@@ -1,22 +1,20 @@
 # Transcoding
-#H264 #H265 #HEVC #MPEG transcoding
+#H264 #H265 #HEVC #MPEG transcode
 
-The proccesing is done in a few steps
+The processing is done in a few steps:
 
-1) Scan a directory pointed to by "Folder"
+1) Scan a directory pointed to by "Folder."
 
-While there are files unproccesed
+While there are unprocessed files
 
-  2) Check if there is a lock file on that folder
+  2) Check if there is a lock file on that file or folder
 
-  3) Use FFparse to parse the vide file
-  
-  4) Use the parse results to figure out what needs to be done
-  
-  5) Use the comands generated to FFmpeg Transcode both Audi and Video while extracting the subtitels
-  
+  3) Use FFparse to parse the file extract all info about Video, Audio, Subtitle etc.
+
+  4) Use the parsed results to figure out what needs to be done FFZa_Brain to generate FFMpeg commands
+
+  5) Use the commands generated to FFmpeg Transcode both Audio and Video while extracting the subtitles
+
   6) Cleanup
- 
- Report results
- 
 
+ Report results

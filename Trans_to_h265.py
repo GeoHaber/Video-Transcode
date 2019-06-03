@@ -26,15 +26,7 @@ Vi_Dur		= 0
 Except_fold = 'C:\\Users\\Geo\\Desktop\\Except'
 
 #Folder		= '-f ./Exception.log'
-#Folder		= "\\\\198.18.0.177\\BkUp\\"
-#Folder		= 'C:\\Users\\George_Yo\\Desktop\\Except'	## XXX:
-#Folder		= Except_fold
-#Folder		= 'D:\Media\TV Shows\Snatch (2017) (Comedy, Crime, TV-G)\S01'
-#Folder		= 'C:\\Users\\Geo\\Desktop\\TestIng'
-#Folder		= 'D:\\_Adlt\\_SortME'
 Folder		= 'C:\\Users\\Geo\\Desktop\\downloads'
-#Folder		= 'C:\\Users\\Geo\\Desktop\\Except'
-#Folder		= 'D:\\Media\\TV Shows\\The Wire (2002) (Crime, Drama, TV-MA)'
 # XXX: Movie Lenght there is a better way but this works for Now
 
 VIDEO_EXTENSIONS = ['.3g2', '.3gp', '.3gp2', '.3gpp', '.60d', '.ajp', '.asf', '.asx', '.avchd', '.avi', '.bik',
@@ -46,9 +38,10 @@ VIDEO_EXTENSIONS = ['.3g2', '.3gp', '.3gp2', '.3gpp', '.60d', '.ajp', '.asf', '.
 					'.vro', '.wm', '.wmv', '.wmx', '.wrap', '.wvx', '.wx', '.x264', '.xvid']
 #					'.vob'
 #VIDEO_EXTENSIONS = ['.old']
+
 Out_F_typ	= '.mkv'
-Max_v_btr	=	1900000
-Max_a_btr	=	 320000
+Max_v_btr	= 1900000
+Max_a_btr	=  320000
 
 Tmp_F_Ext	= '_XY_' + Out_F_typ
 
@@ -1168,7 +1161,7 @@ if __name__=='__main__':
 	start_time = datetime.datetime.now()
 	print(' Start: {:%H:%M:%S}'.format(start_time))
 
-	sys.stdout 		= Tee( sys.stdout, open( Log_File , 'w',encoding="utf-8" ) )
+	sys.stdout 		= Tee( sys.stdout, open( Log_File , 'w', encoding="utf-8" ) )
 
 	Exeptions_File 	= open( Bad_Files , 'w', encoding="utf-8" )
 	Succesful_File 	= open( Good_Files, 'w', encoding="utf-8" )
@@ -1178,8 +1171,8 @@ if __name__=='__main__':
 		exit()
 
 #XXX  |[0] Extension |[1] Full Path |[2] File Size |[3] File Info |[4] Year Made XXX
-#	Qlist_of_Files  = Build_List( Folder, VIDEO_EXTENSIONS, sort=False , sort_loc=2 )	# Smalest Size File
-	Qlist_of_Files  = Build_List( Folder, VIDEO_EXTENSIONS , sort=True , sort_loc=2 )
+#	Qlist_of_Files  = Build_List( Folder, VIDEO_EXTENSIONS, sort=False, sort_loc=2 )	# Smalest Size File
+	Qlist_of_Files  = Build_List( Folder, VIDEO_EXTENSIONS , sort=True, sort_loc=2 )
 	if DeBug > 2 :
 		print (Qlist_of_Files)
 		input ("Next :")

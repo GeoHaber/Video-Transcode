@@ -125,14 +125,14 @@ def ordinal( num ):
 
 def New_File_Name ( file_name , new_extension='', strip='' ) :
 	'''
-	Returns a new filename derived from the Old File by adding and or remouving
+	Returns a new filename derived from the Old File by adding and or removing
 	'''
-	filename , extensi	= os.path.splitext(file_name)
+	filename, extensi	= os.path.splitext(file_name)
 	if len(strip) :
 		filename = filename.strip(strip)
-	extensi = extensi.replace('.','')
-#	New		= filename +"_" +extensi +new_extension
-	New		= filename +new_extension
+	extensi = extensi.replace('.','_')
+	New		= filename + extensi + new_extension
+#	New		= filename + new_extension
 	return New
 ##############################################################################
 
