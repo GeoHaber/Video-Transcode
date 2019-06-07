@@ -55,6 +55,7 @@ class Tee(object):
 			cls.ERRFILE = open(errfilename, 'w')
 		sys.stderr = tee(cls.stderrsav, cls.ERRFILE)
 		return cls.ERRFILE
+
 	@classmethod
 	def stderr_stop(cls):
 		cls.ERRFILE.close()

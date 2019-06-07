@@ -22,11 +22,13 @@ __author__ = 'GeoHabZen'
 #DeBug		= True
 DeBug		= False
 Vi_Dur		= 0
+Skip_First  = True
 
 Except_fold = 'C:\\Users\\Geo\\Desktop\\Except'
 
 #Folder		= '-f ./Exception.log'
 Folder		= 'C:\\Users\\Geo\\Desktop\\downloads'
+Folder		= 'C:\\Users\\Geo\\Desktop\\_2Conv'
 # XXX: Movie Lenght there is a better way but this works for Now
 
 VIDEO_EXTENSIONS = ['.3g2', '.3gp', '.3gp2', '.3gpp', '.60d', '.ajp', '.asf', '.asx', '.avchd', '.avi', '.bik',
@@ -50,7 +52,7 @@ Log_File   = This_File + '_run.log'
 Bad_Files  = This_File + '_bad.txt'
 Good_Files = This_File + '_good.txt'
 
-ffmpeg_bin  = 'C:\\Program Files\\ffmpeg\\'
+ffmpeg_bin  = 'C:\\Program Files\\ffmpeg\\bin'
 ffmpeg_exe  = "ffmpeg.exe"
 ffprobe_exe = "ffprobe.exe"
 ffmpeg		= os.path.join( ffmpeg_bin, ffmpeg_exe  )
@@ -77,11 +79,12 @@ def Run_stats(dictio):
 
 def Parse_year ( FileName ) :
 #	DeBug = True
+
 	message = sys._getframe().f_code.co_name + '-:'
 	if DeBug :	print("{}".format( message ) )
 	try :
 #		yr 	 = re.findall( r'[\[\(]?((?:19[0-9]|20[01])[0-9])[\]\)]?' , FileName )
-		yr 	 = re.findall( r'[\[\(]?((?:19[4-9]|20[0-1])[0-9])[\]\)]?' , FileName ) ## XXX: TODO exclude _at end
+		yr 	 = re.findall( r'[\[\(]?((?:19[4-9]|20[0-1])[0-9])[\]\)]?', FileName ) ## XXX: TODO exclude _at end
 		if yr :
 			va	= sorted(yr, key=lambda pzd: int(pzd), reverse=True) ## XXX:
 			za  = int(va[0])
@@ -101,10 +104,11 @@ def Build_List ( Top_dir, F_trypes, sort=True, sort_loc = 2 ) : # XXX: Sort=True
 	Create the list of Files to be proccesed
 	'''
 #	DeBug = True
+
 	print("=" * 60)
 	message    = sys._getframe().f_code.co_name + '-:'
 	start_time = datetime.datetime.now()
-	print('Start: {:%H:%M:%S}'.format( start_time))
+	print('Start: {:%H:%M:%S}'.format( start_time ))
 
 	cnt 		= 0
 	queue_list 	= []
@@ -161,10 +165,10 @@ def Build_List ( Top_dir, F_trypes, sort=True, sort_loc = 2 ) : # XXX: Sort=True
 			if DeBug : print (line)
 			fi_path   = line.replace("\n",'')
 			if os.path.isfile ( fi_path ) :
-				x, extens = os.path.splitext( fi_path.lower() )
-				fi_path     = os.path.normpath( os.path.join( root, one_file ) )
-				fi_info     = os.stat( fi_path)
-				fi_size     = os.path.getsize( fi_path)
+				x, extens	= os.path.splitext( fi_path.lower() )
+				fi_path		= os.path.normpath( os.path.join( root, one_file ) )
+				fi_info		= os.stat( fi_path)
+				fi_size		= os.path.getsize( fi_path)
 				year_made	= Parse_year( fi_path)
 #XXX  |[0] Extension |[1] Full Path |[2] File Size |[3] File Info |[4] Year Made XXX
 				Save_items	= extens, fi_path, fi_size, fi_info, year_made
@@ -197,6 +201,7 @@ def Build_List ( Top_dir, F_trypes, sort=True, sort_loc = 2 ) : # XXX: Sort=True
 
 def Skip_Files ( One_descr, Min_fsize=10240 ) :
 #	DeBug = True
+
 	message = sys._getframe().f_code.co_name + '-:'
 
 #XXX  |[0] Extension |[1] Full Path |[2] File Size |[3] File Info |[4] Year Made XXX
@@ -258,18 +263,22 @@ def Skip_Files ( One_descr, Min_fsize=10240 ) :
 	return Lock_File
 ##############################################################################
 
-def Do_it ( List_of_files ,Excluded =''):
+def Do_it ( List_of_files, Excluded ='' ):
 #	global DeBug
 #	DeBug = True
 
-	print("=" * 60)
 	message = sys._getframe().f_code.co_name +'-:'
+	print("=" * 60)
 	print("{}".format( message ) )
 	print ("Proccesing %s one by one" % len(List_of_files) )
-	if (len (Excluded)) :
-		print (" Excluding %s" , len (Excluded))
+
 	if not List_of_files :
-		raise ValueError(message,'Nothing to do')
+		raise ValueError( message,'No files to procces' )
+
+	elif ( len ( Excluded ) ) :
+		print (" Excluding %s" , len (Excluded))
+		# XXX: TBD Skip those in the List
+
 	Saving		= 0
 	queue_list 	=[]
 	Fnum  		= 0
@@ -470,7 +479,7 @@ def FFProbe_run (File_in, Execute = ffprobe ):
 				input(" Jlist to small ")
 		if Succes :
 			if DeBug :
-				message += "\n" + json.dumps(jlist, indent=2 )
+				message += "\n" + json.dumps( jlist, indent = 3 )
 				print (message)
 				input("FFparse Done")
 			end_time    = datetime.datetime.now()
@@ -479,7 +488,7 @@ def FFProbe_run (File_in, Execute = ffprobe ):
 		else :
 			message  =' Stdout:\n{!r}\n'.format(ff_out.stdout)
 			message +=' Stderr:\n{!r}\n'.format(ff_out.stderr)
-			message +=' Out   : {}\n'.format( json.dumps(jlist, indent=2 ))
+			message +=' Out   : {}\n'.format( json.dumps(jlist, indent = 2 ))
 			Exeptions_File.write(message)
 			Exeptions_File.flush()
 			print ( message )
@@ -489,12 +498,12 @@ def FFProbe_run (File_in, Execute = ffprobe ):
 ##############################################################################
 
 def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
+	'''
+	The Heavy Lifting Probe, Parse, Decide what to do Return ffmpeg Comand
+	'''
 #	global DeBug
 #	DeBug = True
-	'''
-	The Heavy Lifting Probe Parse and Decide what to do
-	Return ffmpeg Comand
-	'''
+
 	start_time	= datetime.datetime.now()
 	message 	= sys._getframe().f_code.co_name + '/:'
 	print("  {}\t\tStart: {:%H:%M:%S}".format( message ,start_time ) )
@@ -611,17 +620,18 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				Parse_from_to  (Strm_X, _atach)
 				Prst_all.append(_atach)
 				Xt_strms.append(_atach)
-				if DeBug :
+				if DeBug > 1 :
 					print ('\t{} in {}'.format( key, Xt_strms))
 					print ('\tindx:{} : {} = {}\n{}'.format(_atach['index'], key, Xt_strms, _atach))
 					input ("ATT")
 ## XXX: Is WTF ?
 			else :
 				Is_Fuckt += 1
+				input ("Parsing Streams? WTF?")
 				print ("Key:\n",	  json.dumps(key,      indent=2, sort_keys=False))
 				print ("Strm_X:\n",	  json.dumps(Strm_X,   indent=2, sort_keys=False))
 				print ("Meta_dta:\n", json.dumps(Meta_dta, indent=2, sort_keys=False))
-				input ("WTF is this?")
+				input ("Parsing Streams? WTF is this?")
 # XXX: Parsing Done now lets Procces
 
 # XXX: Video
@@ -632,8 +642,8 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 			Exeptions_File.flush()
 			sys.stdout.flush()
 #			return False
-			raise ValueError(message)
 			if DeBug : input('Press CR')
+			raise ValueError(message)
 
 		mins,  secs = divmod(int(_mtdta['duration']), 60)
 		hours, mins = divmod(mins, 60)
@@ -660,20 +670,19 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 			zzz = '0:' + str(_vid['index'])
 			if frm_rate > 40 :
 ### XXX: Best but slow 			ff_video = ['-vf', 'minterpolate=fps=30', '-map', zzz ]
-				ff_video = ['-r', '25', '-map', zzz ]
+				ff_video = [ '-r', '25', '-map', zzz ]
 				message = "Frame rate conversion to 25"
 				print (message)
-				time.sleep(4)
-#				return ff_video
+				time.sleep(3)
 #				raise ValueError('  Frame Rate Conversion to 25', frm_rate )
 #				input ('?')
 			else :
-				ff_video = ['-map', zzz ]
+				ff_video = [ '-map', zzz ]
 
 # XXX: https://trac.ffmpeg.org/wiki/Encode/H.265
 
 			if   _vid['height'] > 1080 :	# Scale to 1080p or -vf scale= -1:720 for 720
-				ff_video.extend( ['-vf', 'scale = -1:1080', '-c:v', 'libx265', '-crf', '25', '-preset', 'slow' ] )
+				ff_video.extend( [ '-vf', 'scale = -1:1080', '-c:v', 'libx265', '-crf', '25', '-preset', 'slow' ] )
 			elif _vid['codec_name'] == 'hevc' and _vid['bit_rate'] > Max_v_btr :
 				ff_video.extend( [ '-c:v', 'libx265', '-b:v', str(Max_v_btr),'-preset', 'slow'])
 			elif _vid['codec_name'] == 'hevc' :
@@ -692,7 +701,17 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 			NB_Vstr += 1
 
 # XXX: audio
+		if DeBug >1 :	print (Au_strms)
+		if len(Au_strms) == 0 :
+			message += ' No Audio => Can\'t convert\n{}\n' .format( Ini_file )
+			print (message)
+			Exeptions_File.write(message)
+			Exeptions_File.flush()
+			sys.stdout.flush()
+			raise ValueError( message )
+
 		NB_Astr = 0
+
 		_disp = dict(	default = int(0),
 						dub 	= int(0),
 						comment = 0,
@@ -703,16 +722,9 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 						visual_impaired	= 0,
 						clean_effects	= 0
 					)
-		if DeBug :	print (Au_strms)
-		if len(Au_strms) == 0 :
-			message = ' No Audio '
-#			return False
-			raise ValueError(message, _vid['codec_name'] )
-## TODO: reverse if biger that one and presumably has english ??
-		Au_strms.reverse ()
 
 		for _aud in Au_strms :
-			if DeBug :
+			if DeBug  :
 				print ('Aud : {}\n{}'.format(NB_Astr, _aud ) )
 			Parse_from_to ( _aud['disposition'], _disp )
 			Prst_all.append (_disp)
@@ -721,83 +733,77 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				if  _aud['bit_rate'] == 'Pu_la':
 					_aud['bit_rate'] = _mtdta['bit_rate'] *0.2	# aproximation
 			_lng = dict ( language = '' )
+
+			if _aud['bit_rate'] > Max_a_btr :
+				aud_btrt = Max_a_btr
+			else:
+				aud_btrt = round( _aud['bit_rate'] )
+
 			if _aud['tags'] != 'Pu_la':
 				Parse_from_to ( _aud['tags'], _lng )
 			else :
 #				print (_aud)
 #				input ('WTF?')
 				_lng['language'] = 'not'
+
 			if DeBug :	print (_aud)
 			message = "    |<A:{}>| {:^6} |Br: {:>9}|Fq: {:>5}|Ch: {}|{}|{}|".format(
-						_aud['index'], _aud['codec_name'], HuSa(_aud['bit_rate']), HuSa(_aud['sample_rate']), _aud['channels'],
-						_lng['language'], _disp['default'])
+						_aud['index'], _aud['codec_name'], HuSa(_aud['bit_rate']),
+						HuSa(_aud['sample_rate']), _aud['channels'], _lng['language'],
+						_disp['default'])
 			print (message)
-
-			zzz = '0:' + str(_aud['index'])
-			if DeBug : print('!<>', zzz, _disp)
-			if NB_Astr == 0 :
-				ff_audio = ['-map', zzz ]
+# XXX: skip first if more than one if rusian or set by flag
+			if   _lng['language'] == 'rus' or ( Skip_First and NB_Astr == 0 and len(Au_strms) > 1 ) :
+				print ('Skip Rusian')
 			else :
-				ff_audio.extend(['-map', zzz ])
-# XXX:
-			zzz = '-c:a:' + str(_aud['index'])
-			if   _aud['codec_name'] == 'aac' and _aud['bit_rate'] < Max_a_btr : # and _aud['channels'] < 3 :
-				ff_audio.extend( [ zzz, 'copy'])
-			elif _aud['codec_name'] == 'aac' and _aud['bit_rate'] > Max_a_btr :
-#				ff_audio.extend( [ zzz, 'aac', '-b:a', '256k', '-ac', '2'] )
-				ff_audio.extend( [ zzz, 'aac', '-b:a', str(Max_a_btr)] )
-# XXX: TODO convert from to aac ????
-			elif _aud['codec_name'] == 'opus' or 'vorbis' :
-				ff_audio.extend( [ zzz, 'copy'])
-				print ("   We have an {} ShitSuation".format(_aud['codec_name']) )
-			else :
-#				ff_audio.extend( [ zzz, 'aac', '-b:a', str(_aud['bit_rate']), '-ac', '2'] )
-				if _aud['bit_rate'] > Max_a_btr :
-					sttin = Max_a_btr
-				else:
-					sttin = _aud['bit_rate']
-				ff_audio.extend( [ zzz, 'aac', '-b:a', str(sttin) ] )
-# TODO: If lang eng is not default make it default If lang unknown and rusnano is set then invert the default.
-			zzz = '-disposition:a:'+ str(_aud['index'])
-			if _lng['language'] == 'rus' and _disp['default'] == 1 :
-				ff_audio.extend( [ zzz, '-default'])
-				print ('Make Rusian none')
-			elif _lng['language'] == 'eng' and _disp['default'] == 0 :
-				ff_audio.extend( [ zzz, 'default'])
-				print ('Make English default')
+				zzz = '0:'+ str( _aud['index'] )
+				if NB_Astr == 0 :
+					ff_audio = [ '-map', zzz ]
+				else :
+					ff_audio.extend([ '-map', zzz ])
+				zzz = '-c:a:' + str( _aud['index'] )
+				if   _aud['codec_name'] == 'aac' and _aud['bit_rate'] < Max_a_btr : # and _aud['channels'] < 3 :
+					ff_audio.extend( [ zzz, 'copy'])
+				elif _aud['codec_name'] == 'aac' and _aud['bit_rate'] > Max_a_btr :
+					ff_audio.extend( [ zzz, 'aac', '-b:a', str(aud_btrt)] )
+# XXX: TODO convert to aac ????
+				elif _aud['codec_name'] == 'opus' or 'vorbis' :
+					ff_audio.extend( [ zzz, 'libfaac', '-b:a', str(aud_btrt), '-ac', '2'] )
+#					print ("   We have an {} ShitSuation".format(_aud['codec_name']) )
+				else :
+					ff_audio.extend( [ zzz, 'aac', '-b:a', str(aud_btrt) ] )
 			NB_Astr += 1
 # XXX:
-		if DeBug:
-#			print (Au_strms, '\n')
+		if DeBug :
 			print (ff_audio, '\n')
-			time.sleep(2)
-#			input ("AUD\n")
+			input ("AUD ?")
+
 #XXX subtitle
 		NB_Sstr = 0
 		for _sub in Su_strms :
 			if DeBug :
 				print ('Sub : {}\n{}'.format(NB_Sstr, _sub ) )
-			lng = 'unknown'
 			if 'Pu_la' in _sub.values() :
 				Is_Fuckt +=1
+
 			if _sub['tags'] != 'Pu_la':
 				_lng = dict ( language = '' )
 				Parse_from_to ( _sub['tags'], _lng )
-				lng =_lng['language']
+			else:
+				_lng['language'] = 'not'
 
-			sin =_sub['index']
 			message = "    |<S:{}>| {:^6} | {:^12}| {}|".format(
-				sin, _sub['codec_name'], _sub['codec_type'], lng  )
+				_sub['index'], _sub['codec_name'], _sub['codec_type'], _lng['language']  )
 			print (message)
 ## XXX:
-			zzz = '0:' + str(sin)
-			Sub_fi_name	= Ini_file + '.' + str(lng) + '.' + str(sin) + '.srt'
+			zzz = '0:' + str(_sub['index'])
+			Sub_fi_name	= Ini_file + '.' + str(_lng['language']) + '.' + str(_sub['index']) + '.srt'
 
 			if NB_Sstr == 0 :
 				ff_subtl = ['-map', zzz ]
 			else :
 				ff_subtl.extend( ['-map', zzz ])
-			zzz = '-c:s:' + str(sin)
+			zzz = '-c:s:' + str(_sub['index'])
 #			ff_subtl.extend( [ zzz, 'copy' , Sub_fi_name ] )
 			ff_subtl.extend( [ zzz, 'copy' ] )
 			NB_Sstr += 1
@@ -826,13 +832,12 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 			message = "    H265 & aac"
 			print (message)
 			if DeBug :
-				input ('escape')
-			raise ValueError('  OK:', _vid['codec_name'], _aud['codec_name'])
+				input ('Nothing to do just escape')
+#			raise ValueError('  OK:', _vid['codec_name'], _aud['codec_name'])
 		FFM_cmnd = ff_video + ff_audio + ff_subtl
-#		FFM_cmnd = ff_subtl + ff_audio + ff_video
 		Bild_Dict ( Ini_file, FFM_cmnd, Stat_colect )
 		if DeBug:
-			print ("FFZa_Brain is Done :", FFM_cmnd)
+			print ("FFZa_Brain Done :", FFM_cmnd)
 			input ('Do it ?')
 		end_time    = datetime.datetime.now()
 		print('   End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, end_time-start_time ) )

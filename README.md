@@ -13,7 +13,7 @@ While there are unprocessed files
 
   4) Use the parsed results to figure out what needs to be done FFZa_Brain to generate FFMpeg commands
 
-  5) Use the commands generated to FFmpeg Transcode both Audio and Video while extracting the subtitles
+  5) Use the FFmpeg commands generated to transcode both Audio and Video while extracting the subtitles
 
   6) Cleanup
 
