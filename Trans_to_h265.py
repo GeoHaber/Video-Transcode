@@ -19,14 +19,16 @@ from   My_Utils  import *
 
 __author__ = 'GeoHabZen'
 
-#DeBug		= True
 DeBug		= False
+Skip_First	= True
 Vi_Dur		= 0
-Skip_First  = True
+Out_F_typ	= '.mkv'
+Max_v_btr	= 1900000
+Max_a_btr	=  320000
 
+Tmp_F_Ext	= '_XY_' + Out_F_typ
 Except_fold = 'C:\\Users\\Geo\\Desktop\\Except'
 
-#Folder		= '-f ./Exception.log'
 Folder		= 'C:\\Users\\Geo\\Desktop\\downloads'
 Folder		= 'C:\\Users\\Geo\\Desktop\\_2Conv'
 # XXX: Movie Lenght there is a better way but this works for Now
@@ -38,14 +40,6 @@ VIDEO_EXTENSIONS = ['.3g2', '.3gp', '.3gp2', '.3gpp', '.60d', '.ajp', '.asf', '.
 					'.mpe', '.mpeg', '.mpg', '.mpv', '.mpv2', '.mxf', '.nsv', '.nut', '.ogg', '.ogm', '.ogv', '.omf',
 					'.ps', '.qt', '.ram', '.rm', '.rmvb', '.swf', '.ts', '.vfw', '.vid', '.video', '.viv', '.vivo',
 					'.vro', '.wm', '.wmv', '.wmx', '.wrap', '.wvx', '.wx', '.x264', '.xvid']
-#					'.vob'
-#VIDEO_EXTENSIONS = ['.old']
-
-Out_F_typ	= '.mkv'
-Max_v_btr	= 1900000
-Max_a_btr	=  320000
-
-Tmp_F_Ext	= '_XY_' + Out_F_typ
 
 This_File  = sys.argv[0].strip ('.py')
 Log_File   = This_File + '_run.log'
@@ -58,9 +52,9 @@ ffprobe_exe = "ffprobe.exe"
 ffmpeg		= os.path.join( ffmpeg_bin, ffmpeg_exe  )
 ffprobe		= os.path.join( ffmpeg_bin, ffprobe_exe )
 
-Stat_colect ={}
+Sored_Dictio ={}
 
-##############################################################################
+##===============================   End   ====================================##
 def Run_stats(dictio):
 # TODO Oh man lots to do XXX
 	cnt =0
@@ -75,7 +69,7 @@ def Run_stats(dictio):
 					print ("\t\t",p )
 		print('-'*35)
 	print ("Total of", cnt )
-##############################################################################
+##===============================   End   ====================================##
 
 def Parse_year ( FileName ) :
 #	DeBug = True
@@ -96,10 +90,10 @@ def Parse_year ( FileName ) :
 	except :
 		za = 1
 	return za
-##############################################################################
+##===============================   End   ====================================##
 
 """ =============== The real McCoy =========== """
-def Build_List ( Top_dir, F_trypes, sort=True, sort_loc = 2 ) : # XXX: Sort=True (Big First) Sort_loc = 2 => File Size: =4 => year_made
+def Build_List ( Top_dir, Ext_types, Sort_ord=True, sort_loc = 2 ) : # XXX: Sort_ord=True (Big First) Sort_loc = 2 => File Size: =4 => year_made
 	'''
 	Create the list of Files to be proccesed
 	'''
@@ -114,15 +108,15 @@ def Build_List ( Top_dir, F_trypes, sort=True, sort_loc = 2 ) : # XXX: Sort=True
 	queue_list 	= []
 	# a Directory ?
 	if os.path.isdir ( Top_dir ) :
-		message  += " -> Directory Scan: {}".format( Top_dir )
+		message  += "\n Directory Scan: {}".format( Top_dir )
 		print ( message )
 		for root, dirs, files in os.walk( Top_dir ):
 			for one_file in files:
 				x, extens = os.path.splitext( one_file.lower() )
-				if extens in F_trypes :
+				if extens in Ext_types :
 					fi_path     = os.path.normpath( os.path.join( root, one_file ) )
-					fi_info     = os.stat( fi_path )
 					fi_size     = os.path.getsize( fi_path )
+					fi_info     = os.stat( fi_path )
 					year_made	= Parse_year( fi_path )
 #XXX  |[0] Extension |[1] Full Path |[2] File Size |[3] File Info |[4] Year Made XXX
 					Save_items	= extens, fi_path, fi_size, fi_info, year_made
@@ -135,8 +129,8 @@ def Build_List ( Top_dir, F_trypes, sort=True, sort_loc = 2 ) : # XXX: Sort=True
 		print ( message )
 		x,extens  = os.path.splitext( Top_dir.lower() )
 		fi_path   = (Top_dir)
-		fi_info   = os.stat( fi_path)
 		fi_size   = os.path.getsize( fi_path)
+		fi_info   = os.stat( fi_path)
 		year_made = Parse_year ( fi_path)
 #XXX  |[0] Extension |[1] Full Path |[2] File Size |[3] File Info |[4] Year Made XXX
 		Save_items	= extens, fi_path, fi_size, fi_info, year_made
@@ -167,8 +161,8 @@ def Build_List ( Top_dir, F_trypes, sort=True, sort_loc = 2 ) : # XXX: Sort=True
 			if os.path.isfile ( fi_path ) :
 				x, extens	= os.path.splitext( fi_path.lower() )
 				fi_path		= os.path.normpath( os.path.join( root, one_file ) )
-				fi_info		= os.stat( fi_path)
 				fi_size		= os.path.getsize( fi_path)
+				fi_info		= os.stat( fi_path)
 				year_made	= Parse_year( fi_path)
 #XXX  |[0] Extension |[1] Full Path |[2] File Size |[3] File Info |[4] Year Made XXX
 				Save_items	= extens, fi_path, fi_size, fi_info, year_made
@@ -179,25 +173,21 @@ def Build_List ( Top_dir, F_trypes, sort=True, sort_loc = 2 ) : # XXX: Sort=True
 				print ("No file named {}".format( fi_path))
 				return False
 
-#TODO Categories based on extension !!
-	print ("\nTotal of {} files, {} Categorie's".format( cnt, len (queue_list)) )
-	# XXX Sort based o file size XXX True for Bigest first XXX
+# TODO Categories based on extension !!
+# XXX: https://wiki.python.org/moin/HowTo/Sorting
 	# XXX: Sort based in item [2] = filesize defined by sort_loc :)
-	queue_list = sorted(queue_list, key=lambda pzd: (pzd[sort_loc], pzd[2]), reverse=sort) ## XXX: sort defined by caller
+	queue_list = sorted( queue_list, key=lambda Item: Item[sort_loc], reverse=Sort_ord ) ## XXX: sort defined by caller
 
 	if DeBug :
-		print ("="*99)
-		cnt 	= 0
+		print ("="*90)
 		for each in queue_list :
-			cnt +=1
-			print (each)
-#			print ("+" *cnt)
+			print ( each )
 		input ("Next:")
-	print (message, "Total of %s Files to Procces" % len (queue_list) )
+
 	end_time    = datetime.datetime.now()
-	print('End  : {:%H:%M:%S}\tTotal: {} '.format( end_time, end_time-start_time ) )
+	print('End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, end_time-start_time ) )
 	return queue_list
-##############################################################################
+##===============================   End   ====================================##
 
 def Skip_Files ( One_descr, Min_fsize=10240 ) :
 #	DeBug = True
@@ -211,7 +201,7 @@ def Skip_Files ( One_descr, Min_fsize=10240 ) :
 # List Files in the to be prccesed Directory
 	if DeBug :
 		Dir, Fil = os.path.split ( The_file )
-		print ("Dir : {}\nFile: {}".format(Dir,Fil))
+		print ("Dir : {}\nFile: {}".format( Dir, Fil))
 		for root, dirs, files in os.walk( Dir ):
 			for fi in files :
 				print ("\tFile :",fi)
@@ -261,7 +251,7 @@ def Skip_Files ( One_descr, Min_fsize=10240 ) :
 		if DeBug : input ("? Delete it ?")
 
 	return Lock_File
-##############################################################################
+##===============================   End   ====================================##
 
 def Do_it ( List_of_files, Excluded ='' ):
 #	global DeBug
@@ -269,8 +259,10 @@ def Do_it ( List_of_files, Excluded ='' ):
 
 	message = sys._getframe().f_code.co_name +'-:'
 	print("=" * 60)
-	print("{}".format( message ) )
-	print ("Proccesing %s one by one" % len(List_of_files) )
+	print( message )
+	print (' Total of {} Files to Procces'. format( len( List_of_files ) ) )
+
+	if DeBug : print ("Proccesing {} one by one".format( List_of_files ) )
 
 	if not List_of_files :
 		raise ValueError( message,'No files to procces' )
@@ -310,8 +302,8 @@ def Do_it ( List_of_files, Excluded ='' ):
 								was      = all_good[0]
 								isn      = all_good[1]
 								rat      = all_good[2]
-								message = "{} File {} \nDone :)\tWas: {}\tIs: {}\tSaved: {} => {} {}\n".format(
-											ordinal(Fnum), The_file, HuSa(was), HuSa(isn), HuSa(was - isn), round(rat,1), '%' )
+								message = "{} File {} \n Done :)\tWas: {}\tIs: {}\tSaved: {} => {} {}\n".format(
+											ordinal(Fnum), os.path.basename(The_file), HuSa(was), HuSa(isn), HuSa(was - isn), round(rat,1), '%' )
 								print (message)
 								# XXX Create the Lock file with utf-8 encode for non english caracters ... # XXX:
 								all_good = open( Lock_File , "w", encoding="utf-8"  )
@@ -321,7 +313,7 @@ def Do_it ( List_of_files, Excluded ='' ):
 									all_good.flush()
 									Succesful_File.write( message )
 									Succesful_File.flush()
-									if DeBug : print ('\nThe List ... \n{}'.format( json.dumps(queue_list, indent=4 )) )	#XXX should be One_descr after it was Modifyed XXX
+									if DeBug : print ('\nThe List ... \n{}'.format( json.dumps(queue_list, indent=3 )) )	#XXX should be One_descr after it was Modifyed XXX
 									Saving += was - isn
 									print ("  Total Saved {}".format( HuSa(Saving)) )
 								else :
@@ -379,11 +371,9 @@ def Do_it ( List_of_files, Excluded ='' ):
 				print( '='*20)
 
 			except ValueError as err:
-				print ("\nValueError Exception\n")
-				print(err.args)
-#				print( '{}' .format (err) )
-				time.sleep(5)
-				Cre_lock = open( Lock_File, "w",encoding="utf-8" )
+				print (" ValueError Exception ", err.args )
+				time.sleep( 1 )
+				Cre_lock = open( Lock_File, "w", encoding="utf-8" )
 				if Cre_lock :
 					Cre_lock.write (str(err) * 3)
 					Cre_lock.flush()
@@ -402,7 +392,7 @@ def Do_it ( List_of_files, Excluded ='' ):
 		sys.stdout.flush()
 #		os.fsync(sys.stdout)
 	return queue_list
-##############################################################################
+##===============================   End   ====================================##
 
 def FFProbe_run (File_in, Execute = ffprobe ):
 #	global DeBug
@@ -410,7 +400,7 @@ def FFProbe_run (File_in, Execute = ffprobe ):
 
 	start_time	= datetime.datetime.now()
 	message 	= sys._getframe().f_code.co_name + '|:'
-	print("  {}\t\tStart: {:%H:%M:%S}".format( message ,start_time ) )
+	print("  {}\t\tStart: {:%H:%M:%S}".format( message, start_time ) )
 	if os.path.exists (File_in) :
 		file_size = os.path.getsize(File_in)
 		message = "\n{}\t{}\n".format(
@@ -435,8 +425,7 @@ def FFProbe_run (File_in, Execute = ffprobe ):
 	if DeBug :
 		print ("    |>:" , Comand)
 #		input ("Ready to run FFProbe? ")
-	else :
-		print ("    |>:" , Comand[3:])
+
 	jlist = []
 	err = 'WTF?'
 	out = 'WTF?'
@@ -468,7 +457,7 @@ def FFProbe_run (File_in, Execute = ffprobe ):
 			print (message)
 			time.sleep (4)
 #			return False
-			raise ValueError ( 'Oy vei ', message, err )
+			raise ValueError ( 'Oy vey ist mir ', message, err )
 # No ErRor all seems to be well
 		jlist	 = json.loads (out)
 		if len (jlist) < 2 :
@@ -495,12 +484,13 @@ def FFProbe_run (File_in, Execute = ffprobe ):
 			if DeBug :
 				input("FFParse NOT Done")
 			return False
-##############################################################################
+##===============================   End   ====================================##
 
 def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 	'''
 	The Heavy Lifting Probe, Parse, Decide what to do Return ffmpeg Comand
 	'''
+	global Vi_Dur	# make it global so we can reuse for fmpeg check ...
 #	global DeBug
 #	DeBug = True
 
@@ -508,9 +498,6 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 	message 	= sys._getframe().f_code.co_name + '/:'
 	print("  {}\t\tStart: {:%H:%M:%S}".format( message ,start_time ) )
 
-	global Vi_Dur	# make it global so we can reuse for fmpeg check ...
-
-#	if DeBug : print ("File Part : {}\nJson File : {} ".format(Ini_file, json.dumps(Meta_dta, indent=2, sort_keys=False) ) )
 	Is_Fuckt = 0
 
 	Prst_all = []
@@ -643,7 +630,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 			sys.stdout.flush()
 #			return False
 			if DeBug : input('Press CR')
-			raise ValueError(message)
+			raise ValueError( message )
 
 		mins,  secs = divmod(int(_mtdta['duration']), 60)
 		hours, mins = divmod(mins, 60)
@@ -674,8 +661,6 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				message = "Frame rate conversion to 25"
 				print (message)
 				time.sleep(3)
-#				raise ValueError('  Frame Rate Conversion to 25', frm_rate )
-#				input ('?')
 			else :
 				ff_video = [ '-map', zzz ]
 
@@ -720,8 +705,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 						forced  = int(0),
 						hearing_impaired= 0,
 						visual_impaired	= 0,
-						clean_effects	= 0
-					)
+						clean_effects	= 0 )
 
 		for _aud in Au_strms :
 			if DeBug  :
@@ -742,8 +726,6 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 			if _aud['tags'] != 'Pu_la':
 				Parse_from_to ( _aud['tags'], _lng )
 			else :
-#				print (_aud)
-#				input ('WTF?')
 				_lng['language'] = 'not'
 
 			if DeBug :	print (_aud)
@@ -768,7 +750,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 					ff_audio.extend( [ zzz, 'aac', '-b:a', str(aud_btrt)] )
 # XXX: TODO convert to aac ????
 				elif _aud['codec_name'] == 'opus' or 'vorbis' :
-					ff_audio.extend( [ zzz, 'libfaac', '-b:a', str(aud_btrt), '-ac', '2'] )
+					ff_audio.extend( [ zzz, 'aac', '-b:a', str(aud_btrt), '-ac', '2'] )
 #					print ("   We have an {} ShitSuation".format(_aud['codec_name']) )
 				else :
 					ff_audio.extend( [ zzz, 'aac', '-b:a', str(aud_btrt) ] )
@@ -815,7 +797,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				Is_Fuckt += 1
 				if DeBug     : print ("\t  | XXX | Pu_la :", pu)
 				if DeBug > 2 : print ("WTF ?? " ,key ,'\n', json.dumps(Meta_dta, indent=2, sort_keys=False))
-		Bild_Dict ( Ini_file, Prst_all , Stat_colect )
+		Bild_Dict ( Ini_file, Prst_all , Sored_Dictio )
 		if DeBug > 2 : print ("Prst_all :\n", json.dumps( Prst_all, indent=2, sort_keys=False))
 
 	except Exception as e:
@@ -824,25 +806,25 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 		print ("WTF ?? ",key ,'\n', json.dumps(Meta_dta, indent=2, sort_keys=False))
 		print( "Error: {}".format( traceback.print_exc()   ) )
 		print( "Is:    {}".format( traceback.print_stack() ) )
-		input ("Got you")
 		return False
+
 	else :
 ## XXX: if  _vid['height'] < 1080 and _vid['bit_rate'] < 1400000 and _vid['codec_name'] == 'hevc' and _aud['codec_name'] == 'aac' :
-		if  _vid['codec_name'] == 'hevc' and _vid['bit_rate'] < Max_v_btr and _vid['height'] <= 1080 and _aud['codec_name'] == 'aac' and _aud['bit_rate'] < Max_a_btr :
-			message = "    H265 & aac"
-			print (message)
+		if  _vid['codec_name'] == 'hevc' and _vid['bit_rate'] < Max_v_btr and _vid['height'] <= 1080 and _aud['bit_rate'] < Max_a_btr and _aud['codec_name'] == ('aac' or 'vorbis') :
 			if DeBug :
+				print ('    ', _vid['codec_name'], ' & ', _aud['codec_name'])
 				input ('Nothing to do just escape')
-#			raise ValueError('  OK:', _vid['codec_name'], _aud['codec_name'])
+			raise ValueError('  OK:', _vid['codec_name'], _aud['codec_name'])
 		FFM_cmnd = ff_video + ff_audio + ff_subtl
-		Bild_Dict ( Ini_file, FFM_cmnd, Stat_colect )
+		Bild_Dict ( Ini_file, FFM_cmnd, Sored_Dictio )
 		if DeBug:
 			print ("FFZa_Brain Done :", FFM_cmnd)
 			input ('Do it ?')
+		if DeBug : print ( '\n   ', Vi_strms, '\n   ', Au_strms,'\n   ', Su_strms)
 		end_time    = datetime.datetime.now()
 		print('   End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, end_time-start_time ) )
 		return FFM_cmnd
-##############################################################################
+##===============================   End   ====================================##
 
 def FFMpeg_run ( Fmpg_in_file, Comand, Execute = ffmpeg ) :
 #	global DeBug
@@ -1017,7 +999,7 @@ def FFMpeg_run ( Fmpg_in_file, Comand, Execute = ffmpeg ) :
 				print ( message )
 				time.sleep(10)
 			return False
-##############################################################################
+##===============================   End   ====================================##
 
 def FFClean_up ( Inp_file, Out_file ):
 #	global DeBug
@@ -1046,12 +1028,13 @@ def FFClean_up ( Inp_file, Out_file ):
 		print ("Post:\n{} \t\t{}".format (Out_file, HuSa(Out_file_size)) )
 
 	Ratio   =  round( 100*(( Ini_file_size - Out_file_size) / Out_file_size))
-	if  Ratio  >  2 :
-		print ("\tNew {} {} Smaller".format(Ratio, '%'))
-	elif Ratio < -2 :
-		print ("\tNew {} {} Larger ".format(abs(Ratio), '%'))
-	else :
-		print ("\tSimilar {} {}".format(Ratio, '%'))
+	if DeBug:
+		if  Ratio  >  2 :
+			print ("\tNew {} {} Smaller".format(Ratio, '%'))
+		elif Ratio < -2 :
+			print ("\tNew {} {} Larger ".format(abs(Ratio), '%'))
+		else :
+			print ("\tSimilar {} {}".format(Ratio, '%'))
 
 	Succes = True
 	if DeBug :
@@ -1065,6 +1048,7 @@ def FFClean_up ( Inp_file, Out_file ):
 		check_path = os.path.exists( To_delete )
 		if check_path : # File alredy exists TODO let's create another one ??
 			print ("\t.old Alredy Exists Rm:", To_delete )
+			time.sleep( 3 )
 			try:
 				os.remove( To_delete )
 			except OSError as e:  ## if failed, report it back to the user ##
@@ -1086,7 +1070,7 @@ def FFClean_up ( Inp_file, Out_file ):
 		check_path   = os.path.exists (New_out_File)
 		if check_path : # File alredy exists TODO let's deleate it to create another one
 			print ("\t Alredy Exists Must Rm:", New_out_File )
-			input ('WTF')
+			time.sleep( 3 )
 			try:
 				os.remove( New_out_File)
 			except OSError as e:  ## if failed, report it back to the user ##
@@ -1112,7 +1096,7 @@ def FFClean_up ( Inp_file, Out_file ):
 		return ( Ini_file_size,  Out_file_size, Ratio )
 	else :
 		return False
-##############################################################################
+##===============================   End   ====================================##
 
 def Prog_cal (line_to, sy=False ) :
 #	global DeBug
@@ -1123,7 +1107,6 @@ def Prog_cal (line_to, sy=False ) :
 	_P =''
 	if DeBug :
 		print ("\r>" , last_fr)
-		_P   = '\r {} .. {}'.format( sy, last_fr )
 	if 'frame=' and 'bitrate=' and not 'N/A' in last_fr :
 		try :
 			global Vi_Dur
@@ -1131,7 +1114,6 @@ def Prog_cal (line_to, sy=False ) :
 			fp	 = re.search( r'fps=\s*([0-9]+)'      	,last_fr ).group(1)
 			sz   = re.search( r'size=\s*([0-9]+)'     	,last_fr ).group(1)
 			tm =   re.search( r'time=\S([0-9:]+)'		,last_fr ).group(1)
-#			tm   = re.search( r'time=\S([0-9\.:]+)'		,last_fr ).group(1)	#Can start with -
 			br	 = re.search( r'bitrate=\s*([0-9\.]+)'	,last_fr ).group(1)	#Can have value of N/A
 			sp	 = re.search( r'speed=\s*([0-9\.]+)'	,last_fr ).group(1)	#Can have value of N/A
 
@@ -1154,10 +1136,12 @@ def Prog_cal (line_to, sy=False ) :
 	sys.stderr.write( _P )
 	sys.stderr.flush
 	return True
-##############################################################################
+##===============================   End   ====================================##
 
 if __name__=='__main__':
+#	global DeBug
 #	DeBug = False
+
 	cgitb.enable(format='text')
 
 	message = __file__ +'-:'
@@ -1177,7 +1161,7 @@ if __name__=='__main__':
 
 #XXX  |[0] Extension |[1] Full Path |[2] File Size |[3] File Info |[4] Year Made XXX
 #	Qlist_of_Files  = Build_List( Folder, VIDEO_EXTENSIONS, sort=False, sort_loc=2 )	# Smalest Size File
-	Qlist_of_Files  = Build_List( Folder, VIDEO_EXTENSIONS , sort=True, sort_loc=2 )
+	Qlist_of_Files  = Build_List( Folder, VIDEO_EXTENSIONS , Sort_ord=True, sort_loc=2 )
 	if DeBug > 2 :
 		print (Qlist_of_Files)
 		input ("Next :")
@@ -1187,15 +1171,12 @@ if __name__=='__main__':
 		for filedesc in QExeption_ :
 			print (filedesc.replace('\n',''))
 		input ("Next :")
-#	print("\nAll Done:\n" )
-#	print ("Scaned   : %s\nSelected : %s\nFinished :" % ( (Qlist_of_Files) , (QExeption_)) )
-#	Run_stats( Stat_colect )
+#	Run_stats( Sored_Dictio )
 	Exeptions_File.close()
 	Succesful_File.close()
 
 	end_time = datetime.datetime.now()
 	print(' \tEnd  : {:%H:%M:%S}\tTotal: {}'.format( end_time, end_time-start_time ) )
-
 	input("Done")
 	exit()
-##############################################################################
+##===============================   End   ====================================##
