@@ -55,7 +55,6 @@ class Tee(object):
 			cls.ERRFILE = open(errfilename, 'w')
 		sys.stderr = tee(cls.stderrsav, cls.ERRFILE)
 		return cls.ERRFILE
-
 	@classmethod
 	def stderr_stop(cls):
 		cls.ERRFILE.close()
@@ -161,7 +160,7 @@ def Bild_Dict (key, value, TheDick) :
 
 def Parse_from_to ( Stream, Dictio, DeBug=False ) :
 	message = sys._getframe().f_code.co_name
-	if DeBug : print(message,' :\t', Stream , len(Stream), '\n', Dictio , len(Dictio) )
+	if DeBug : print(message,':\n', len(Stream), Stream, '\n', len(Dictio), Dictio)
 	Result = Dictio
 	Pu_la_cnt = 0
 
@@ -171,17 +170,18 @@ def Parse_from_to ( Stream, Dictio, DeBug=False ) :
 			Dictio[key] = 'Pu_la'
 		return tuple( Dictio.values() )
 	elif not Dictio :
-		print ("WTF:? " ,message, " No Dictio" ,'\t', Stream ,'\n', Dictio )
+		print ("WTF:? ", message, " No Dictio", '\t', Stream, '\n', Dictio )
 		return False
-	if DeBug : print (message , " In :", repr(Dictio) )
+
+	if DeBug : print ("\n>", repr(Dictio) )
 	try :
 		for key in Dictio.keys() :
 			if DeBug  : print( key, Dictio[key] )
-			item = Stream.get(key,'Pu_la')
+			item = Stream.get (key,'Pu_la')
 			if item == 'Pu_la' :
 				Result[key] = 'Pu_la'
 				Pu_la_cnt += 1
-				if DeBug : print ("\nPu_la_la ", key ) , input("N")
+				if DeBug : print ("\nPu_la_la ", key, '\n' )
 			else :
 				ty = type (item)
 				dy = type (Dictio[key])
@@ -193,7 +193,7 @@ def Parse_from_to ( Stream, Dictio, DeBug=False ) :
 				else :
 					Result[key] = item
 				if DeBug : print("Got : ", item )
-		if DeBug : print (message , " Out ", repr(Dictio) )
+		if DeBug : print (message , " Out ", repr(Dictio) , "\nPu_la_cnt = ", Pu_la_cnt), input("N")
 	except Exception as e:
 		print ("{} -> {!r}".format(message, e))
 		input ("All Fuked up")
