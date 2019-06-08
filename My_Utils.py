@@ -59,7 +59,7 @@ class Tee(object):
 	def stderr_stop(cls):
 		cls.ERRFILE.close()
 		sys.stderr = cls.stderrsav
-##############################################################################
+##==============-------------------   End   -------------------==============##
 
 def Custom_logger( name ):
 	Frmt 	     = logging.Formatter(fmt='%(asctime)s %(levelname)-8s %(message)s',
@@ -73,10 +73,10 @@ def Custom_logger( name ):
 	logger.addHndlr(Hndlr)
 	logger.addHndlr(screen_Hndlr)
 	return logger
-##############################################################################
+##==============-------------------   End   -------------------==============##
 
-def Util_str_calc (the_string) :
-	DeBug = False
+def Util_str_calc (the_string, DeBug=False ) :
+
 	message = sys._getframe().f_code.co_name
 	'''
 	Returns the result for string (a/b)
@@ -98,18 +98,18 @@ def Util_str_calc (the_string) :
 	else :
 		Rounded = float(dividend) / float(divisor)
 		if Rounded > 1 :
-			Rounded = round (Rounded, 2)
+			Rounded = round ( Rounded, 2 )
 		else :
-			Rounded = round (1/Rounded, 2)
+			Rounded = round ( 1 / Rounded, 2 )
 		return Rounded
-##############################################################################
+##==============-------------------   End   -------------------==============##
 
-def Random_String( length = 15 ):
+def Random_String( length= 17 ):
 	rand_string = '_'
 	for letter in random.sample('_' + string.ascii_letters + string.hexdigits, length):
 		rand_string += letter
 	return rand_string
-##############################################################################
+##==============-------------------   End   -------------------==============##
 
 def ordinal( num ):
 	'''
@@ -121,7 +121,7 @@ def ordinal( num ):
 	else:
 		ord = {1 : '\'st', 2 : '\'nd', 3 : '\'rd'}.get(num % 10, '\'th')
 		return '{0}{1}'.format(num, ord)
-##############################################################################
+##==============-------------------   End   -------------------==============##
 
 def New_File_Name ( file_name , new_extension='', strip='' ) :
 	'''
@@ -134,7 +134,7 @@ def New_File_Name ( file_name , new_extension='', strip='' ) :
 	New		= filename + extensi + new_extension
 #	New		= filename + new_extension
 	return New
-##############################################################################
+##==============-------------------   End   -------------------==============##
 
 def HuSa( nbyte ):
 	'''
@@ -148,7 +148,7 @@ def HuSa( nbyte ):
 		indx	   += 1
 	res = ( round (byte_val,1) )
 	return '%s %s' % (res, suffixes[indx])
-##############################################################################
+##==============-------------------   End   -------------------==============##
 
 def Bild_Dict (key, value, TheDick) :
 	if key in TheDick : ## XXX:  Add item to key location
@@ -156,7 +156,7 @@ def Bild_Dict (key, value, TheDick) :
 	else : 				## XXX:  The is the first, create key location
 		TheDick[ key ] = [ value ]
 	return TheDick
-##############################################################################
+##==============-------------------   End   -------------------==============##
 
 def Parse_from_to ( Stream, Dictio, DeBug=False ) :
 	message = sys._getframe().f_code.co_name
@@ -201,7 +201,7 @@ def Parse_from_to ( Stream, Dictio, DeBug=False ) :
 		return tuple( Dictio.values() )
 	else :
 		return Dictio[key]
-##############################################################################
+##==============-------------------   End   -------------------==============##
 
 def Resource_Check (Folder='./') :
 	print("=" * 60)
@@ -268,4 +268,4 @@ def Resource_Check (Folder='./') :
 	finally :
 		print ("\nResources OK\n" )
 		return True
-##############################################################################
+##==============-------------------   End   -------------------==============##

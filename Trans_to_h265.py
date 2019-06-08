@@ -20,23 +20,17 @@ from   My_Utils  import *
 __author__ = 'GeoHabZen'
 
 DeBug		= False
-Skip_First	= True
+Skip_First	= False
 Vi_Dur		= 0
 Out_F_typ	= '.mkv'
-<<<<<<< HEAD
-Max_v_btr	= 1999000
+Max_v_btr	= 1990000
 Max_a_btr	=  340000
-=======
-Max_v_btr	= 1900000
-Max_a_btr	=  320000
->>>>>>> a3c8dbd93e8a8b6b8afe1eed21cf30dcbc5147fb
 
 Tmp_F_Ext	= '_XY_' + Out_F_typ
 Except_fold = 'C:\\Users\\Geo\\Desktop\\Except'
 
 Folder		= 'C:\\Users\\Geo\\Desktop\\downloads'
-Folder		= 'C:\\Users\\Geo\\Desktop\\_2Conv'
-# XXX: Movie Lenght there is a better way but this works for Now
+Folder = 'C:\\Users\\Geo\\Desktop\\Except'
 
 VIDEO_EXTENSIONS = ['.3g2', '.3gp', '.3gp2', '.3gpp', '.60d', '.ajp', '.asf', '.asx', '.avchd', '.avi', '.bik',
 					'.bix', '.box', '.cam', '.dat', '.divx', '.dmf', '.dv', '.dvr-ms', '.evo', '.flc', '.fli',
@@ -57,26 +51,6 @@ ffprobe_exe = "ffprobe.exe"
 ffmpeg		= os.path.join( ffmpeg_bin, ffmpeg_exe  )
 ffprobe		= os.path.join( ffmpeg_bin, ffprobe_exe )
 
-<<<<<<< HEAD
-=======
-Sored_Dictio ={}
-
-##===============================   End   ====================================##
-def Run_stats(dictio):
-# TODO Oh man lots to do XXX
-	cnt =0
-	for item in tuple(sorted(dictio.items(), key=lambda t: len(t[0]))) :
-		cnt += 1
-		print (item)
-		for compo in  (item[1]) :
-			print (len (item[1]))
-			for po in compo :
-				print ("\t",po)
-				for p in po.items() :
-					print ("\t\t",p )
-		print('-'*35)
-	print ("Total of", cnt )
->>>>>>> a3c8dbd93e8a8b6b8afe1eed21cf30dcbc5147fb
 ##===============================   End   ====================================##
 
 def Parse_year ( FileName ) :
@@ -180,14 +154,8 @@ def Build_List ( Top_dir, Ext_types, Sort_ord=True, sort_loc = 2 ) : # XXX: Sort
 				print ("No file named {}".format( fi_path))
 				return False
 
-<<<<<<< HEAD
 # XXX: https://wiki.python.org/moin/HowTo/Sorting
 # XXX: Sort based in item [2] = filesize defined by sort_loc :)
-=======
-# TODO Categories based on extension !!
-# XXX: https://wiki.python.org/moin/HowTo/Sorting
-	# XXX: Sort based in item [2] = filesize defined by sort_loc :)
->>>>>>> a3c8dbd93e8a8b6b8afe1eed21cf30dcbc5147fb
 	queue_list = sorted( queue_list, key=lambda Item: Item[sort_loc], reverse=Sort_ord ) ## XXX: sort defined by caller
 
 	if DeBug :
@@ -406,7 +374,7 @@ def Do_it ( List_of_files, Excluded ='' ):
 	return queue_list
 ##===============================   End   ====================================##
 
-def FFProbe_run (File_in, Execute = ffprobe ):
+def FFProbe_run (File_in, Execute= ffprobe ):
 #	global DeBug
 #	DeBug = True
 
@@ -436,11 +404,7 @@ def FFProbe_run (File_in, Execute = ffprobe ):
 			'-show_streams' ]
 	if DeBug :
 		print ("    |>:" , Comand)
-<<<<<<< HEAD
 		input ("Ready to run FFProbe? ")
-=======
-#		input ("Ready to run FFProbe? ")
->>>>>>> a3c8dbd93e8a8b6b8afe1eed21cf30dcbc5147fb
 
 	jlist = []
 	err = 'WTF?'
@@ -679,6 +643,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 						_vid['index'], _vid['codec_name'], HuSa(_vid['bit_rate']), frm_rate )
 			print (message)
 			zzz = '0:' + str(_vid['index'])
+
 			if frm_rate > 40 :
 ### XXX: Best but slow 			ff_video = ['-vf', 'minterpolate=fps=30', '-map', zzz ]
 				ff_video = [ '-r', '25', '-map', zzz ]
@@ -689,24 +654,24 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				ff_video = [ '-map', zzz ]
 
 # XXX: https://trac.ffmpeg.org/wiki/Encode/H.265
-
 			if   _vid['height'] > 1080 :	# Scale to 1080p or -vf scale= -1:720 for 720
 				ff_video.extend( [ '-vf', 'scale = -1:1080', '-c:v', 'libx265', '-crf', '25', '-preset', 'slow' ] )
-			elif _vid['codec_name'] == 'hevc' and _vid['bit_rate'] > Max_v_btr :
-				ff_video.extend( [ '-c:v', 'libx265', '-b:v', str(Max_v_btr),'-preset', 'slow'])
 			elif _vid['codec_name'] == 'hevc' :
-				ff_video.extend( [ '-c:v', 'copy'])
+				if _vid['bit_rate'] > Max_v_btr :
+					ff_video.extend( [ '-c:v', 'libx265', '-b:v', str(Max_v_btr),'-preset', 'slow'])
+				else :
+					ff_video.extend( [ '-c:v', 'copy'])
 			else :
 				if   _vid['height'] > 680 :
 					ff_video.extend( [ '-c:v', 'libx265', '-crf', '25', '-preset', 'slow'  ] )
 				elif _vid['height'] > 340 :
 					ff_video.extend( [ '-c:v', 'libx265', '-crf', '25', '-preset', 'medium'] )
-				elif _vid['height'] > 250 :
+				elif _vid['height'] > 240 :
 					ff_video.extend( [ '-c:v', 'libx265', '-preset', 'medium'  ] )
 				else :
 					ff_video.extend( [ '-c:v', 'libx265', '-preset', 'fast'] )
-			if DeBug :
-				print (ff_video)
+
+			if DeBug :	print (ff_video)
 			NB_Vstr += 1
 
 # XXX: audio
@@ -718,7 +683,6 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 			Exeptions_File.flush()
 			sys.stdout.flush()
 			raise ValueError( message )
-
 		NB_Astr = 0
 		_disp = dict(	default = int(0),
 						dub 	= int(0),
@@ -733,7 +697,6 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 		for _aud in Au_strms :
 			if DeBug  : print ('Aud : {}\n{}'.format(NB_Astr, _aud ) )
 			Parse_from_to ( _aud['disposition'], _disp )
-			Prst_all.append (_disp)
 			if 'Pu_la' in _aud.values() :
 				Is_Fuckt +=1
 				message += "  Aud has Pu_la :("
@@ -761,6 +724,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 						HuSa(_aud['sample_rate']), _aud['channels'], _lng['language'],
 						_disp['default'])
 			print (message)
+
 # XXX: skip first if more than one if rusian or set by flag
 			if   _lng['language'] == 'rus' or ( Skip_First and NB_Astr == 0 and len(Au_strms) > 1 ) :
 				print ('Skip Russian')
@@ -771,27 +735,20 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				else :
 					ff_audio.extend([ '-map', zzz ])
 				zzz = '-c:a:' + str( _aud['index'] )
-				if   _aud['codec_name'] == 'aac' and _aud['bit_rate'] <= Max_a_btr : # and _aud['channels'] < 3 :
-					ff_audio.extend( [ zzz, 'copy'])
-				elif _aud['codec_name'] == 'aac' and _aud['bit_rate'] > Max_a_btr :
-					ff_audio.extend( [ zzz, 'aac', '-b:a', str(aud_btrt)] )
-# XXX: TODO convert to aac ????
-				elif _aud['codec_name'] == 'opus' or 'vorbis' :
-<<<<<<< HEAD
-					ff_audio.extend( [ zzz, 'aac', '-b:a', str(aud_btrt)] )
-=======
-					ff_audio.extend( [ zzz, 'aac', '-b:a', str(aud_btrt), '-ac', '2'] )
->>>>>>> a3c8dbd93e8a8b6b8afe1eed21cf30dcbc5147fb
-#					print ("   We have an {} ShitSuation".format(_aud['codec_name']) )
+
+				if   _aud['codec_name'] == ('aac' or 'vorbis') :
+					if  _aud['bit_rate'] <= Max_a_btr:
+						ff_audio.extend( [ zzz, 'copy'] )
+					else :
+						ff_audio.extend( [ zzz, 'aac', '-b:a', str(aud_btrt)] )
 				else :
 					ff_audio.extend( [ zzz, 'aac', '-b:a', str(aud_btrt)] )
+
 				if _aud['channels'] > 2 :
 					ff_audio.extend( [ '-ac', '2' ])
 			NB_Astr += 1
 # XXX:
-		if DeBug :
-			print (ff_audio, '\n')
-			input ("AUD ?")
+		if DeBug : 	print (ff_audio, '\n'), input ("AUD ?")
 
 #XXX subtitle
 		NB_Sstr = 0
@@ -819,26 +776,15 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 			if NB_Sstr == 0 :
 				ff_subtl = ['-map', zzz ]
 			else :
-				ff_subtl.extend( ['-map', zzz ])
+				ff_subtl.extend( [ '-map', zzz ])
 			zzz = '-c:s:' + str(_sub['index'])
 #			ff_subtl.extend( [ zzz, 'copy' , Sub_fi_name ] )
 			ff_subtl.extend( [ zzz, 'copy' ] )
 			NB_Sstr += 1
-			if DeBug :
-				print (ff_subtl)
+			if DeBug : print (ff_subtl)
+		if DeBug > 2 : print (" Prst_all :\n", json.dumps( Prst_all, indent=2, sort_keys=False)) , input ("Oy Vey")
 
-		for pu in Prst_all :
-			if 'Pu_la' in pu :
-				Is_Fuckt += 1
-				message += ' We Had some Pu_la'
-				print (message)
-				if DeBug     : print ("\t  | XXX | Pu_la :", pu)
-				if DeBug > 2 : print ("WTF ?? " ,key ,'\n', json.dumps(Meta_dta, indent=2, sort_keys=False))
-<<<<<<< HEAD
-=======
-		Bild_Dict ( Ini_file, Prst_all , Sored_Dictio )
->>>>>>> a3c8dbd93e8a8b6b8afe1eed21cf30dcbc5147fb
-		if DeBug > 2 : print ("Prst_all :\n", json.dumps( Prst_all, indent=2, sort_keys=False))
+## XXX: if  _vid['height'] < 1080 and _vid['bit_rate'] < 1400000 and _vid['codec_name'] == 'hevc' and _aud['codec_name'] == 'aac' :
 
 	except Exception as e:
 		message = "FFZa_Brain: Exception => {}:".format( e )
@@ -847,31 +793,20 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 		print( "Error: {}".format( traceback.print_exc()   ) )
 		print( "Is:    {}".format( traceback.print_stack() ) )
 		return False
-
 	else :
-## XXX: if  _vid['height'] < 1080 and _vid['bit_rate'] < 1400000 and _vid['codec_name'] == 'hevc' and _aud['codec_name'] == 'aac' :
-<<<<<<< HEAD
 		if  _vid['codec_name'] == 'hevc' and ( _aud['codec_name'] == 'vorbis' or _aud['codec_name'] == 'aac' ) :
-			print ('    | Vcod {}| Acod {}| Vhgt {}| VBtr {} : {}| ABtr {} : {}' .format( _vid['codec_name'], _aud['codec_name'], _vid['height'], round( _vid['bit_rate'] ), Max_v_btr, round( _aud['bit_rate'] ), Max_a_btr ) )
-			if Is_Fuckt ==0 and _vid['bit_rate'] <= Max_v_btr and _vid['height'] <= 1080 and _vid['bit_rate'] <= Max_v_btr and _aud['bit_rate'] <= Max_a_btr :
-				if DeBug :
-					input ('Nothing to do just escape')
-				raise ValueError('  Skip:', _vid['codec_name'], _aud['codec_name'])
+			print ('   | Vcod {}| Acod {}| Vhgt {}| VBtr {} : {}| ABtr {} : {}' .format( _vid['codec_name'], _aud['codec_name'], _vid['height'], round( _vid['bit_rate'] ), Max_v_btr, round( _aud['bit_rate'] ), Max_a_btr ) )
+			if _vid['bit_rate'] <= Max_v_btr and _vid['height'] <= 1080 and _vid['bit_rate'] <= Max_v_btr and _aud['bit_rate'] <= Max_a_btr :
+				if DeBug : input ('Nothing to do just escape')
+#				raise ValueError('  Skip:', _vid['codec_name'], _aud['codec_name'])
+
 		FFM_cmnd = ff_video + ff_audio + ff_subtl
 
-=======
-		if  _vid['codec_name'] == 'hevc' and _vid['bit_rate'] < Max_v_btr and _vid['height'] <= 1080 and _aud['bit_rate'] < Max_a_btr and _aud['codec_name'] == ('aac' or 'vorbis') :
-			if DeBug :
-				print ('    ', _vid['codec_name'], ' & ', _aud['codec_name'])
-				input ('Nothing to do just escape')
-			raise ValueError('  OK:', _vid['codec_name'], _aud['codec_name'])
-		FFM_cmnd = ff_video + ff_audio + ff_subtl
-		Bild_Dict ( Ini_file, FFM_cmnd, Sored_Dictio )
->>>>>>> a3c8dbd93e8a8b6b8afe1eed21cf30dcbc5147fb
 		if DeBug:
+			print ( '\n   ', Vi_strms, '\n   ', Au_strms,'\n   ', Su_strms)
 			print ("FFZa_Brain Done :", FFM_cmnd)
 			input ('Do it ?')
-		if DeBug : print ( '\n   ', Vi_strms, '\n   ', Au_strms,'\n   ', Su_strms)
+
 		end_time    = datetime.datetime.now()
 		print('   End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, end_time-start_time ) )
 		return FFM_cmnd
@@ -892,12 +827,10 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 
 	Fmpg_ou_file  = Random_String(13) + Tmp_F_Ext
 
-#	Title         = 'title=\"' +Sh_fil_name +" => Encoded By: Mr. _XY_, Universal CompZen Master " +'\"\''
 	Title         = 'title=\"' +Sh_fil_name +" Encoded By: " + __author__ + " Master (HEVC, AAC) " +'\"\''
 
-#	ff_head  = [Execute, '-i', Fmpg_in_file, '-hide_banner', '-fflags', '+genpts', '-movflags', '+faststart' ]
-	ff_head  = [Execute, '-i', Fmpg_in_file, '-hide_banner', '-movflags', 'faststart' ]
-	ff_tail  = [ '-metadata', Title, '-y', Fmpg_ou_file ]
+	ff_head  = [ Execute, '-i', Fmpg_in_file, '-hide_banner', '-movflags', 'faststart' ]
+	ff_tail  = [ '-metadata', Title, '-fflags', 'genpts', '-y', Fmpg_ou_file ]
 
 	Cmd      = ff_head + Za_br_com + ff_tail
 
@@ -923,7 +856,7 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 			input("Are we Done?")
 			return Fmpg_ou_file
 		else :
-			print ("    |>:", Cmd[6:-4] )	## XXX:  Skip firts 6 and last 4
+			print ("    |>:", Cmd[6:-6] )	## XXX:  Skip firts 6 and last 6
 			ff_out = subprocess.Popen( Cmd,
 						stdout=subprocess.PIPE,
 						stderr=subprocess.STDOUT,
@@ -1217,10 +1150,6 @@ if __name__=='__main__':
 		for filedesc in QExeption_ :
 			print (filedesc.replace('\n',''))
 		input ("Next :")
-<<<<<<< HEAD
-=======
-#	Run_stats( Sored_Dictio )
->>>>>>> a3c8dbd93e8a8b6b8afe1eed21cf30dcbc5147fb
 	Exeptions_File.close()
 	Succesful_File.close()
 
