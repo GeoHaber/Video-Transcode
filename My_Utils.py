@@ -123,7 +123,7 @@ def ordinal( num ):
 		return '{0}{1}'.format(num, ord)
 ##==============-------------------   End   -------------------==============##
 
-def New_File_Name ( file_name , new_extension='', strip='' ) :
+def New_File_Name ( file_name, new_extension='', strip='' ) :
 	'''
 	Returns a new filename derived from the Old File by adding and or removing
 	'''
@@ -195,8 +195,11 @@ def Parse_from_to ( Stream, Dictio, DeBug=False ) :
 				if DeBug : print("Got : ", item )
 		if DeBug : print (message , " Out ", repr(Dictio) , "\nPu_la_cnt = ", Pu_la_cnt), input("N")
 	except Exception as e:
-		print ("{} -> {!r}".format(message, e))
-		input ("All Fuked up")
+		print( message,':\n', len(Stream), Stream, '\n', len(Dictio), Dictio )
+		print("\n{} -> {!r}".format(message, e))
+		print("Is:    {}".format( traceback.print_stack() ) )
+		print("Error: {}".format( traceback.print_exc()   ) )
+		input("All Fuked up")
 	if len(Dictio) > 1 :
 		return tuple( Dictio.values() )
 	else :
@@ -207,10 +210,10 @@ def Resource_Check (Folder='./') :
 	print("=" * 60)
 	message = sys._getframe().f_code.co_name
 	print (datetime.datetime.now().strftime('\n%A: %m/%d/%Y %H:%M:%S %p'))
-	print('\n:', message )
+	print('\n:>', message )
+	print (os.getcwd())
 
-	print ("Python is:")
-	print ('\n'.join(sorted(sys.path)) )
+	print ("Python is:", '\n'.join(sorted(sys.path)), '\n' )
 
 	print('\nFile       :', __file__)
 	print('Access time  :', time.ctime(os.path.getatime(__file__)))
@@ -219,22 +222,16 @@ def Resource_Check (Folder='./') :
 	print('Size         :', HuSa(      os.path.getsize( __file__)))
 
 	if os.path.isfile( Folder ) :
-		print (Folder, " is a File")
+		print ('\n', Folder, " is a File")
 	elif os.path.isdir( Folder ) :
-		print (Folder, " is a Folder" )
+		print ('\n',Folder, " is a Folder" )
 	elif os.path.islink( Folder ) :
-		print (Folder, " is a Link")
+		print ('\n',Folder, " is a Link")
 	elif os.path.ismount (Folder) :
-		print (Folder, " is a Mountpoint")
+		print ('\n',Folder, " is a Mountpoint")
 	else :
-		print (Folder, " is WTF?")
-	'''
-	stat 	= os.stat(Folder)
-	print ("Size     :" , HuSa( stat.st_size ))
-	print ("Created  :" , time.asctime( time.gmtime( stat.st_ctime ) ) )
-	print ("Modifyed :" , time.asctime( time.gmtime( stat.st_mtime ) ) )
-	print ("Accesed  :" , time.asctime( time.gmtime( stat.st_atime ) ) )
-	'''
+		print ('\n',Folder, " is WTF?")
+
 	try :
 		sys_is = platform.uname()
 		print ('\nSystem Name :', sys_is.node , sys_is.system , sys_is.release, '(',sys_is.version,')', sys_is.processor )
@@ -269,3 +266,24 @@ def Resource_Check (Folder='./') :
 		print ("\nResources OK\n" )
 		return True
 ##==============-------------------   End   -------------------==============##
+
+def get_tree_size(path):
+    """Return total size of files in path and subdirs. If
+    is_dir() or stat() fails, print an error message to stderr
+    and assume zero size (for example, file has been deleted).
+    """
+    total = 0
+    for entry in os.scandir(path):
+        try:
+            is_dir = entry.is_dir(follow_symlinks=False)
+        except OSError as error:
+            print('Error calling is_dir():', error, file=sys.stderr)
+            continue
+        if is_dir:
+            total += get_tree_size(entry.path)
+        else:
+            try:
+                total += entry.stat(follow_symlinks=False).st_size
+            except OSError as error:
+                print('Error calling stat():', error, file=sys.stderr)
+    return total
