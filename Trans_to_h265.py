@@ -81,14 +81,14 @@ def Move_Del_File (src, dst, DeBug=False ):
 					os.remove( src )
 				except OSError as e:  ## if failed, report it back to the user ##
 					message += "\n!Error: {}\n{} - {}\n".format(src, e.filename, e.strerror)
-					if DeBug : print (message)
-					raise Exception( message )
+					if DeBug : print( message )
+					raise  Exception( message )
 			else:
 				time.sleep ( 1 )
 	except OSError as e:  ## if failed, report it back to the user ##
 		message += "\n!Error: Src {} , Dst {}\n{} - {}\n".format(src, dst, e.filename, e.strerror)
-		if DeBug : print (message)
-		raise Exception( message )
+		if DeBug : print( message )
+		raise  Exception( message )
 	else:
 		return True
 ##===============================   End   ====================================##
@@ -346,7 +346,7 @@ def Do_it ( List_of_files, Excluded ='' ):
 						if  all_good :
 							all_good = FFClean_up( The_file, all_good )
 							if  all_good :
-								Saving = all_good
+								Saving += all_good
 								all_good = Create_File ( Lock_File, message )
 								if  all_good :
 									cnt -= 1
@@ -482,19 +482,28 @@ def FFProbe_run (File_in, Execute= ffprobe ):
 	out = ''
 
 	try :
-		ff_out = subprocess.run( Comand,
+		if DeBug :
+			ff_out = subprocess.run( Comand,
+				stdout	= subprocess.PIPE,
+#				stderr	= subprocess.PIPE,
+				universal_newlines = True,
+#				bufsize=0,
+				encoding='utf-8'
+				)
+		else:
+			ff_out = subprocess.run( Comand,
 				stdout	= subprocess.PIPE,
 				stderr	= subprocess.PIPE,
 				universal_newlines = True,
 				encoding='utf-8')
 	except subprocess.CalledProcessError as err:
-		print('ERROR:', err)
-		if DeBug : input("Exception")
+		message += " FFProbe: CalledProcessError" .format( str(repr(err)) )
+		if DeBug : print( message ), input ('Next')
+		raise  Exception( message )
 	except Exception as e:
-		message += " ErRor: Exception = {}:".format( str(repr(e)) )
-		print( message )
-		if DeBug : input("Exception")
-		return False
+		message += " FFProbe: Exception = {}:".format( str(repr(e)) )
+		if DeBug : print( message ), input ('Next')
+		raise  Exception( message )
 	else:
 		message += "\nDone :\n"
 		out	= ff_out.stdout
@@ -529,7 +538,6 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 	message 	= sys._getframe().f_code.co_name + '/:'
 	print("  {}\t\tStart: {:%H:%M:%S}".format( message ,start_time ) )
 
-	Is_Fuckt = 0
 	frm_rate = 0
 
 	Prst_all = []
@@ -552,7 +560,6 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 		Parse_from_to ( Meta_dta['format'], _mtdta)
 		Prst_all.append (_mtdta)
 		if 'Pu_la' in _mtdta.values() :
-			Is_Fuckt +=1
 			message += ":O: Meta_dta has Pu_la\n{}\n{}" .format( json.dumps( Meta_dta, indent=2, sort_keys=True ), _mtdta )
 			print (message)
 			if DeBug : input ('Meta WTF')
@@ -647,7 +654,6 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 					input ("ATT")
 ## XXX: Is WTF ?
 			else :
-				Is_Fuckt += 1
 				print ("Key:\n",	  json.dumps(key,      indent=2, sort_keys=False))
 				print ("Strm_X:\n",	  json.dumps(Strm_X,   indent=2, sort_keys=False))
 				print ("Meta_dta:\n", json.dumps(Meta_dta, indent=2, sort_keys=False))
@@ -669,19 +675,14 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 
 # XXX: Video
 		if len(Vi_strms) == 0 :
-			Is_Fuckt += 1
 			message += ' No Video => Can not convert \n{}\n' .format( Ini_file )
-			print (message)
-			sys.stdout.flush()
-#			return False
-			if DeBug : input('Press CR')
+			if DeBug : print( message ), input ('Next ?')
 			raise ValueError( message )
 
 		NB_Vstr = 0
 		for _vid in Vi_strms :
 			if DeBug :  print ('Vid : {}\n{}'.format(NB_Vstr, _vid ) )
 			if 'Pu_la' in _vid.values() :
-				Is_Fuckt +=1
 				if DeBug > 1 : print ( json.dumps( _vid, indent=2, sort_keys=False)), input ('ZZ')
 				print (':O: Vid has Pu_la VBR')
 				if  _vid['bit_rate'] == 'Pu_la':
@@ -697,7 +698,6 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 			print (message)
 
 			if _vid['codec_name'] == 'mjpeg' :		# XXX Add wait
-				Is_Fuckt +=1
 				continue
 
 			zzz = '0:' + str(_vid['index'])
@@ -735,8 +735,9 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 # XXX: audio
 		if len(Au_strms) == 0 :
 			message = ' No Audio => Can\'t convert\n{}\n' .format( Ini_file )
-			if DeBug : print (message)
-			raise ValueError( message )
+			if DeBug : print( message ), input ('Next ?')
+			return False
+#			raise ValueError( message )
 
 		NB_Astr = 0
 		_disp = dict(	default = int(0),
@@ -753,7 +754,6 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 			if DeBug  : print ('Aud : {}\n{}'.format(NB_Astr, _aud ) )
 			Parse_from_to ( _aud['disposition'], _disp )
 			if 'Pu_la' in _aud.values() :
-				Is_Fuckt +=1
 				if DeBug > 1 : print (json.dumps( _aud, indent=2, sort_keys=False)), input ('ZZ')
 				print (':O: Aud has Pu_la VBR')
 				if  _aud['bit_rate'] == 'Pu_la':
@@ -777,7 +777,6 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 # XXX: skip first if more than one if rusian or set by flag
 			if  (len(Au_strms) > 1  and _lng['language'] == 'rus') or (Skip_First and NB_Astr == 0 ) :
 				print ('Skip Russian')
-				Is_Fuckt +=1
 				time.sleep ( 1 )
 #				Move_Del_File ( Ini_file, Excepto, DeBug=True )
 			else :
@@ -807,7 +806,6 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 		for _sub in Su_strms :
 			if DeBug : print ('Sub : {}\n{}'.format(NB_Sstr, _sub ) )
 			if 'Pu_la' in _sub.values() :
-				Is_Fuckt +=1
 				if DeBug > 1 : print ( json.dumps( _sub, indent=2, sort_keys=False)), input ('ZZ')
 				print (':O: Sub has Pu_la')
 
@@ -844,18 +842,19 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 
 		for pu in Prst_all :
 			if 'Pu_la' in pu :
-				Is_Fuckt += 1
 				message += ' We Had some Pu_la'
 				print (message)
 				if DeBug     : print ("\t  | XXX | Pu_la :", pu)
 	except Exception as e:
 		message += "\n FFZa_Brain: Exception => {}".format( e )
-		print( message )
+		if DeBug : print( message ), input ('Next')
 #		print( "Is:    {}".format( traceback.print_stack() ) )
 #		print( "Error: {}".format( traceback.print_exc()   ) )
-		if DeBug: input ( 'What now ?' )
-		FFM_cmnd = ff_video + ff_audio + ff_subtl
-		return FFM_cmnd
+		raise  Exception( message )
+
+#		FFM_cmnd = ff_video + ff_audio + ff_subtl
+#		return FFM_cmnd
+
 	else :
 		FFM_cmnd = ff_video + ff_audio + ff_subtl
 
@@ -918,7 +917,7 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 				message += "\n ErRor: Code {!r}\n".format( errcode )
 				print( message )
 				input('Next')
-				raise ValueError ( '$hit ', message, errcode )
+				raise Exception( '$hit ', message, errcode )
 			input("Are we Done?")
 			return Fmpg_ou_file
 		else :
@@ -932,11 +931,11 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 	except subprocess.CalledProcessError as err:
 		message += " ErRor: CalledProcessError {!r},  {!r} :".format( err.returncode , err.output )
 		if DeBug : print( message ) , input('Next')
-		raise ValueError ( '$hit ', message, err )
+		raise Exception( '$hit ', message, err )
 	except Exception as e:
 		message += " ErRor: Exception {}:".format( e )
 		if DeBug : print( message ) , input('Next')
-		raise ValueError ( '$hit ', message, e )
+		raise Exception( '$hit ', message, e )
 	else:
 		while True :
 			try:
@@ -967,15 +966,12 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 						else :
 							print ("\t  [:)] Lenght={}".format( Vi_Dur ) )
 
-#						if dif < 15 : # 15 seconds rule
 						# XXX: make it 1 percent a fixed number
 						if dif < ( b_sec / 100 ) :
-							Succes = True
+							pass
 						else :
 							print ("Diff to Big :( ",dif)
-						if DeBug :
-							time.sleep (2)
-#							input ("So ?")
+						if DeBug : time.sleep (2), input ("So ?")
 					except Exception as e:
 						message += " Got Time ErRor: Exception {}:".format( e )
 						if DeBug : print( message ) , input('Next')
@@ -1015,6 +1011,105 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 		print ( message )
 		return Fmpg_ou_file
 ##===============================   End   ====================================##
+def FFClean_up ( Inp_file, Out_file ):
+#	global DeBug
+#	DeBug = True
+
+	start_time	= datetime.datetime.now()
+	message 	= sys._getframe().f_code.co_name + '\\:'
+	print("  {}\t\tStart: {:%H:%M:%S}".format( message, start_time ) )
+
+## XXX: Check that in and out Files are okay
+	check_path    = os.path.exists (Out_file )
+	Out_file_size = os.path.getsize(Out_file)
+	Ini_file_size = os.path.getsize(Inp_file)
+
+	if not check_path:
+		print ("\tPath not found: " + Out_file )
+		if DeBug > 1 : input ("WTF ?")
+		return False
+	if not Out_file_size:
+		print ("\tFile size Error" , Out_file_size )
+		print ("\tNo New File Aborting script.")
+		if DeBug > 1 : input ("WTF ?")
+		return False
+	if DeBug :
+		print ("Pre :\n{} \t\t{}".format (Inp_file, HuSa(Ini_file_size)) )
+		print ("Post:\n{} \t\t{}".format (Out_file, HuSa(Out_file_size)) )
+
+	Ratio   =  round( 100*(( Ini_file_size - Out_file_size) / Out_file_size))
+	if DeBug:
+		if  Ratio  >  2 :
+			print ("\tNew {} {} Smaller".format(Ratio, '%'))
+		elif Ratio < -2 :
+			print ("\tNew {} {} Larger ".format(abs(Ratio), '%'))
+		else :
+			print ("\tSimilar {} {}".format(Ratio, '%'))
+	if DeBug :
+		print ("Ini\t{}\tOut\t{}\tRat\t{}".format( Ini_file_size, Out_file_size, Ratio ))
+		input ('Next')
+	try :
+		# Create "Delete Me File" from the Original file (Inp_file)
+		To_delete  = New_File_Name ( Inp_file, "DeletMe.old", Tmp_F_Ext  )
+		check_path = os.path.exists( To_delete )
+		if check_path : # File alredy exists TODO let's create another one ??
+			print ("\t.old Alredy Exists Rm:", To_delete )
+			time.sleep( 2 )
+			try:
+				os.remove( To_delete )
+			except OSError as e:  ## if failed, report it back to the user ##
+				message += " OSErRor: removing File {} {!r}:".format( To_delete, e )
+				if DeBug : print( message ) , input('Next')
+				raise ValueError ( '$hit ', message, e )
+		os.rename ( Inp_file, To_delete)
+		check_path = os.path.exists( To_delete )
+		if check_path :
+			if DeBug : print ("\tRnm: {}\tTo: {}".format( os.path.basename(Inp_file), os.path.basename(To_delete)) )
+		else :
+			print (message, " Big BuBu ", To_delete, Inp_file )
+			return False
+## XXX: Extract ext remouve and change to Out_F_typ for ImpFile
+		f_name, xt 	 = os.path.splitext (Inp_file)
+		New_out_File = New_File_Name (Inp_file, Out_F_typ, xt)
+		if DeBug :
+			print ("Creating" , New_out_File)
+			input ("Shall we?")
+		check_path   = os.path.exists (New_out_File)
+		if check_path : # File alredy exists TODO let's deleate it to create another one
+			print ("\t Alredy Exists Must Rm:", New_out_File )
+			time.sleep( 3 )
+			try:
+				os.remove( New_out_File)
+			except OSError as e:  ## if failed, report it back to the user ##
+				message += " OSErRor: removing File {} {!r}:".format( New_out_File, e )
+				if DeBug : print( message ) , input('Next')
+				raise ValueError ( '$hit ', message, e )
+
+		shutil.move ( Out_file, New_out_File)
+		os.utime 	( New_out_File, None) 			## XXX:  None means now !
+
+		check_path = os.path.exists( New_out_File )
+		if not check_path :
+			print (message, " Big BuBu " , New_out_File , Out_file )
+			return False
+		else :
+			if DeBug : print ("\tRnm: {}\tTo: {}".format( os.path.basename(Out_file), os.path.basename(New_out_File)) )
+
+	except Exception as ex :
+		message += " FFClean_up Exception {!r}:".format( ex )
+		if DeBug : print( message ) , input('Next')
+		raise ValueError ( '$hit ', message )
+
+	else :
+		message = "File {}\nDone :)\tWas: {}\tIs: {}\tSaved: {} => {} % \n".format(
+					os.path.basename(Inp_file), HuSa(Ini_file_size), HuSa(Out_file_size), HuSa(Ini_file_size - Out_file_size), round(Ratio,1) )
+		print (message)
+		# XXX Create the Lock file with utf-8 encode for non english caracters ... # XXX:
+		end_time    = datetime.datetime.now()
+		print('   End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, end_time-start_time ) )
+		return (1 + abs ( Ini_file_size - Out_file_size ) )
+##===============================   End   ====================================##
+
 
 def Prog_cal (line_to, sy=False ) :
 #	global DeBug
@@ -1076,8 +1171,7 @@ if __name__=='__main__':
 		print ("Aborting Not Enough resources")
 		exit()
 
-#XXX  |[0] Extension |[1] Full Path |[2] File Size |[3] File Info |[4] Year Made XXX
-#	Qlist_of_Files  = Build_List( Folder, VIDEO_EXTENSIONS, sort=False, Sort_loc=2 )	# Smalest Size File
+#XXX  |[0] Extension |[1] Full Path |[2] File Size |[3] File Info |[4] Year Made Sort = True => Largest First XXX
 	Qlist_of_Files  = Build_List( Folder, VIDEO_EXTENSIONS, Sort_loc=2, Sort_ord=True  )
 	if DeBug > 2 :  print (Qlist_of_Files), input ("Next :")
 
