@@ -835,7 +835,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 			if _sub['codec_name'] == 'hdmv_pgs_subtitle' or 'dvd_subtitle' :
 				if _lng['language'] == 'eng' :
 					Sub_fi_name	= Ini_file + '.' + str(_lng['language']) + '.ssa'
-					ff_subtl.extend( [  zzz, 'copy', Sub_fi_name ] )
+#					ff_subtl.extend( [  zzz, 'copy', Sub_fi_name ] )
 				else :
 					message += 'Skip :('
 					print (message)
@@ -882,7 +882,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 
 def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 #	global DeBug
-	DeBug = True
+#	DeBug = True
 
 	start_time	= datetime.datetime.now()
 	message 	= sys._getframe().f_code.co_name + '-:'
