@@ -717,7 +717,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 					print ( json.dumps( _vid, indent=2, sort_keys=True ) )
 					input("Pu_la is here")
 			frm_rate  = float( Util_str_calc(_vid['avg_frame_rate']) )
-			message = "    |<V:{}>| {:^6} |Br: {:>9}|Fps: {:>5}| {}".format(
+			message = "    |<V:{:2}>| {:^6} |Br: {:>9}|Fps: {:>5}| {}".format(
 						_vid['index'], _vid['codec_name'], HuSa(_vid['bit_rate']), frm_rate, extra )
 			print (message)
 
@@ -779,7 +779,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				_lng['language'] = 'wtf'
 			else:
 				Parse_from_to ( _aud['tags'], _lng )
-			message = "    |<A:{}>| {:^6} |Br: {:>9}|Fq: {:>5}|Ch: {}|{}|{}| {}".format(
+			message = "    |<A:{:2}>| {:^6} |Br: {:>9}|Fq: {:>5}|Ch: {}|{}|{}| {}".format(
 						_aud['index'], _aud['codec_name'], HuSa(_aud['bit_rate']),
 						HuSa(_aud['sample_rate']), _aud['channels'], _lng['language'],
 						_disp['default'], extra)
@@ -828,27 +828,29 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 			if 'Pu_la' in _lng['language'] :
 				_lng['language'] = 'wtf'
 
-			message = "    |<S:{}>| {:^6} | {:^12}| {}| {}".format(
+			message = "    |<S:{:2}>|{:^6}|{:^10}|{:3}| {}".format(
 				_sub['index'], _sub['codec_name'], _sub['codec_type'], _lng['language'], extra )
 
-#			if _lng['language'] != 'eng' and (_sub['codec_name'] == 'hdmv_pgs_subtitle' or 'dvd_subtitle') :
-			if _sub['codec_name'] == 'hdmv_pgs_subtitle' or 'dvd_subtitle' :
-				message += 'Skip :( Dont Know How to handle'
-				print (message)
-				if DeBug : input ('Next Sub ?')
-				continue
-			print (message)
 ## XXX:
-			zzz = '0:' + str(_sub['index'])
-			if NB_Sstr == 0 :
-				ff_subtl = [ '-map', zzz ]
-			else :
-				ff_subtl.extend( ['-map', zzz ])
-			zzz = '-c:s:' + str(_sub['index'])
+			if _sub['codec_name'] == 'hdmv_pgs_subtitle' or 'dvd_subtitle' :
+				if _lng['language'] == 'eng' :
+					Sub_fi_name	= Ini_file + '.' + str(_lng['language']) + '.ssa'
+					ff_subtl.extend( [  zzz, 'copy', Sub_fi_name ] )
+				else :
+					message += 'Skip :('
+					print (message)
+					if DeBug : input ('Next Sub ?')
+					continue
+			else:
+				print (message)
+				zzz = '0:' + str(_sub['index'])
+				if NB_Sstr == 0 :
+					ff_subtl = [ '-map', zzz ]
+				else :
+					ff_subtl.extend( ['-map', zzz ])
+				zzz = '-c:s:' + str(_sub['index'])
+				ff_subtl.extend( [ zzz, 'copy' ] )
 
-#			Sub_fi_name	= Ini_file + '.' + str(_lng['language']) + '.' + str(_sub['index']) + '.srt'
-#			ff_subtl.extend( [ zzz, 'copy' , Sub_fi_name ] )
-			ff_subtl.extend( [ zzz, 'copy' ] )
 			NB_Sstr += 1
 		message = "    {}".format( ff_subtl )
 		print (message)
@@ -880,7 +882,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 
 def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 #	global DeBug
-#	DeBug = True
+	DeBug = True
 
 	start_time	= datetime.datetime.now()
 	message 	= sys._getframe().f_code.co_name + '-:'
