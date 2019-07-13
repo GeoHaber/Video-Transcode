@@ -37,6 +37,7 @@ Folder	= 'C:\\Users\\Geo\\Desktop\\downloads'
 #Folder	= 'E:\\Media\\Movie'
 #Folder = '\\\\NAS-Q\\Multimedia\Movie'
 #Folder	= 'D:\\Media'
+#Folder	= 'C:\\Users\\Geo\\Desktop\\Except'
 
 VIDEO_EXTENSIONS = ['.3g2', '.3gp', '.3gp2', '.3gpp', '.60d', '.ajp', '.asf', '.asx', '.avchd', '.avi', '.bik',
 					'.bix', '.box', '.cam', '.dat', '.divx', '.dmf', '.dv', '.dvr-ms', '.evo', '.flc', '.fli',
@@ -67,6 +68,7 @@ ffprobe		= os.path.join( ffmpeg_bin, ffprobe_exe )
 def Move_Del_File (src, dst, DeBug=False ):
 #	DeBug = True
 	message = sys._getframe().f_code.co_name + '-:'
+
 	if DeBug :
 		message += ' Src : {}\n Dest : {}' .format( src, dst)
 		print( message )
@@ -90,6 +92,13 @@ def Move_Del_File (src, dst, DeBug=False ):
 		if DeBug : print( message )
 		raise  Exception( message )
 	else:
+		if DeBug :
+			print ( "\n", "=" *40)
+			print( "Stack:{}\n".format( traceback.print_stack (limit=5) ) )
+			print ( "\n", "-" *40)
+			print( "Exec: {}\n".format( traceback.print_exc   (limit=5) ) )
+			print ( "\n", "-" *40)
+			input("\nNow what")
 		return True
 ##===============================   End   ====================================##
 
@@ -338,15 +347,20 @@ def Do_it ( List_of_files, Excluded ='' ):
 		if Lock_File :
 			#XXX Do it XXX
 			try:
+				if DeBug : print ("\nDo> FFProbe_run")
 				all_good = FFProbe_run( The_file )
 				if  all_good :
+					if DeBug : print ("\nDo> FFZa_Brain")
 					all_good = FFZa_Brain( The_file, all_good )
 					if  all_good :
+						if DeBug : print ("\nDo> FFMpeg_run")
 						all_good = FFMpeg_run( The_file, all_good )
 						if  all_good :
+							if DeBug : print ("\nDo> FFClean_up")
 							all_good = FFClean_up( The_file, all_good )
 							if  all_good :
 								Saving += all_good
+								if DeBug : print ("\nDo> Create_File Log ")
 								all_good = Create_File ( Lock_File, message )
 								if  all_good :
 									cnt -= 1
@@ -410,10 +424,13 @@ def Do_it ( List_of_files, Excluded ='' ):
 #					Create_File   ( Lock_File, message, 10, DeBug=True )
 					Move_Del_File ( The_file, Excepto, DeBug=True )
 			except Exception as e:
-				print( "Is:    {}".format( traceback.print_stack() ) )
-				print( "Error: {}".format( traceback.print_exc()   ) )
 				message += " WTF? General Exception {}" .format(e)
+				print ( "\n", "=" *40)
 				print (message)
+				print( "Stack:{}\n".format( traceback.print_stack (limit=5) ) )
+				print ( "\n", "-" *40)
+				print( "Exec: {}\n".format( traceback.print_exc   (limit=5) ) )
+				print ( "\n", "-" *40)
 #				Create_File   ( Lock_File, message, 100, DeBug=True )
 				Move_Del_File ( The_file, Excepto, DeBug=True )
 				Exeptions_File.flush()
@@ -459,8 +476,8 @@ def FFProbe_run (File_in, Execute= ffprobe ):
 		return False
 
 	Comand = [ Execute ,
-		'-analyzeduration', '2147483640',
-		'-probesize', '2147483640',
+		'-analyzeduration', '2000000000',
+		'-probesize',       '2000000000',
 		'-i', File_in,
 		'-v', 'verbose',		# XXX quiet, panic, fatal, error, warning, info, verbose, debug, trace
 		'-of', 'json',			# XXX default, csv, xml, flat, ini
@@ -496,8 +513,8 @@ def FFProbe_run (File_in, Execute= ffprobe ):
 				stderr	= subprocess.PIPE,
 				universal_newlines = True,
 				encoding='utf-8')
-	except subprocess.CalledProcessError as err:
-		message += " FFProbe: CalledProcessError" .format( str(repr(err)) )
+	except subprocess.CalledProcessError as err:	# XXX: TBD Fix error in some rare cases
+		message += " FFProbe: CalledProcessError" .format( err )
 		if DeBug : print( message ), input ('Next')
 		raise  Exception( message )
 	except Exception as e:
@@ -527,9 +544,6 @@ def FFProbe_run (File_in, Execute= ffprobe ):
 ##===============================   End   ====================================##
 
 def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
-	'''
-	The Heavy Lifting Probe, Parse, Decide what to do Return ffmpeg Comand
-	'''
 	global Vi_Dur	# make it global so we can reuse for fmpeg check ...
 #	global DeBug
 #	DeBug = True
@@ -564,12 +578,10 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 			print (message)
 			if DeBug : input ('Meta WTF')
 #			raise ValueError( message )
-
 		_kdat = dict(	codec_type 		=''	)
 		for rg in range ( _mtdta['nb_streams'] ) :
 			Strm_X = Meta_dta['streams'][ rg ]
 			key    = Parse_from_to ( Strm_X, _kdat )
-			Prst_all.append(_kdat)
 			if DeBug > 1 :
 				print ("  HAS :", key, '\n\n', json.dumps( Strm_X, indent=2, sort_keys=False ) )
 				input ("  Next:")
@@ -657,89 +669,87 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				print ("Key:\n",	  json.dumps(key,      indent=2, sort_keys=False))
 				print ("Strm_X:\n",	  json.dumps(Strm_X,   indent=2, sort_keys=False))
 				print ("Meta_dta:\n", json.dumps(Meta_dta, indent=2, sort_keys=False))
-				input ("Parsing Streams? WTF is this?")
-# XXX: Parsing Done now lets Procces
+				message += ' Cant Parse Streams WTF? \n{}\n' .format( Ini_file )
+				print( message )
+				input( 'Next ' )
+				raise ValueError( message )
+
+# XXX: Parsing Done lets Procces
 		if  _mtdta['bit_rate'] == 'Pu_la':
 			_mtdta['bit_rate'] = 100
-
-		if  _mtdta['duration'] == 'Pu_la':
-			Vi_Dur = 1080
+			Vi_Dur = 11080
 		else :
 			mins,  secs = divmod(int(_mtdta['duration']), 60)
 			hours, mins = divmod(mins, 60)
 			Vi_Dur = '{:02d}:{:02d}:{:02d}'.format(hours, mins, secs)
-
 		message = "    |< G >|{}| {:^5}x{:^5} | {} Vid| {} Aud| {} Sub|".format(
 					Vi_Dur, _vdata['width'], _vdata['height'], len(Vi_strms), len(Au_strms), len(Su_strms) )
 		print (message)
 
-# XXX: Video
+# XXX: Check it :)
 		if len(Vi_strms) == 0 :
-			message += ' No Video => Can not convert \n{}\n' .format( Ini_file )
+			message = 'File \n{}\n Has no Video => Can\'t convert' .format( Ini_file )
 			if DeBug : print( message ), input ('Next ?')
 			raise ValueError( message )
+		if len(Au_strms) == 0 :
+			message = 'File \n{}\n Has no Audio => Can\'t convert' .format( Ini_file )
+			if DeBug : print( message ), input ('Next ?')
+			return False
+		if len(Su_strms ) == 0 :
+			print (' No subtitles' )
+			if DeBug : input ('Next ?')
 
+# XXX: Video
+		if DeBug : input ("VID !!")
 		NB_Vstr = 0
+		extra = ''
 		for _vid in Vi_strms :
-			if DeBug :  print ('Vid : {}\n{}'.format(NB_Vstr, _vid ) )
+			if DeBug >1 :  print ('Vid : {}\n{}'.format(NB_Vstr, _vid ) )
+			if _vid['codec_name'] == 'mjpeg' :
+				continue
 			if 'Pu_la' in _vid.values() :
 				if DeBug > 1 : print ( json.dumps( _vid, indent=2, sort_keys=False)), input ('ZZ')
-				print (':O: Vid has Pu_la VBR')
+				extra = 'has Pu_la'
 				if  _vid['bit_rate'] == 'Pu_la':
 					if DeBug: print ( _vid.items() ),	time.sleep(1)
 					_vid['bit_rate'] = round( _mtdta['bit_rate'] * 0.85 )	# XXX approximation 80% video
 				else:
 					print ( json.dumps( _vid, indent=2, sort_keys=True ) )
 					input("Pu_la is here")
-
 			frm_rate  = float( Util_str_calc(_vid['avg_frame_rate']) )
-			message = "    |<V:{}>| {:^6} |Br: {:>9}|Fps: {:>5}|".format(
-						_vid['index'], _vid['codec_name'], HuSa(_vid['bit_rate']), frm_rate )
+			message = "    |<V:{}>| {:^6} |Br: {:>9}|Fps: {:>5}| {}".format(
+						_vid['index'], _vid['codec_name'], HuSa(_vid['bit_rate']), frm_rate, extra )
 			print (message)
-
-			if _vid['codec_name'] == 'mjpeg' :		# XXX Add wait
-				continue
 
 			zzz = '0:' + str(_vid['index'])
 			ff_video = [ '-map', zzz ]
 
-			if frm_rate > Max_frm_rt :
-### XXX: Best but slow 			ff_video = ['-vf', 'minterpolate=fps=30', '-map', zzz ]
-#				ff_video = [ '-r', '25', '-map', zzz ]
-				message = " Should Frame rate convert from {} to 25" .format( frm_rate )
-				print (message)
-				time.sleep(2)
-# XXX: https://video.stackexchange.com/questions/16664/what-crf-or-settings-i-should-choose-for-h265-in-order-to-achieve-a-similiar-qua
-# XXX: https://trac.ffmpeg.org/wiki/Encode/H.265
-			if   _vid['height'] > 1080 :	# Scale to 1080p or -vf scale= -1:720 for 720
+			if   _vid['height'] > 1090 :	# Scale to 1080p
 				ff_video.extend( [ '-vf', 'scale = -1:1080', '-c:v', 'libx265', '-crf', '25', '-preset', 'slow' ] )
-			elif _vid['codec_name'] == 'hevc' and _vid['bit_rate'] > Max_v_btr :
-				ff_video.extend( [ '-c:v', 'libx265', '-b:v', str(Max_v_btr),'-preset', 'slow'])
 			elif _vid['codec_name'] == 'hevc' :
-				ff_video.extend( [ '-c:v', 'copy'])
+				if _vid['bit_rate'] > Max_v_btr :
+					ff_video.extend( [ '-c:v', 'libx265', '-b:v', str(Max_v_btr), '-preset', 'slow'])
+				else:
+					ff_video.extend( [ '-c:v', 'copy'])
 			else :
 				if   _vid['height'] > 680 :
 					ff_video.extend( [ '-c:v', 'libx265', '-crf', '25', '-preset', 'slow'  ] )
 				elif _vid['height'] > 340 :
-					ff_video.extend( [ '-c:v', 'libx265', '-crf', '25', '-preset', 'medium'] )
+					ff_video.extend( [ '-c:v', 'libx265', '-crf', '26', '-preset', 'medium'] )
 				elif _vid['height'] > 240 :
-					ff_video.extend( [ '-c:v', 'libx265', '-preset', 'medium'  ] )
+					ff_video.extend( [ '-c:v', 'libx265', '-preset', 'medium'] )
 				else :
-					ff_video.extend( [ '-c:v', 'libx265', '-preset', 'fast'] )
-
-			message = "    {}".format( ff_video )
-			print (message)
+					ff_video.extend( [ '-c:v', 'libx265', '-preset', 'fast'  ] )
+			if frm_rate > Max_frm_rt :
+#				ff_video.extend( = [ '-r', '25' ] )
+				message = " Should Frame rate convert from {} to 25" .format( frm_rate )
+				print (message)
+				time.sleep(2)
 			NB_Vstr += 1
-		if DeBug : input ("VID ?")
+		message = "    {}".format( ff_video )
+		print (message)
 
 # XXX: audio
-		if len(Au_strms) == 0 :
-			message = ' No Audio => Can\'t convert\n{}\n' .format( Ini_file )
-			if DeBug : print( message ), input ('Next ?')
-			return False
-#			raise ValueError( message )
-
-		NB_Astr = 0
 		_disp = dict(	default = int(0),
 						dub 	= int(0),
 						comment = 0,
@@ -750,30 +760,30 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 						visual_impaired	= 0,
 						clean_effects	= 0 )
 
+		if DeBug : input ("AUD !!")
+		NB_Astr = 0
+		extra = ''
 		for _aud in Au_strms :
-			if DeBug  : print ('Aud : {}\n{}'.format(NB_Astr, _aud ) )
+			if DeBug  > 1 : print ('Aud : {}\n{}'.format(NB_Astr, _aud ) )
 			Parse_from_to ( _aud['disposition'], _disp )
 			if 'Pu_la' in _aud.values() :
 				if DeBug > 1 : print (json.dumps( _aud, indent=2, sort_keys=False)), input ('ZZ')
-				print (':O: Aud has Pu_la VBR')
+				extra = 'has Pu_la'
 				if  _aud['bit_rate'] == 'Pu_la':
 					if DeBug: print ( _aud.items() ), time.sleep(1)
 					_aud['bit_rate'] = round( _mtdta['bit_rate'] * 0.15 / _aud['channels'] )	## XXX:  aproximation
 				else:
 					pass
-
 			_lng = dict ( language = '' )
 			if  _aud['tags'] == 'Pu_la':
 				_lng['language'] = 'wtf'
 			else:
 				Parse_from_to ( _aud['tags'], _lng )
-
-			if DeBug :	print (_aud)
-			message = "    |<A:{}>| {:^6} |Br: {:>9}|Fq: {:>5}|Ch: {}|{}|{}|".format(
+			message = "    |<A:{}>| {:^6} |Br: {:>9}|Fq: {:>5}|Ch: {}|{}|{}| {}".format(
 						_aud['index'], _aud['codec_name'], HuSa(_aud['bit_rate']),
 						HuSa(_aud['sample_rate']), _aud['channels'], _lng['language'],
-						_disp['default'])
-			print (message)
+						_disp['default'], extra)
+
 # XXX: skip first if more than one if rusian or set by flag
 			if  (len(Au_strms) > 1  and _lng['language'] == 'rus') or (Skip_First and NB_Astr == 0 ) :
 				print ('Skip Russian')
@@ -791,87 +801,78 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 					if _aud['bit_rate'] <= Max_a_btr : # and _aud['channels'] < 3 :
 						ff_audio.extend( [ zzz, 'copy'] )
 					else:
-						ff_audio.extend( [ zzz, 'libvorbis', '-q:a', '7'] )
+						ff_audio.extend( [ zzz, 'libvorbis', '-q:a', '6'] )
 				else :
-					ff_audio.extend( [ zzz, 'libvorbis', '-q:a', '8'] )
-
-			message = "    {}".format( ff_audio )
+					ff_audio.extend( [ zzz, 'libvorbis', '-q:a', '7'] )
+			if _lng['language'] == 'eng' and _disp['default'] == 1 :
+				message += " * Yey *"
+				print (message)
+				break
 			print (message)
 			NB_Astr += 1
-
-		if DeBug : input ("AUD ?")
+		message = "    {}".format( ff_audio )
+		print (message)
 
 #XXX subtitle
+		if DeBug : input ("SUB !!")
 		NB_Sstr = 0
+		extra = ''
 		for _sub in Su_strms :
-			if DeBug : print ('Sub : {}\n{}'.format(NB_Sstr, _sub ) )
+			if DeBug >1 : print ('Sub : {}\n{}'.format(NB_Sstr, _sub ) )
 			if 'Pu_la' in _sub.values() :
 				if DeBug > 1 : print ( json.dumps( _sub, indent=2, sort_keys=False)), input ('ZZ')
-				print (':O: Sub has Pu_la')
+				extra = 'has Pu_la'
 
 			_lng = dict ( language = '' )
 			Parse_from_to ( _sub['tags'], _lng )
 			if 'Pu_la' in _lng['language'] :
 				_lng['language'] = 'wtf'
 
-			message = "    |<S:{}>| {:^6} | {:^12}| {}|".format(
-				_sub['index'], _sub['codec_name'], _sub['codec_type'], _lng['language']  )
-			print (message)
+			message = "    |<S:{}>| {:^6} | {:^12}| {}| {}".format(
+				_sub['index'], _sub['codec_name'], _sub['codec_type'], _lng['language'], extra )
 
-			if _sub['codec_name'] == 'hdmv_pgs_subtitle' :
-				print ('No F_cking Way')
+#			if _lng['language'] != 'eng' and (_sub['codec_name'] == 'hdmv_pgs_subtitle' or 'dvd_subtitle') :
+			if _sub['codec_name'] == 'hdmv_pgs_subtitle' or 'dvd_subtitle' :
+				message += 'Skip :( Dont Know How to handle'
+				print (message)
+				if DeBug : input ('Next Sub ?')
 				continue
+			print (message)
 ## XXX:
 			zzz = '0:' + str(_sub['index'])
-			Sub_fi_name	= Ini_file + '.' + str(_lng['language']) + '.' + str(_sub['index']) + '.srt'
-
 			if NB_Sstr == 0 :
-				ff_subtl = ['-map', zzz ]
+				ff_subtl = [ '-map', zzz ]
 			else :
 				ff_subtl.extend( ['-map', zzz ])
 			zzz = '-c:s:' + str(_sub['index'])
 
+#			Sub_fi_name	= Ini_file + '.' + str(_lng['language']) + '.' + str(_sub['index']) + '.srt'
 #			ff_subtl.extend( [ zzz, 'copy' , Sub_fi_name ] )
 			ff_subtl.extend( [ zzz, 'copy' ] )
-
-			message = "    {}".format( ff_subtl )
-			print (message)
 			NB_Sstr += 1
+		message = "    {}".format( ff_subtl )
+		print (message)
 
-		if DeBug : input ("SUB ?")
-
-		for pu in Prst_all :
-			if 'Pu_la' in pu :
-				message += ' We Had some Pu_la'
-				print (message)
-				if DeBug     : print ("\t  | XXX | Pu_la :", pu)
 	except Exception as e:
 		message += "\n FFZa_Brain: Exception => {}".format( e )
 		if DeBug : print( message ), input ('Next')
-#		print( "Is:    {}".format( traceback.print_stack() ) )
-#		print( "Error: {}".format( traceback.print_exc()   ) )
 		raise  Exception( message )
-
-#		FFM_cmnd = ff_video + ff_audio + ff_subtl
-#		return FFM_cmnd
 
 	else :
 		FFM_cmnd = ff_video + ff_audio + ff_subtl
 
-## XXX: if  _vid['height'] < 1080 and _vid['bit_rate'] < 1400000 and _vid['codec_name'] == 'hevc' and _aud['codec_name'] == 'aac' :
-		if  frm_rate < Max_frm_rt and _vid['codec_name'] == 'hevc' and ( _aud['codec_name'] == 'vorbis' or _aud['codec_name'] == 'aac' ) :
+		if  frm_rate < Max_frm_rt and _vid['codec_name'] == 'hevc' and _aud['codec_name'] == ('aac' or 'opus' or 'vorbis') :
 			if DeBug: print ('    | Vcod {}| Acod {}| Vhgt {}| VBtr {} : {}| ABtr {} : {}' .format( _vid['codec_name'], _aud['codec_name'], _vid['height'], round( _vid['bit_rate'] ), Max_v_btr, round( _aud['bit_rate'] ), Max_a_btr ) )
-			if _vid['bit_rate'] <= Max_v_btr and _vid['height'] <= 1080 and _vid['bit_rate'] <= Max_v_btr and _aud['bit_rate'] <= Max_a_btr :
+			if _vid['bit_rate'] <= Max_v_btr and _vid['height'] <= 1090 and _aud['bit_rate'] <= Max_a_btr :
 				if DeBug :	input ('Nothing to do just escape')
 				message = "_Skip_it : Nothing to Do {} | Vid :{} Aud :{}\n" .format( Ini_file,  _vid['codec_name'], _aud['codec_name'] )
-				print (message)
-				FFM_cmnd = [' ']
+##				print (message)
+				FFM_cmnd = ['-benchmark_all']	# XXX: Make it more useful
 
-		if DeBug :
-			print ("FFZa_Brain Done :", FFM_cmnd)
-			input ('Do it ?')
-			print ( '\n   ', Vi_strms, '\n   ', Au_strms,'\n   ', Su_strms)
-
+		for pu in Prst_all :
+			if 'Pu_la' in pu.values() :
+				print ('Had some Pu_la ¯\_(ツ)_/¯')
+				break
 		end_time    = datetime.datetime.now()
 		print('   End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, end_time-start_time ) )
 		return FFM_cmnd
@@ -892,36 +893,35 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 
 	Fmpg_ou_file  = '_'+ Random_String( 15 ) + Tmp_F_Ext
 
-	Title         = 'title=\" ' +Sh_fil_name +" (x265-aac) Encoded By: " + __author__ + " Master "
+	Title         = 'title=\" ' +Sh_fil_name + " (x265-aac) Encoded By: " + __author__ + " Master "
 
-	ff_head  = [Execute, '-analyzeduration', '2147483640', '-probesize', '2147483640', '-i', Fmpg_in_file, '-hide_banner' ]
-	ff_tail  = [ '-metadata', Title, '-movflags', 'faststart', '-fflags', 'genpts', '-y', Fmpg_ou_file ]
+	ff_head  = [Execute, '-i', Fmpg_in_file, '-hide_banner' ]
+	ff_tail  = [ '-metadata', Title, '-movflags', '+faststart', '-fflags', 'genpts', '-y', Fmpg_ou_file ]
 
 	Cmd      = ff_head + Za_br_com + ff_tail
 
 	loc		= 0
 	symbs	= '|/-+\\'
 	try :
-		if DeBug :
-			print ("    |>:", Cmd )
+		if DeBug  :
+			print ("    |>-:", Cmd )
 			input ("Ready to Do it? ")
+			ff_out = subprocess.run( Cmd,
 
-			ff_out = subprocess.Popen( Cmd,
 						universal_newlines=True,
-
 						encoding='utf-8' )
-
 			message += "\n Out: {!r}\n".format( ff_out )
 			errcode  = ff_out.returncode
-			if errcode :
-				message += "\n ErRor: Code {!r}\n".format( errcode )
+			stderri  = ff_out.stderr
+			if errcode or stderri :
+				message += " ErRor: ErRorde {!r} Stderr {!r}:".format( errcode, stderri )
 				print( message )
 				input('Next')
-				raise Exception( '$hit ', message, errcode )
+				raise Exception( '$hit ', message )
 			input("Are we Done?")
 			return Fmpg_ou_file
 		else :
-			print ("    |>:", Cmd[6:-7] )	## XXX:  Skip First 4 and Last 6
+			print ("    |>-:", Cmd[4:-7] )	## XXX:  Skip First 4 and Last 6
 			ff_out = subprocess.Popen( Cmd,
 						stdout=subprocess.PIPE,
 						stderr=subprocess.STDOUT,
@@ -929,21 +929,22 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 						encoding='utf-8' )
 	#					bufsize=1
 	except subprocess.CalledProcessError as err:
-		message += " ErRor: CalledProcessError {!r},  {!r} :".format( err.returncode , err.output )
+		message += " ErRor: {} CalledProcessError {!r}  {!r} :".format(err, err.returncode, err.output )
 		if DeBug : print( message ) , input('Next')
-		raise Exception( '$hit ', message, err )
+		raise Exception( '$hit ', message )
 	except Exception as e:
 		message += " ErRor: Exception {}:".format( e )
 		if DeBug : print( message ) , input('Next')
-		raise Exception( '$hit ', message, e )
+		raise Exception( '$hit ', message )
 	else:
 		while True :
 			try:
 				lineo    = ff_out.stdout.readline()
 				if DeBug : print("<{!r}>".format (lineo))
 				errcode  = ff_out.returncode
-				if errcode :
-					message += " ErRor: ErRorde {!r} :".format( errcode )
+				stderri  = ff_out.stderr
+				if errcode or stderri :
+					message += " ErRor: ErRorde {!r} stderr {!r}:".format( errcode, stderri )
 					print( message )
 					break
 				elif 'frame=' in lineo :
@@ -975,7 +976,7 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 					except Exception as e:
 						message += " Got Time ErRor: Exception {}:".format( e )
 						if DeBug : print( message ) , input('Next')
-						raise ValueError ( '$hit ', message, e )
+						raise ValueError ( '$hit ', message )
 # XXX: ?? Not sure if it's the right way to deal with problem streems XXX
 				elif lineo == '' :
 					if DeBug :
@@ -990,8 +991,9 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 			except Exception as e:
 				message += " ErRor: in Procesing data {!r}:".format( e )
 				if DeBug : print( message ) , input('Next')
-				raise ValueError ( '$hit ', message, e )
+				raise ValueError ( '$hit ', message )
 	finally :
+		ff_out.kill()
 		file_size	= os.path.getsize(Fmpg_in_file)
 		check_path	= os.path.exists (Fmpg_ou_file)
 		if check_path :
@@ -999,11 +1001,11 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 			if n_file_size < (file_size/64) :	# XXX Kind of imposible
 				message += " Size to small :" +os.path.basename(Fmpg_in_file) +' ' +HuSa(n_file_size)
 				if DeBug : print( message ) , input('Next')
-				raise ValueError ( '$hit ', message, e )
+				raise ValueError ( '$hit ', message )
 		else :
 			message += ": Output Path not found "+ os.path.basename(Fmpg_in_file)
 			if DeBug : print( message ) , input('Next')
-			raise ValueError ( '$hit ', message, e )
+			raise ValueError ( '$hit ', message )
 
 		end_time    = datetime.datetime.now()
 		print('   End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, end_time-start_time ) )
@@ -1060,7 +1062,7 @@ def FFClean_up ( Inp_file, Out_file ):
 			except OSError as e:  ## if failed, report it back to the user ##
 				message += " OSErRor: removing File {} {!r}:".format( To_delete, e )
 				if DeBug : print( message ) , input('Next')
-				raise ValueError ( '$hit ', message, e )
+				raise ValueError ( '$hit ', message )
 		os.rename ( Inp_file, To_delete)
 		check_path = os.path.exists( To_delete )
 		if check_path :
@@ -1083,7 +1085,7 @@ def FFClean_up ( Inp_file, Out_file ):
 			except OSError as e:  ## if failed, report it back to the user ##
 				message += " OSErRor: removing File {} {!r}:".format( New_out_File, e )
 				if DeBug : print( message ) , input('Next')
-				raise ValueError ( '$hit ', message, e )
+				raise ValueError ( '$hit ', message )
 
 		shutil.move ( Out_file, New_out_File)
 		os.utime 	( New_out_File, None) 			## XXX:  None means now !
@@ -1176,7 +1178,7 @@ if __name__=='__main__':
 	if DeBug > 2 :  print (Qlist_of_Files), input ("Next :")
 
 	QExeption_ = Do_it( Qlist_of_Files )
-	if DeBug or True :
+	if DeBug :
 		for filedesc in QExeption_ :
 			print (filedesc.replace('\n',''))
 		print ("Total files :", len (QExeption_) )
