@@ -33,7 +33,7 @@ Tmp_F_Ext	= '_XY_' + Out_F_typ
 Excepto	= 'C:\\Users\\Geo\\Desktop\\Except'
 
 Folder	= 'C:\\Users\\Geo\\Desktop\\downloads'
-#Folder = 'C:\\Users\\Geo\\Desktop\\_2Conv'
+Folder = 'C:\\Users\\Geo\\Desktop\\Test'
 #Folder	= 'E:\\Media\\Movie'
 #Folder = '\\\\NAS-Q\\Multimedia\Movie'
 #Folder	= 'D:\\Media'
@@ -695,9 +695,6 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 			message = 'File \n{}\n Has no Audio => Can\'t convert' .format( Ini_file )
 			if DeBug : print( message ), input ('Next ?')
 			return False
-		if len(Su_strms ) == 0 :
-			print (' No subtitles' )
-			if DeBug : input ('Next ?')
 
 # XXX: Video
 		if DeBug : input ("VID !!")
@@ -722,7 +719,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 			print (message)
 
 			zzz = '0:' + str(_vid['index'])
-			ff_video = [ '-map', zzz ]
+			ff_video.extend( [ '-map', zzz ] )
 
 			if   _vid['height'] > 1090 :	# Scale to 1080p
 				ff_video.extend( [ '-vf', 'scale = -1:1080', '-c:v', 'libx265', '-crf', '25', '-preset', 'slow' ] )
@@ -759,12 +756,40 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 						hearing_impaired= 0,
 						visual_impaired	= 0,
 						clean_effects	= 0 )
-
+		if DeBug > 1 : print ( json.dumps( Au_strms, indent=3, sort_keys=False ) )
 		if DeBug : input ("AUD !!")
 		NB_Astr = 0
 		extra = ''
+		'''
 		for _aud in Au_strms :
-			if DeBug  > 1 : print ('Aud : {}\n{}'.format(NB_Astr, _aud ) )
+			for i, v in enumerate( _aud.items() ):
+				print ('\nItm:', i, '\tVal:', v)
+				if 'tags' in v :
+					if 'eng' in v[1]['language'] :
+						input ('WTff')
+		'''
+		indx  = 0
+		leave = 0
+		# XXX: Do we have Englis Audio?
+		for _aud in Au_strms :
+			if DeBug  > 1 : print ( json.dumps( _aud, indent=3, sort_keys=False ) )
+			for i, v in _aud.items() :
+				if DeBug : print ('\nItm:', i, '\tVal:', v)
+				if 'tags' in i :
+					if 'Pu_la' in v :
+						if DeBug : print ( " Pu_la ", v)
+					elif 'eng' in v['language'] :
+#						input ('Got you')
+						leave = True
+						break
+			if leave :
+				break
+			indx += 1
+		# XXX: If Yes then use it dischard the rest
+		if  indx <= len(Au_strms) and leave == True :
+			_aud = Au_strms[indx]
+			if 'eng' in _aud['tags']['language'] :
+				print ('Oh yes Index ', _aud['index'])
 			Parse_from_to ( _aud['disposition'], _disp )
 			if 'Pu_la' in _aud.values() :
 				if DeBug > 1 : print (json.dumps( _aud, indent=2, sort_keys=False)), input ('ZZ')
@@ -781,41 +806,64 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				Parse_from_to ( _aud['tags'], _lng )
 			message = "    |<A:{:2}>| {:^6} |Br: {:>9}|Fq: {:>5}|Ch: {}|{}|{}| {}".format(
 						_aud['index'], _aud['codec_name'], HuSa(_aud['bit_rate']),
-						HuSa(_aud['sample_rate']), _aud['channels'], _lng['language'],
-						_disp['default'], extra)
-
-# XXX: skip first if more than one if rusian or set by flag
-			if  (len(Au_strms) > 1  and _lng['language'] == 'rus') or (Skip_First and NB_Astr == 0 ) :
-				print ('Skip Russian')
-				time.sleep ( 1 )
-#				Move_Del_File ( Ini_file, Excepto, DeBug=True )
+						HuSa(_aud['sample_rate']), _aud['channels'], _lng['language'], _disp['default'], extra)
+			zzz = '0:' + str( _aud['index'] )
+			ff_audio.extend([ '-map', zzz ])
+			zzz = '-c:a:' + str( _aud['index'] )
+			if  (_aud['codec_name'] == ('aac' or 'opus' or 'vorbis')) :
+				if _aud['bit_rate'] <= Max_a_btr : # and _aud['channels'] < 3 :
+					ff_audio.extend( [ zzz, 'copy'] )
+				else:
+					ff_audio.extend( [ zzz, 'libvorbis', '-q:a', '6'] )
 			else :
-				zzz = '0:'+ str( _aud['index'] )
-				if NB_Astr == 0 :
-					ff_audio = [ '-map', zzz ]
-				else :
-					ff_audio.extend([ '-map', zzz ])
-
+				ff_audio.extend( [ zzz, 'libvorbis', '-q:a', '7'] )
+			message += " * Yey *"
+			print (message)
+		# XXX: Oh well do what needs to be Done
+		else :
+			if DeBug : print ("No English found")
+			for _aud in Au_strms :
+				Parse_from_to ( _aud['disposition'], _disp )
+				if 'Pu_la' in _aud.values() :
+					if DeBug > 1 : print (json.dumps( _aud, indent=2, sort_keys=False)), input ('ZZ')
+					extra = 'has Pu_la'
+					if  _aud['bit_rate'] == 'Pu_la':
+						if DeBug: print ( _aud.items() ), time.sleep(1)
+						_aud['bit_rate'] = round( _mtdta['bit_rate'] * 0.15 / _aud['channels'] )	## XXX:  aproximation
+					else:
+						pass
+				_lng = dict ( language = '' )
+				if  _aud['tags'] == 'Pu_la':
+					_lng['language'] = 'wtf'
+				else:
+					Parse_from_to ( _aud['tags'], _lng )
+				message = "    |<A:{:2}>| {:^6} |Br: {:>9}|Fq: {:>5}|Ch: {}|{}|{}| {}".format(
+							_aud['index'], _aud['codec_name'], HuSa(_aud['bit_rate']),
+							HuSa(_aud['sample_rate']), _aud['channels'], _lng['language'], _disp['default'], extra)
+				zzz = '0:' + str( _aud['index'] )
+				ff_audio.extend([ '-map', zzz ])
 				zzz = '-c:a:' + str( _aud['index'] )
-				if   (_aud['codec_name'] == ('aac' or 'opus' or 'vorbis')) :
+				if  _aud['codec_name'] == 'aac' or 'opus' or 'vorbis' :
 					if _aud['bit_rate'] <= Max_a_btr : # and _aud['channels'] < 3 :
 						ff_audio.extend( [ zzz, 'copy'] )
 					else:
 						ff_audio.extend( [ zzz, 'libvorbis', '-q:a', '6'] )
 				else :
 					ff_audio.extend( [ zzz, 'libvorbis', '-q:a', '7'] )
-			if _lng['language'] == 'eng' and _disp['default'] == 1 :
-				message += " * Yey *"
+
+				if  len(Au_strms) == 1 :
+					break
 				print (message)
-				break
-			print (message)
-			NB_Astr += 1
+				NB_Astr += 1
 		message = "    {}".format( ff_audio )
 		print (message)
 
 #XXX subtitle
 		if DeBug : input ("SUB !!")
 		NB_Sstr = 0
+		if len(Su_strms ) == 0 :
+			print ('    |<S: No Subtitle>|' )
+			if DeBug : input ('Next ?')
 		extra = ''
 		for _sub in Su_strms :
 			if DeBug >1 : print ('Sub : {}\n{}'.format(NB_Sstr, _sub ) )
@@ -830,12 +878,11 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 
 			message = "    |<S:{:2}>|{:^6}|{:^10}|{:3}| {}".format(
 				_sub['index'], _sub['codec_name'], _sub['codec_type'], _lng['language'], extra )
-
 ## XXX:
 			if _sub['codec_name'] == 'hdmv_pgs_subtitle' or 'dvd_subtitle' :
 				if _lng['language'] == 'eng' :
-					Sub_fi_name	= Ini_file + '.' + str(_lng['language']) + '.ssa'
-#					ff_subtl.extend( [  zzz, 'copy', Sub_fi_name ] )
+					Sub_fi_name	= Ini_file + '.' + str(_lng['language']) + '.dvd_subtitle'
+#					ff_subtl.extend( [ zzz, 'copy', Sub_fi_name ] )
 				else :
 					message += 'Skip :('
 					print (message)
@@ -844,16 +891,13 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 			else:
 				print (message)
 				zzz = '0:' + str(_sub['index'])
-				if NB_Sstr == 0 :
-					ff_subtl = [ '-map', zzz ]
-				else :
-					ff_subtl.extend( ['-map', zzz ])
+				ff_subtl.extend( ['-map', zzz ])
 				zzz = '-c:s:' + str(_sub['index'])
 				ff_subtl.extend( [ zzz, 'copy' ] )
 
 			NB_Sstr += 1
 		message = "    {}".format( ff_subtl )
-		print (message)
+		if NB_Sstr > 0 : print (message)
 
 	except Exception as e:
 		message += "\n FFZa_Brain: Exception => {}".format( e )
