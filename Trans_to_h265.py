@@ -535,11 +535,10 @@ def FFProbe_run (File_in, Execute= ffprobe ):
 		jlist	 = json.loads (out)
 		if len (jlist) < 2 :
 			message += " Output to small\n{}\n{!r}".format( File_in, jlist )
-			return False
 			if DeBug : print( message ), input(" Jlist to small ")
+			raise  Exception( message )
 		end_time    = datetime.datetime.now()
 		print('   End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, end_time - start_time ))
-
 		return jlist
 ##===============================   End   ====================================##
 
@@ -743,8 +742,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				print (message)
 				time.sleep(2)
 			NB_Vstr += 1
-		message = "    {}".format( ff_video )
-		print (message)
+		if DeBug : message = "    {}".format( ff_video ), print (message)
 
 # XXX: audio
 		_disp = dict(	default = int(0),
@@ -855,8 +853,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 					break
 				print (message)
 				NB_Astr += 1
-		message = "    {}".format( ff_audio )
-		print (message)
+		if DeBug : message = "    {}".format( ff_audio ), print (message)
 
 #XXX subtitle
 		if DeBug : input ("SUB !!")
@@ -896,8 +893,9 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				ff_subtl.extend( [ zzz, 'copy' ] )
 
 			NB_Sstr += 1
-		message = "    {}".format( ff_subtl )
-		if NB_Sstr > 0 : print (message)
+		if DeBug :
+			message = "    {}".format( ff_subtl )
+			if NB_Sstr > 0 : print (message)
 
 	except Exception as e:
 		message += "\n FFZa_Brain: Exception => {}".format( e )
@@ -967,7 +965,7 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 			input("Are we Done?")
 			return Fmpg_ou_file
 		else :
-			print ("    |>-:", Cmd[4:-7] )	## XXX:  Skip First 4 and Last 6
+			print ("    |>-:", Cmd[4:-8] )	## XXX:  Skip First 4 and Last 6
 			ff_out = subprocess.Popen( Cmd,
 						stdout=subprocess.PIPE,
 						stderr=subprocess.STDOUT,
