@@ -206,7 +206,7 @@ def Parse_from_to ( Stream, Dictio, DeBug=False ) :
 		return Dictio[key]
 ##==============-------------------   End   -------------------==============##
 
-def Resource_Check (Folder='./') :
+def Resource_Check( Path='./' ) :
 	print("=" * 60)
 	message = sys._getframe().f_code.co_name
 	print (datetime.datetime.now().strftime('\n%A: %m/%d/%Y %H:%M:%S %p'))
@@ -221,16 +221,16 @@ def Resource_Check (Folder='./') :
 	print('Change time  :', time.ctime(os.path.getctime(__file__)))
 	print('Size         :', HuSa(      os.path.getsize( __file__)))
 
-	if os.path.isfile( Folder ) :
-		print ('\n', Folder, " is a File")
-	elif os.path.isdir( Folder ) :
-		print ('\n',Folder, " is a Folder" )
-	elif os.path.islink( Folder ) :
-		print ('\n',Folder, " is a Link")
-	elif os.path.ismount (Folder) :
-		print ('\n',Folder, " is a Mountpoint")
+	if os.path.isfile( Path ) :
+		print ('\n', Path, " is a File")
+	elif os.path.isdir( Path ) :
+		print ('\n',Path, " is a Path" )
+	elif os.path.islink( Path ) :
+		print ('\n',Path, " is a Link")
+	elif os.path.ismount (Path) :
+		print ('\n',Path, " is a Mountpoint")
 	else :
-		print ('\n',Folder, " is WTF?")
+		print ('\n',Path, " is WTF?")
 
 	try :
 		sys_is = platform.uname()
