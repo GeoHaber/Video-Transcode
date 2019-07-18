@@ -8,6 +8,7 @@ import time
 import ctypes
 import random
 import string
+import shutil
 import logging
 import datetime
 import platform
@@ -141,12 +142,12 @@ def HuSa( nbyte ):
 	Returns a human readable string from a number
 	'''
 	suffixes = ['B', 'K', 'M', 'G', 'T', 'P', 'Zilion']
-	byte_val = float (nbyte)
+	byte_val = float( nbyte )
 	indx     = 0
-	while byte_val >= 1024 and indx < len(suffixes):
+	while byte_val >= 1024 and indx < len(suffixes) -1:
 		byte_val   /= 1024
 		indx	   += 1
-	res = ( round (byte_val,1) )
+	res = ( round( byte_val, 1 ) )
 	return '%s %s' % (res, suffixes[indx])
 ##==============-------------------   End   -------------------==============##
 
@@ -206,7 +207,7 @@ def Parse_from_to ( Stream, Dictio, DeBug=False ) :
 		return Dictio[key]
 ##==============-------------------   End   -------------------==============##
 
-def Resource_Check( Path='./' ) :
+def Resource_Check (Folder='./') :
 	print("=" * 60)
 	message = sys._getframe().f_code.co_name
 	print (datetime.datetime.now().strftime('\n%A: %m/%d/%Y %H:%M:%S %p'))
@@ -221,16 +222,16 @@ def Resource_Check( Path='./' ) :
 	print('Change time  :', time.ctime(os.path.getctime(__file__)))
 	print('Size         :', HuSa(      os.path.getsize( __file__)))
 
-	if os.path.isfile( Path ) :
-		print ('\n', Path, " is a File")
-	elif os.path.isdir( Path ) :
-		print ('\n',Path, " is a Path" )
-	elif os.path.islink( Path ) :
-		print ('\n',Path, " is a Link")
-	elif os.path.ismount (Path) :
-		print ('\n',Path, " is a Mountpoint")
+	if os.path.isfile( Folder ) :
+		print ('\n', Folder, " is a File")
+	elif os.path.isdir( Folder ) :
+		print ('\n',Folder, " is a Folder" )
+	elif os.path.islink( Folder ) :
+		print ('\n',Folder, " is a Link")
+	elif os.path.ismount (Folder) :
+		print ('\n',Folder, " is a Mountpoint")
 	else :
-		print ('\n',Path, " is WTF?")
+		print ('\n',Folder, " is WTF?")
 
 	try :
 		sys_is = platform.uname()
