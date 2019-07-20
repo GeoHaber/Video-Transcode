@@ -18,13 +18,14 @@ import traceback
 import subprocess
 from   My_Utils  import *
 
-# XXX:  NO need to have these in two diferent files
+DeBug		= False
 
 Vi_Dur		= '0:0'
 
 Out_F_typ	= '.mkv'
 Tmp_F_Ext	= '_XY_' + Out_F_typ
-DeBug		= False
+
+Excepto	= 'C:\\Users\\Geo\\Desktop\\Except'
 
 # XXX:
 
@@ -146,7 +147,6 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 						stderr=subprocess.STDOUT,
 						universal_newlines=True,
 						encoding='utf-8' )
-	#					bufsize=1
 	except subprocess.CalledProcessError as err:
 		message += " ErRor: {} CalledProcessError {!r}  {!r} :".format(err, err.returncode, err.output )
 		if DeBug : print( message ) , input('Next')
@@ -165,17 +165,20 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 				if errcode or stderri :
 					message += " ErRor: ErRorde {!r} stderr {!r}:".format( errcode, stderri )
 					print( message )
-					break
+					raise ValueError ( '$hit ', message )
 				elif 'frame=' in lineo :
-					sys.stderr.write( Prog_cal( lineo, symbs[loc] ))
-					sys.stderr.flush
+					Prog_cal (lineo , symbs[loc])
 					last_fr  = lineo.rstrip('\r\n')
 					loc += 1
 					if loc == len(symbs) :
 						loc = 0
-				elif 'video:' and "muxing overhead:" in lineo :
-					print ('\r\t  |><|', last_fr )
-					print (  '\t  |><|', lineo.rstrip('\r\n') )
+				elif 'global headers:' and "muxing overhead:" in lineo :
+					last_fr = lineo.rstrip('\r\n')
+# 			video:611001kB audio:55396kB subtitle:0kB other streams:0kB global headers:6kB muxing overhead: 0.480537%
+					vis	= re.search( r'video:\s*([0-9\.]+)',	last_fr ).group(1)	#Can have value of N/A
+					aus	= re.search( r'audio:\s*([0-9\.]+)',	last_fr ).group(1)	#Can have value of N/A
+					print (  '\t  |><| Video = {} Audio = {}'.format (vis, aus) )
+					'''
 					global Vi_Dur
 					try :
 						tm    = re.search ( r'time=\S([0-9:]+)', last_fr ).group(1)
@@ -186,7 +189,6 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 							print ("\t  [-)] Lenght was={} is={} dif={}".format( Vi_Dur ,tm, dif ) )
 						else :
 							print ("\t  [:)] Lenght={}".format( Vi_Dur ) )
-
 						# XXX: make it 1 percent a fixed number
 						if dif < ( b_sec / 100 ) :
 							pass
@@ -197,6 +199,7 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 						message += " Got Time ErRor: Exception {}:".format( e )
 						if DeBug : print( message ) , input('Next')
 						raise ValueError ( '$hit ', message )
+					'''
 # XXX: ?? Not sure if it's the right way to deal with problem streems XXX
 				elif lineo == '' :
 					if DeBug :
@@ -260,11 +263,11 @@ def FFClean_up ( Inp_file, Out_file ):
 		print ("Pre :\n{} \t\t{}".format (Inp_file, HuSa(Ini_file_size)) )
 		print ("Post:\n{} \t\t{}".format (Out_file, HuSa(Out_file_size)) )
 
-	Ratio   =  round( 100*(( Ini_file_size - Out_file_size) / Out_file_size))
+	Ratio   =  round( 100*(( Out_file_size - Ini_file_size) / Ini_file_size))
 	if DeBug:
-		if  Ratio  >  2 :
+		if  Ratio  <  2 :
 			print ("\tNew {} {} Smaller".format(Ratio, '%'))
-		elif Ratio < -2 :
+		elif Ratio > -2 :
 			print ("\tNew {} {} Larger ".format(abs(Ratio), '%'))
 		else :
 			print ("\tSimilar {} {}".format(Ratio, '%'))
@@ -324,8 +327,8 @@ def FFClean_up ( Inp_file, Out_file ):
 		raise ValueError ( '$hit ', message )
 
 	else :
-		message = "File {}\nDone :)\tWas: {}\tIs: {}\tSaved: {} => {} % \n".format(
-					os.path.basename(Inp_file), HuSa(Ini_file_size), HuSa(Out_file_size), HuSa(Ini_file_size - Out_file_size), round(Ratio,1) )
+		message = "File: {}\nWas: {}\tIs: {}\tSaved: {} = {} % \n".format(
+					os.path.basename(Inp_file), HuSa(Ini_file_size), HuSa(Out_file_size), HuSa(Ini_file_size - Out_file_size), Ratio )
 		print (message)
 		# XXX Create the Lock file with utf-8 encode for non english caracters ... # XXX:
 		end_time    = datetime.datetime.now()
@@ -333,42 +336,45 @@ def FFClean_up ( Inp_file, Out_file ):
 		return (1 + abs ( Ini_file_size - Out_file_size ) )
 ##===============================   End   ====================================##
 
-def Prog_cal( line_to, sy=False ) :
+
+def Prog_cal (line_to, sy=False ) :
 #	global DeBug
 #	DeBug = True
-
+	global Vi_Dur
 	message  = sys._getframe().f_code.co_name + '-:'
-	last_fr  = line_to.rstrip('\r\n')
+
 	_P =''
+	last_fr  = line_to.rstrip('\r\n')
 	if DeBug :
 		print ("\r>" , last_fr)
 	if 'frame=' and 'bitrate=' and not 'N/A' in last_fr :
 		try :
-			fr 	 = re.search( r'frame=\s*([0-9]+)'    	,last_fr ).group(1)
-			fp	 = re.search( r'fps=\s*([0-9]+)'      	,last_fr ).group(1)
-			sz   = re.search( r'size=\s*([0-9]+)'     	,last_fr ).group(1)
-			tm =   re.search( r'time=\S([0-9:]+)'		,last_fr ).group(1)
-			br	 = re.search( r'bitrate=\s*([0-9\.]+)'	,last_fr ).group(1)	#Can have value of N/A
-			sp	 = re.search( r'speed=\s*([0-9\.]+)'	,last_fr ).group(1)	#Can have value of N/A
+			fr	= re.search( r'frame=\s*([0-9]+)',		last_fr ).group(1)
+			fp	= re.search( r'fps=\s*([0-9]+)',		last_fr ).group(1)
+			sz	= re.search( r'size=\s*([0-9]+)',		last_fr ).group(1)
+			tm	= re.search( r'time=\S([0-9:]+)',		last_fr ).group(1)
+			br	= re.search( r'bitrate=\s*([0-9\.]+)',	last_fr ).group(1)	#Can have value of N/A
+			sp	= re.search( r'speed=\s*([0-9\.]+)',	last_fr ).group(1)	#Can have value of N/A
 			if int(fp) > 0 :
-				a_sec = sum( int(x)*60**i for i,x in enumerate( reversed(tm.split(":"))) )
-				b_sec = sum( int(x)*60**i for i,x in enumerate( reversed(Vi_Dur.split(":"))) )
+				a_sec = sum( int(x)*60**i for i, x in enumerate( reversed( tm.split(":"))) )
+				b_sec = sum( int(x)*60**i for i, x in enumerate( reversed( Vi_Dur.split(":"))) )
 				dif   = abs( b_sec - a_sec )
-				eta   = round( dif / (float(sp) ))
+				eta  = round( dif / (float(sp) ))
 				mins, secs  = divmod(int(eta), 60)
 				hours, mins = divmod( mins, 60)
 				_Dur = '{:02d}:{:02d}:{:02d}'.format(hours, mins, secs)
-				_P   = '\r| {} |Frame: {}|Fps: {}|Siz: {}|BitRate : {}|Speed: {}|Time Left: {}|  '.format(sy, fr, fp, sz, br, sp, _Dur)
+				_P   = '\r| {} |Frame: {:>7}|Fps: {}|Siz: {:>6}|BitRate : {}|Speed: {}|Time Left: {}|  '.format(sy, fr, fp, sz, br, sp, _Dur)
+
 		except Exception as e:
 			print (last_fr)
 			message += " ErRor: in Procesing data {!r}:".format( e )
 			raise  Exception( message )
-		else:
-			return _P
 	else :
 		print (last_fr)
+	sys.stderr.write( _P )
+	sys.stderr.flush
+	return True
 ##===============================   End   ====================================##
-
 
 if __name__=='__main__':
 #	global DeBug
