@@ -94,7 +94,9 @@ def FFProbe_run (File_in, Execute= ffprobe ):
 				if DeBug : print( message ), input(" Jlist to small ")
 				raise  Exception( message )
 		end_time    = datetime.datetime.now()
-		print('   End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, end_time - start_time ))
+		Tot_time	= end_time - start_time
+		Tot_time 	= Tot_time.total_seconds()
+		print('   End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, Tot_time ) )
 		return jlist
 ##===============================   End   ====================================##
 
@@ -177,7 +179,8 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 # 			video:611001kB audio:55396kB subtitle:0kB other streams:0kB global headers:6kB muxing overhead: 0.480537%
 					vis	= re.search( r'video:\s*([0-9\.]+)',	last_fr ).group(1)	#Can have value of N/A
 					aus	= re.search( r'audio:\s*([0-9\.]+)',	last_fr ).group(1)	#Can have value of N/A
-					print (  '\t  |><| Video = {} Audio = {}'.format (vis, aus) )
+					print(  '\t  |><| Video = {} Audio = {}'.format (vis, aus) )
+					print( ff_out.stdout )
 					'''
 					global Vi_Dur
 					try :
@@ -216,7 +219,6 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 				if DeBug : print( message ) , input('Next')
 				raise ValueError ( '$hit ', message )
 	finally :
-		ff_out.kill()
 		file_size	= os.path.getsize(Fmpg_in_file)
 		check_path	= os.path.exists (Fmpg_ou_file)
 		if check_path :
@@ -229,10 +231,11 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 			message += ": Output Path not found "+ os.path.basename(Fmpg_in_file)
 			if DeBug : print( message ) , input('Next')
 			raise ValueError ( '$hit ', message )
-
 		end_time    = datetime.datetime.now()
-		print('   End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, end_time-start_time ) )
-		message +="\n\t FFMpeg Done !!"
+		Tot_time	= end_time - start_time
+		Tot_time 	= Tot_time.total_seconds()
+		print('   End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, Tot_time ) )
+		message +="   FFMpeg Done !!"
 		print ( message )
 		return Fmpg_ou_file
 ##===============================   End   ====================================##
@@ -332,7 +335,10 @@ def FFClean_up ( Inp_file, Out_file ):
 		print (message)
 		# XXX Create the Lock file with utf-8 encode for non english caracters ... # XXX:
 		end_time    = datetime.datetime.now()
-		print('   End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, end_time-start_time ) )
+		Tot_time	= end_time - start_time
+		Tot_time 	= Tot_time.total_seconds()
+		print('   End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, Tot_time ) )
+
 		return (1 + abs ( Ini_file_size - Out_file_size ) )
 ##===============================   End   ====================================##
 
