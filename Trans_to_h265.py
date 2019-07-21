@@ -233,9 +233,10 @@ def Build_List ( Top_dir, Ext_types, Sort_loc=2, Sort_ord=True  ) : # XXX: Sort_
 		for each in queue_list :
 			print ( each )
 		input ("Next:")
-
 	end_time    = datetime.datetime.now()
-	print('End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, end_time-start_time ) )
+	Tot_time	= end_time - start_time
+	Tot_time 	= Tot_time.total_seconds()
+	print('End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, Tot_time ) )
 	return queue_list
 ##===============================   End   ====================================##
 
@@ -451,9 +452,10 @@ def Do_it ( List_of_files, Excluded ='' ):
 
 		sys.stdout.flush()
 		end_time    = datetime.datetime.now()
-		print( ' End  : {:%H:%M:%S}\tTotal: {} '.format( end_time, end_time-start_time ) )
-		print( '='*20)
-
+		Tot_time	= end_time - start_time
+		Tot_time 	= Tot_time.total_seconds()
+		print(' End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, Tot_time ) )
+		print('='*20)
 	return queue_list
 ##===============================   End   ====================================##
 
@@ -590,8 +592,8 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 
 # XXX: Parsing Done lets Procces
 		if  _mtdta['bit_rate'] == 'Pu_la':
-			_mtdta['bit_rate'] = 100
-			Vi_Dur = '11:080'
+			_mtdta['bit_rate'] = 1000
+			Vi_Dur = '11:55'
 		else :
 			mins,  secs = divmod(int(_mtdta['duration']), 60)
 			hours, mins = divmod(mins, 60)
@@ -639,13 +641,11 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				ff_video.extend( [ '-vf', 'scale = -1:1080', '-c:v', 'libx265', '-crf', '25', '-preset', 'slow' ] )
 			elif _vid['codec_name'] == 'hevc' :
 				if _vid['bit_rate'] > Max_v_btr :
-#					ff_video.extend( [ '-c:v', 'libx265', '-preset', 'slow', '-lossless' ] )
-#					ff_video.extend( [ '-c:v', 'libx265', '-preset', 'medium', '-b:v', str(Max_v_btr) ])
 					ff_video.extend( [ '-c:v', 'libx265', '-preset', 'slow',   '-b:v', str(Max_v_btr) ])
 				else:
 					ff_video.extend( [ '-c:v', 'copy'])
 			else :
-				if   _vid['height'] > 680 :
+				if   _vid['height'] > 620 :
 					ff_video.extend( [ '-c:v', 'libx265', '-crf', '25', '-preset', 'medium' ] )
 				elif _vid['height'] > 300 :
 					ff_video.extend( [ '-c:v', 'libx265', '-crf', '27', '-preset', 'medium' ] )
@@ -653,7 +653,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 					ff_video.extend( [ '-c:v', 'libx265',                '-preset', 'fast'  ] )
 			if frm_rate > Max_frm_rt :
 #				ff_video.extend( = [ '-r', '25' ] )
-				message = " FYI #XXX: Should Frame rate convert from {} to 25" .format( frm_rate )
+				message = "    FYI Could conv Frame rate from {} to 25" .format( frm_rate )
 				print (message)
 				time.sleep(1)
 			NB_Vstr += 1
@@ -694,32 +694,24 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 						HuSa(_aud['sample_rate']), _aud['channels'], _lng['language'],
 						_disp['default'], extra)
 
-# XXX: skip first if more than one if rusian or set by flag
-			if  (len(Au_strms) > 1  and _lng['language'] != 'eng') :
-				print ('We Have {} languagees'.format( _lng['language']))
-				time.sleep ( 1 )
-#				Move_Del_File ( Ini_file, Excepto, DeBug=True )
-#			else :
-				zzz = '0:'+ str( _aud['index'] )
-				if NB_Astr == 0 :
-					ff_audio = [ '-map', zzz ]
-				else :
-					ff_audio.extend([ '-map', zzz ])
+			zzz = '0:'+ str( _aud['index'] )
+			if NB_Astr == 0 :
+				ff_audio = [ '-map', zzz ]
+			else :
+				ff_audio.extend([ '-map', zzz ])
 
-				zzz = '-c:a:' + str( _aud['index'] )
-				if  _aud['codec_name'] == 'aac' or 'opus' or 'vorbis' :
-					if _aud['bit_rate'] <= Max_a_btr : # and _aud['channels'] < 3 :
-						ff_audio.extend( [ zzz, 'copy'] )
-					else:
-						ff_audio.extend( [ zzz, 'libvorbis', '-q:a', '6'] )
-				else :
-					ff_audio.extend( [ zzz, 'libvorbis', '-q:a', '7'] )
-			if _lng['language'] == 'eng' and _disp['default'] == 1 :
-				message += " * Yey *"
-				print (message)
-				break
-			print (message)
-			NB_Astr += 1
+			zzz = '-c:a:' + str( _aud['index'] )
+			if  _aud['codec_name'] == 'aac' or _aud['codec_name'] == 'opus' or _aud['codec_name'] == 'vorbis' :
+				if _aud['bit_rate'] <= Max_a_btr : # and _aud['channels'] < 3 :
+					ff_audio.extend( [ zzz, 'copy'] )
+				else:
+					ff_audio.extend( [ zzz, 'libvorbis', '-q:a', '6'] )
+			else :
+				ff_audio.extend( [ zzz, 'libvorbis', '-q:a', '7'] )
+		if _lng['language'] == 'eng' and _disp['default'] == 1 :
+			message += " * Yey *"
+		print (message)
+		NB_Astr += 1
 		if DeBug : message = "    {}".format( ff_audio ), print (message)
 
 #XXX subtitle
@@ -744,7 +736,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				message = "    |<S:{:2}>|{:^6}|{:^10}|{:3}| {}".format(
 					_sub['index'], _sub['codec_name'], _sub['codec_type'], _lng['language'], extra )
 	## XXX:
-				if _sub['codec_name'] == 'hdmv_pgs_subtitle' or 'dvd_subtitle' :
+				if _sub['codec_name'] == 'hdmv_pgs_subtitle' or _sub['codec_name'] == 'dvd_subtitle' :
 					if _lng['language'] == 'eng' :
 						Sub_fi_name	= Ini_file + '.' + str(_lng['language']) + '.dvd_subtitle'
 	#					ff_subtl.extend( [ zzz, 'copy', Sub_fi_name ] )
@@ -754,13 +746,17 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 						if DeBug : input ('Next Sub ?')
 #						continue
 				else:
-					print (message)
-					zzz = '0:' + str(_sub['index'])
-					ff_subtl.extend( ['-map', zzz ])
-					zzz = '-c:s:' + str(_sub['index'])
-					ff_subtl.extend( [ zzz, 'copy' ] )
+					if _lng['language'] == 'eng' or _lng['language'] == 'rum' or  _lng['language'] == 'fre' :
+						print (message)
+						zzz = '0:' + str(_sub['index'])
+						ff_subtl.extend( ['-map', zzz ])
+						zzz = '-c:s:' + str(_sub['index'])
+						ff_subtl.extend( [ zzz, 'copy' ] )
+					else :
+						message += 'Skip :( {}'.format( _sub['codec_name'])
+						print (message)
+						if DeBug : input ('Next Sub ?')
 				NB_Sstr += 1
-
 		if DeBug :
 			message = "    {}".format( ff_subtl )
 			if NB_Sstr > 0 : print (message)
@@ -771,7 +767,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 	else :
 		FFM_cmnd = ff_video + ff_audio + ff_subtl
 
-		if  _vid['codec_name'] == 'hevc' and (_aud['codec_name'] == 'aac' or 'opus' or 'vorbis') :
+		if  _vid['codec_name'] == 'hevc' and (_aud['codec_name'] == 'aac' or _aud['codec_name'] =='opus' or _aud['codec_name'] =='vorbis') :
 			if DeBug :
 				print ('    | Vcod {}| Acod {}| Vhgt {}| VBtr {} : {}| ABtr {} : {}' .format( _vid['codec_name'], _aud['codec_name'], _vid['height'], round( _vid['bit_rate'] ), Max_v_btr, round( _aud['bit_rate'] ), Max_a_btr ) )
 			if _vid['bit_rate'] <= Max_v_btr and _vid['height'] <= 1090 and _aud['bit_rate'] <= Max_a_btr :
@@ -784,7 +780,9 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				print ('Had some Pu_la ¯\_(ツ)_/¯')
 				break
 		end_time    = datetime.datetime.now()
-		print('   End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, end_time-start_time ) )
+		Tot_time	= end_time - start_time
+		Tot_time 	= Tot_time.total_seconds()
+		print('   End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, Tot_time ) )
 		return FFM_cmnd
 ##===============================   End   ====================================##
 
