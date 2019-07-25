@@ -20,7 +20,7 @@ from	FFMpeg	 import *
 
 DeBug		= False
 
-Vi_Dur		= '0:0'
+Vi_Dur		= '30:00'
 
 Max_v_btr	= 2300000
 Max_a_btr	= 380000
@@ -35,8 +35,9 @@ Excepto	= 'C:\\Users\\Geo\\Desktop\\Except'
 Folder	= 'C:\\Users\\Geo\\Desktop\\downloads'
 #Folder = 'C:\\Users\\Geo\\Desktop\\ZxZ'
 #Folder	= 'E:\\Media\\Movie'
+#Folder	= 'E:\\Media'
 #Folder = '\\\\NAS-Q\\Multimedia\Movie'
-Folder	= 'D:\\Media'
+#Folder	= 'D:\\Media'
 #Folder	= 'C:\\Users\\Geo\\Desktop\\Except'
 
 VIDEO_EXTENSIONS = ['.3g2', '.3gp', '.3gp2', '.3gpp', '.60d', '.ajp', '.asf', '.asx', '.avchd', '.avi', '.bik',
@@ -93,9 +94,9 @@ def Move_Del_File (src, dst, DeBug=False ):
 	else:
 		if DeBug :
 			print ( "\n", "=" *40)
-#			print( "Stack:{}\n".format( traceback.print_stack (limit=5) ) )
+#			print( "Stack:{}\n".format( traceback.print_stack( limit=5 ) ) )
 #			print ( "\n", "-" *40)
-			print( "Exec: {}\n".format( traceback.print_exc   (limit=5) ) )
+			print( "Exec: {}\n".format( traceback.print_exc( limit=5 ) ) )
 			print ( "\n", "-" *40)
 			input("\nNow what")
 		return True
@@ -140,6 +141,16 @@ def Parse_year ( FileName ) :
 	return za
 ##===============================   End   ====================================##
 
+def Sanitize_file ( root, one_file, extens ) :
+	message    = sys._getframe().f_code.co_name + '-:'
+
+	fi_path     = os.path.normpath( os.path.join( root, one_file ) )
+	fi_size     = os.path.getsize( fi_path )
+	fi_info     = os.stat( fi_path )
+	year_made	= Parse_year( fi_path )
+#XXX  |[0] Extension |[1] Full Path |[2] File Size |[3] File Info |[4] Year Made XXX
+	return	extens, fi_path, fi_size, fi_info, year_made
+
 """ =============== The real McCoy =========== """
 def Build_List ( Top_dir, Ext_types, Sort_loc=2, Sort_ord=True  ) : # XXX: Sort_ord=True (Big First) Sort_loc = 2 => File Size: =4 => year_made
 	'''
@@ -154,7 +165,7 @@ def Build_List ( Top_dir, Ext_types, Sort_loc=2, Sort_ord=True  ) : # XXX: Sort_
 	print("=" * 60)
 	start_time = datetime.datetime.now()
 	value = HuSa (get_tree_size ( Top_dir ) )
-	print ( value )
+	print ('Dir: {}\tis: {}'.format( Top_dir, value ) )
 	print('Start: {:%H:%M:%S}'.format( start_time ))
 
 	# a Directory ?
@@ -165,12 +176,7 @@ def Build_List ( Top_dir, Ext_types, Sort_loc=2, Sort_ord=True  ) : # XXX: Sort_
 			for one_file in files:
 				x, extens = os.path.splitext( one_file.lower() )
 				if extens in Ext_types :
-					fi_path     = os.path.normpath( os.path.join( root, one_file ) )
-					fi_size     = os.path.getsize( fi_path )
-					fi_info     = os.stat( fi_path )
-					year_made	= Parse_year( fi_path )
-#XXX  |[0] Extension |[1] Full Path |[2] File Size |[3] File Info |[4] Year Made XXX
-					Save_items	= extens, fi_path, fi_size, fi_info, year_made
+					Save_items	= Sanitize_file( root, one_file, extens )
 					queue_list += [ Save_items ]
 					if DeBug : print ("Add :{:>4} {:<70} {:^9} {} {:^6}".format(
 								extens, one_file, HuSa(fi_size), fi_info, year_made ))
@@ -178,57 +184,18 @@ def Build_List ( Top_dir, Ext_types, Sort_loc=2, Sort_ord=True  ) : # XXX: Sort_
 	elif os.path.isfile ( Top_dir ) :
 		message += " -> Single File Not a Directory: {}".format( Top_dir )
 		print ( message )
-		x,extens  = os.path.splitext( Top_dir.lower() )
-		fi_path   = (Top_dir)
-		fi_size   = os.path.getsize( fi_path)
-		fi_info   = os.stat( fi_path)
-		year_made = Parse_year ( fi_path)
-#XXX  |[0] Extension |[1] Full Path |[2] File Size |[3] File Info |[4] Year Made XXX
-		Save_items	= extens, fi_path, fi_size, fi_info, year_made
-		queue_list += [ Save_items ]
+		x,  extens  = os.path.splitext( Top_dir.lower() )
+		if extens in Ext_types :
+			Save_items	= Sanitize_file( root, one_file, extens )
+			queue_list += [ Save_items ]
 		if DeBug : print ("Add :{:>4} {:<70} {:^9} {} {:^6}".format(
 					extens, one_file, HuSa(fi_size), fi_info, year_made ))
-
-	elif os.path.islink( Top_dir ) :
-		print (Folder, " It's a Link")
-		input ("WTF should I do now?")
-		return False
-
-	elif os.path.ismount( Top_dir) :
-		print (Folder, " It's a Mountpoint")
-		input ("WTF should I do now?")
-		return False
-
-	else :
-		# XXX TODO : Read from file if flag -f XXX for now just read the same file
-		message = "{} -> ./Excepton.log File ".format( message)
-		print ( message )
-		input ( "Ready ? Press CR")
-		Exep_File = open("./Excepton.log", "r", encoding="utf-8")
-		for line in Exep_File:
-			cnt += 1
-			if DeBug : print (line)
-			fi_path   = line.replace("\n",'')
-			if os.path.isfile ( fi_path ) :
-				x, extens	= os.path.splitext( fi_path.lower() )
-				fi_path		= os.path.normpath( os.path.join( root, one_file ) )
-				fi_size		= os.path.getsize( fi_path)
-				fi_info		= os.stat( fi_path)
-				year_made	= Parse_year( fi_path)
-#XXX  |[0] Extension |[1] Full Path |[2] File Size |[3] File Info |[4] Year Made XXX
-				Save_items	= extens, fi_path, fi_size, fi_info, year_made
-				queue_list += [Save_items]
-				if DeBug : print ("Add :{:>4} {:<70} {:^9} {} {:^6}".format(
-							extens, one_file, HuSa(fi_size), fi_info, year_made ))
-			else :
-				print ("No file named {}".format( fi_path))
-				return False
 
 # XXX: https://wiki.python.org/moin/HowTo/Sorting
 # XXX: Sort based in item [2] = filesize defined by Sort_loc :)
 	queue_list = sorted( queue_list, key=lambda Item: Item[Sort_loc], reverse=Sort_ord ) ## XXX: sort defined by caller
 
-	if DeBug :
+	if DeBug > 1 :
 		print ("="*90)
 		for each in queue_list :
 			print ( each )
@@ -320,8 +287,8 @@ def Do_it ( List_of_files, Excluded ='' ):
 	if not List_of_files :
 		raise ValueError( message, 'No files to procces' )
 
-	elif len ( Excluded ) :
-		message += " Excluding" + len (Excluded) + Excluded
+	elif len( Excluded ) :
+		message += " Excluding" + len( Excluded ) + Excluded
 		raise ValueError( message, 'Not Implemented yet :( ' )
 # XXX: TBD Skip those in the List
 
@@ -427,12 +394,12 @@ def Do_it ( List_of_files, Excluded ='' ):
 					Move_Del_File ( The_file, Excepto, DeBug=True )
 			except Exception as e:
 				message += " WTF? General Exception {}" .format(e)
-				print ( "\n", "=" *40)
+				print ( "\n", "-+" *20)
 				print (message)
-#				print( "Stack:{}\n".format( traceback.print_stack (limit=5) ) )
+#				print( "Stack:{}\n".format( traceback.print_stack( limit=5 ) ) )
 #				print ( "\n", "-" *40)
-				print( "Exec: {}\n".format( traceback.print_exc   (limit=5) ) )
-				print ( "\n", "-" *40)
+				print( "Exec: {}\n".format( traceback.print_exc( limit=5 ) ) )
+				print ( "\n", "=" *40)
 #				Create_File   ( Lock_File, message, 100, DeBug=True )
 				Move_Del_File ( The_file, Excepto, DeBug=True )
 				Exeptions_File.flush()
@@ -490,10 +457,10 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 		Parse_from_to ( Meta_dta['format'], _mtdta)
 		Prst_all.append (_mtdta)
 		if 'Pu_la' in _mtdta.values() :
-			message += ":O: Meta_dta has Pu_la\n{}\n{}" .format( json.dumps( Meta_dta, indent=2, sort_keys=True ), _mtdta )
+			message += ":O: Meta_dta has Pu_la\n{}\n{}" .format( json.dumps( Meta_dta, indent=2 ), _mtdta )
 			print (message)
 			if DeBug : input ('Meta WTF')
-#			raise ValueError( message )
+			raise ValueError( message )
 		_kdat = dict(	codec_type 		=''	)
 		for rg in range ( _mtdta['nb_streams'] ) :
 			Strm_X = Meta_dta['streams'][ rg ]
@@ -590,27 +557,23 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				input( 'Next ' )
 				raise ValueError( message )
 
-# XXX: Parsing Done lets Procces
-		if  _mtdta['bit_rate'] == 'Pu_la':
-			_mtdta['bit_rate'] = 1000
-			Vi_Dur = '11:55'
-		else :
-			mins,  secs = divmod(int(_mtdta['duration']), 60)
-			hours, mins = divmod(mins, 60)
-			Vi_Dur = '{:02d}:{:02d}:{:02d}'.format(hours, mins, secs)
-		message = "    |< CT >|{}| {:^5}x{:^5} | {} V| {} A| {} S|".format(
-					Vi_Dur, _vdata['width'], _vdata['height'], len(Vi_strms), len(Au_strms), len(Su_strms) )
+		mins,  secs = divmod(int(_mtdta['duration']), 60)
+		hours, mins = divmod(mins, 60)
+		Vi_Dur = '{:02d}:{:02d}:{:02d}'.format(hours, mins, secs)
+		message = "    |< CT >|{}| {:^5}x{:^5} |Size= {}|Vi= {}|Au= {}|Su= {}|".format(
+					Vi_Dur, _vdata['width'], _vdata['height'], HuSa(os.path.getsize((Ini_file))), len(Vi_strms), len(Au_strms), len(Su_strms) )
 		print (message)
 
 # XXX: Check it :)
 		if len(Vi_strms) == 0 :
-			message = 'File \n{}\n Has no Video => Can\'t convert' .format( Ini_file )
+			message = 'File \n{}\n Has no Video => Can\'t convert\n' .format( Ini_file )
 			if DeBug : print( message ), input ('Next ?')
 			raise ValueError( message )
 		if len(Au_strms) == 0 :
-			message = 'File \n{}\n Has no Audio => Can\'t convert' .format( Ini_file )
+			message = 'File:\n{}\n Has no Audio => Can\'t convert\n' .format( Ini_file )
 			if DeBug : print( message ), input ('Next ?')
-			return False
+			raise  Exception( message )
+#			raise ValueError( message )
 
 # XXX: Video
 		if DeBug : input ("VID !!")
@@ -630,7 +593,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 					print ( json.dumps( _vid, indent=2, sort_keys=True ) )
 					input("Pu_la is here")
 			frm_rate  = float( Util_str_calc(_vid['avg_frame_rate']) )
-			message = "    |<V:{:2}>| {:^6} |Br: {:>9}|Fps: {:>5}| {}".format(
+			message = "    |<V:{:2}>| {:^6} |Br= {:>9}|Fps= {:>5} | {}".format(
 						_vid['index'], _vid['codec_name'], HuSa(_vid['bit_rate']), frm_rate, extra )
 			print (message)
 
@@ -641,7 +604,8 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				ff_video.extend( [ '-vf', 'scale = -1:1080', '-c:v', 'libx265', '-crf', '25', '-preset', 'slow' ] )
 			elif _vid['codec_name'] == 'hevc' :
 				if _vid['bit_rate'] > Max_v_btr :
-					ff_video.extend( [ '-c:v', 'libx265', '-preset', 'slow',   '-b:v', str(Max_v_btr) ])
+#					ff_video.extend( [ '-c:v', 'libx265', '-preset', 'slow',   '-b:v', str(Max_v_btr) ])
+					ff_video.extend( [ '-c:v', 'libx265', '-crf', '25', '-preset', 'slow' ] )
 				else:
 					ff_video.extend( [ '-c:v', 'copy'])
 			else :
@@ -655,7 +619,6 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 #				ff_video.extend( = [ '-r', '25' ] )
 				message = "    FYI Could conv Frame rate from {} to 25" .format( frm_rate )
 				print (message)
-				time.sleep(1)
 			NB_Vstr += 1
 		if DeBug : message = "    {}".format( ff_video ), print (message)
 
@@ -689,7 +652,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				_lng['language'] = 'wtf'
 			else:
 				Parse_from_to ( _aud['tags'], _lng )
-			message = "    |<A:{:2}>| {:^6} |Br: {:>9}|Fq: {:>5}|Ch: {}|{}|{}| {}".format(
+			message = "    |<A:{:2}>| {:^6} |Br= {:>9}|Fq= {:>5}h|Ch= {}|{}|*{}|{}".format(
 						_aud['index'], _aud['codec_name'], HuSa(_aud['bit_rate']),
 						HuSa(_aud['sample_rate']), _aud['channels'], _lng['language'],
 						_disp['default'], extra)
@@ -701,7 +664,8 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				ff_audio.extend([ '-map', zzz ])
 
 			zzz = '-c:a:' + str( _aud['index'] )
-			if  _aud['codec_name'] == 'aac' or _aud['codec_name'] == 'opus' or _aud['codec_name'] == 'vorbis' :
+			if  'aac' or 'opus' or 'vorbis' in _aud['codec_name'] :
+#			if  _aud['codec_name'] == 'aac' or _aud['codec_name'] == 'opus' or _aud['codec_name'] == 'vorbis' :
 				if _aud['bit_rate'] <= Max_a_btr : # and _aud['channels'] < 3 :
 					ff_audio.extend( [ zzz, 'copy'] )
 				else:
@@ -733,20 +697,22 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				if 'Pu_la' in _lng['language'] :
 					_lng['language'] = 'wtf'
 
-				message = "    |<S:{:2}>|{:^6}|{:^10}|{:3}| {}".format(
+				message = "    |<S:{:2}>|{:^6}|{:^10}|{:3}|{}".format(
 					_sub['index'], _sub['codec_name'], _sub['codec_type'], _lng['language'], extra )
 	## XXX:
-				if _sub['codec_name'] == 'hdmv_pgs_subtitle' or _sub['codec_name'] == 'dvd_subtitle' :
+				if 'hdmv_pgs_subtitle' or 'dvd_subtitle' in  _sub['codec_name']:
+#				if _sub['codec_name'] == 'hdmv_pgs_subtitle' or _sub['codec_name'] == 'dvd_subtitle' :
 					if _lng['language'] == 'eng' :
 						Sub_fi_name	= Ini_file + '.' + str(_lng['language']) + '.dvd_subtitle'
 	#					ff_subtl.extend( [ zzz, 'copy', Sub_fi_name ] )
 					else :
-						message += 'Skip :( {}'.format( _sub['codec_name'])
+						message += ' :( Skip :( {}'.format( _sub['codec_name'])
 						print (message)
 						if DeBug : input ('Next Sub ?')
 #						continue
 				else:
-					if _lng['language'] == 'eng' or _lng['language'] == 'rum' or  _lng['language'] == 'fre' :
+					if 'eng' or 'rum' or 'fre' or 'wtf' in _lng['language'] :
+#					if _lng['language'] == 'eng' or _lng['language'] == 'rum' or  _lng['language'] == 'fre' or _lng['language'] == 'wtf':
 						print (message)
 						zzz = '0:' + str(_sub['index'])
 						ff_subtl.extend( ['-map', zzz ])
@@ -767,7 +733,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 	else :
 		FFM_cmnd = ff_video + ff_audio + ff_subtl
 
-		if  _vid['codec_name'] == 'hevc' and (_aud['codec_name'] == 'aac' or _aud['codec_name'] =='opus' or _aud['codec_name'] =='vorbis') :
+		if  _vid['codec_name'] == 'hevc' and ( 'aac' or 'opus' or 'vorbis' in aud['codec_name'] ) :
 			if DeBug :
 				print ('    | Vcod {}| Acod {}| Vhgt {}| VBtr {} : {}| ABtr {} : {}' .format( _vid['codec_name'], _aud['codec_name'], _vid['height'], round( _vid['bit_rate'] ), Max_v_btr, round( _aud['bit_rate'] ), Max_a_btr ) )
 			if _vid['bit_rate'] <= Max_v_btr and _vid['height'] <= 1090 and _aud['bit_rate'] <= Max_a_btr :
