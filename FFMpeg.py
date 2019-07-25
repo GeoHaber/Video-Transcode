@@ -20,7 +20,7 @@ from   My_Utils  import *
 
 DeBug		= False
 
-Vi_Dur		= '0:0'
+Vi_Dur		= '30:00'
 
 Out_F_typ	= '.mkv'
 Tmp_F_Ext	= '_XY_' + Out_F_typ
@@ -125,18 +125,15 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 	loc		= 0
 	symbs	= '|/-+\\'
 	try :
-		if DeBug  :
+		if DeBug :
 			print ("    |>-:", Cmd )
 			input ("Ready to Do it? ")
 			ff_out = subprocess.run( Cmd,
-
-						universal_newlines=True,
-						encoding='utf-8' )
-			message += "\n Out: {!r}\n".format( ff_out )
+				universal_newlines=True,
+				encoding='utf-8' )
 			errcode  = ff_out.returncode
-			stderri  = ff_out.stderr
-			if errcode or stderri :
-				message += " ErRor: ErRorde {!r} Stderr {!r}:".format( errcode, stderri )
+			if errcode :
+				message += " ErRor: ErRorde {!r}".format( errcode )
 				print( message )
 				input('Next')
 				raise Exception( '$hit ', message )
@@ -145,99 +142,49 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 		else :
 			print ("    |>-:", Cmd[4:-8] )	## XXX:  Skip First 4 and Last 6
 			ff_out = subprocess.Popen( Cmd,
-						stdout=subprocess.PIPE,
-						stderr=subprocess.STDOUT,
-						universal_newlines=True,
-						encoding='utf-8' )
+				stdout=subprocess.PIPE,
+				stderr=subprocess.STDOUT,
+				universal_newlines=True,
+				encoding='utf-8' )
 	except subprocess.CalledProcessError as err:
-		message += " ErRor: {} CalledProcessError {!r}  {!r} :".format(err, err.returncode, err.output )
+		ff_out.kill()
+		message += " ErRor: {!r} CalledProcessError :".format( err )
 		if DeBug : print( message ) , input('Next')
 		raise Exception( '$hit ', message )
 	except Exception as e:
-		message += " ErRor: Exception {}:".format( e )
+		ff_out.kill()
+		message += " ErRor: Exception {!r}:".format( e )
 		if DeBug : print( message ) , input('Next')
 		raise Exception( '$hit ', message )
 	else:
-		while True :
-			try:
-				lineo    = ff_out.stdout.readline()
-				if DeBug : print("<{!r}>".format (lineo))
-				errcode  = ff_out.returncode
-				stderri  = ff_out.stderr
-				if errcode or stderri :
-					message += " ErRor: ErRorde {!r} stderr {!r}:".format( errcode, stderri )
-					print( message )
-					raise ValueError ( '$hit ', message )
-				elif 'frame=' in lineo :
-					Prog_cal (lineo , symbs[loc])
-					last_fr  = lineo.rstrip('\r\n')
-					loc += 1
-					if loc == len(symbs) :
-						loc = 0
-				elif 'global headers:' and "muxing overhead:" in lineo :
-					last_fr = lineo.rstrip('\r\n')
-# 			video:611001kB audio:55396kB subtitle:0kB other streams:0kB global headers:6kB muxing overhead: 0.480537%
-					vis	= re.search( r'video:\s*([0-9\.]+)',	last_fr ).group(1)	#Can have value of N/A
-					aus	= re.search( r'audio:\s*([0-9\.]+)',	last_fr ).group(1)	#Can have value of N/A
-					print(  '\t  |><| Video = {} Audio = {}'.format (vis, aus) )
-					print( ff_out.stdout )
-					'''
-					global Vi_Dur
-					try :
-						tm    = re.search ( r'time=\S([0-9:]+)', last_fr ).group(1)
-						a_sec = sum( int(x)*60**i for i,x in enumerate( reversed(tm.split(":"))) )
-						b_sec = sum( int(x)*60**i for i,x in enumerate( reversed(Vi_Dur.split(":"))) )
-						dif   = abs (b_sec - a_sec)
-						if dif :
-							print ("\t  [-)] Lenght was={} is={} dif={}".format( Vi_Dur ,tm, dif ) )
-						else :
-							print ("\t  [:)] Lenght={}".format( Vi_Dur ) )
-						# XXX: make it 1 percent a fixed number
-						if dif < ( b_sec / 100 ) :
-							pass
-						else :
-							print ("Diff to Big :( ",dif)
-						if DeBug : time.sleep (2), input ("So ?")
-					except Exception as e:
-						message += " Got Time ErRor: Exception {}:".format( e )
-						if DeBug : print( message ) , input('Next')
-						raise ValueError ( '$hit ', message )
-					'''
-# XXX: ?? Not sure if it's the right way to deal with problem streems XXX
-				elif lineo == '' :
-					if DeBug :
-						print("Done {!r}".format (lineo))
-						print('\nStderr : {!r}'.format(ff_out.stderr) )
-						print('\nStdout : {!r}'.format(ff_out.stdout) )
-					if ff_out.poll() is not None:
-						if DeBug :
-							time.sleep(10)
-#							input ("WWWWW")
-						break
-			except Exception as e:
-				message += " ErRor: in Procesing data {!r}:".format( e )
-				if DeBug : print( message ) , input('Next')
+		while ff_out.poll() is None:
+			lineo    = ff_out.stdout.readline()
+			errcode  = ff_out.returncode
+			if DeBug : print("<Line:{} Err:{}>".format( lineo.rstrip('\r\n') ), errcode)
+#			stderri  = ff_out.stderr
+			if errcode :
+				message += " ErRor: ErRorde {!r} stderr {!r}:".format( errcode )
+				print( message )
 				raise ValueError ( '$hit ', message )
-	finally :
-		file_size	= os.path.getsize(Fmpg_in_file)
-		check_path	= os.path.exists (Fmpg_ou_file)
-		if check_path :
-			n_file_size = os.path.getsize(Fmpg_ou_file)
-			if n_file_size < (file_size/64) :	# XXX Kind of imposible
-				message += " Size to small :" +os.path.basename(Fmpg_in_file) +' ' +HuSa(n_file_size)
-				if DeBug : print( message ) , input('Next')
-				raise ValueError ( '$hit ', message )
-		else :
-			message += ": Output Path not found "+ os.path.basename(Fmpg_in_file)
-			if DeBug : print( message ) , input('Next')
-			raise ValueError ( '$hit ', message )
-		end_time    = datetime.datetime.now()
-		Tot_time	= end_time - start_time
-		Tot_time 	= Tot_time.total_seconds()
-		print('   End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, Tot_time ) )
-		message +="   FFMpeg Done !!"
-		print ( message )
-		return Fmpg_ou_file
+			elif 'frame=' in lineo :
+				Prog_cal (lineo, symbs[loc])
+				loc += 1
+				if loc == len(symbs) :
+					loc = 0
+			elif 'global headers:' and "muxing overhead:" in lineo :
+				print('\n|>+<| {}'.format( lineo ) )
+			else :
+				if DeBug : print("<{}>".format( lineo) )
+				if lineo is None :
+					break
+
+	end_time    = datetime.datetime.now()
+	Tot_time	= end_time - start_time
+	Tot_time 	= Tot_time.total_seconds()
+	print('   End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, Tot_time ) )
+	message +="   FFMpeg Done !!"
+	print ( message )
+	return Fmpg_ou_file
 ##===============================   End   ====================================##
 
 def FFClean_up ( Inp_file, Out_file ):
@@ -342,49 +289,61 @@ def FFClean_up ( Inp_file, Out_file ):
 		return (1 + abs ( Ini_file_size - Out_file_size ) )
 ##===============================   End   ====================================##
 
-
-def Prog_cal (line_to, sy=False ) :
+def Prog_cal ( line_to, sy=False ) :
 #	global DeBug
 #	DeBug = True
 	global Vi_Dur
 	message  = sys._getframe().f_code.co_name + '-:'
 
+	cnt = 0
 	_P =''
-	last_fr  = line_to.rstrip('\r\n')
-	if DeBug :
-		print ("\r>" , last_fr)
-	if 'frame=' and 'bitrate=' and not 'N/A' in last_fr :
+	if DeBug : print ("\r", line_to, sy), input(message)
+	if not line_to and sy :
+		sy = "\r    | {} |Working:".format(sy)
+		sys.stderr.write( sy )
+		sys.stderr.flush
+	elif 'frame=' and 'bitrate=' and not 'N/A' in line_to :
 		try :
-			fr	= re.search( r'frame=\s*([0-9]+)',		last_fr ).group(1)
-			fp	= re.search( r'fps=\s*([0-9]+)',		last_fr ).group(1)
-			sz	= re.search( r'size=\s*([0-9]+)',		last_fr ).group(1)
-			tm	= re.search( r'time=\S([0-9:]+)',		last_fr ).group(1)
-			br	= re.search( r'bitrate=\s*([0-9\.]+)',	last_fr ).group(1)	#Can have value of N/A
-			sp	= re.search( r'speed=\s*([0-9\.]+)',	last_fr ).group(1)	#Can have value of N/A
+			fr	= re.search( r'frame=\s*([0-9]+)',		line_to ).group(1)
+			fp	= re.search( r'fps=\s*([0-9]+)',		line_to ).group(1)
+			sz	= re.search( r'size=\s*([0-9]+)',		line_to ).group(1)
+			tm	= re.search( r'time=\S([0-9:]+)',		line_to ).group(1)
+			br	= re.search( r'bitrate=\s*([0-9\.]+)',	line_to ).group(1)	#Can have value of N/A
+			sp	= re.search( r'speed=\s*([0-9\.]+)',	line_to ).group(1)	#Can have value of N/A
 			if int(fp) > 0 :
 				a_sec = sum( int(x)*60**i for i, x in enumerate( reversed( tm.split(":"))) )
 				b_sec = sum( int(x)*60**i for i, x in enumerate( reversed( Vi_Dur.split(":"))) )
 				dif   = abs( b_sec - a_sec )
-				eta  = round( dif / (float(sp) ))
+				eta   = round( dif / (float(sp) ))
 				mins, secs  = divmod(int(eta), 60)
 				hours, mins = divmod( mins, 60)
 				_Dur = '{:02d}:{:02d}:{:02d}'.format(hours, mins, secs)
-				_P   = '\r| {} |Frame: {:>7}|Fps: {}|Siz: {:>6}|BitRate : {}|Speed: {}|Time Left: {}|  '.format(sy, fr, fp, sz, br, sp, _Dur)
+				if not cnt :
+					fp_av = float( fp )
+					sp_av = float( sp )
+				else :
+					fp_av += round( (float( fp ) - fp_av ) / cnt )
+					sp_av += round( (float( sp ) - sp_av ) / cnt )
+				_P   = '\r    | {} |Frame= {}|Fps= {}|BitRate= {}|Speed= {}|Size= {}Kb|Time Left= {}| '.format(sy, fr, fp_av, br, sp_av, sz, _Dur)
+				cnt += 1
 
 		except Exception as e:
-			print (last_fr)
+			print (line_to)
 			message += " ErRor: in Procesing data {!r}:".format( e )
 			raise  Exception( message )
+		else:
+			sys.stderr.write( _P )
+			sys.stderr.flush
 	else :
-		print (last_fr)
-	sys.stderr.write( _P )
-	sys.stderr.flush
+		_P = '\r' + line_to
+		sys.stderr.write( _P )
+		sys.stderr.flush
 	return True
 ##===============================   End   ====================================##
 
 if __name__=='__main__':
 #	global DeBug
-#	DeBug = True
+#	DeBug = False
 
 	start_time	= datetime.datetime.now()
 	message 	= sys._getframe().f_code.co_name + '-:'
