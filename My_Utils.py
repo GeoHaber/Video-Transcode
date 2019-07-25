@@ -62,6 +62,19 @@ class Tee(object):
 		sys.stderr = cls.stderrsav
 ##==============-------------------   End   -------------------==============##
 
+def Print_Aligned ( List_of_Strings ) :
+	'''
+	print formated table with the values provided
+	'''
+
+	lens = []
+	for col in zip(*List_of_Strings):
+	    lens.append(max([len(v) for v in col]))
+	format = "  ".join(["{:<" + str(l) + "}" for l in lens])
+	for row in List_of_Strings:
+	    print(format.format(*row))
+##==============-------------------   End   -------------------==============##
+
 def Custom_logger( name ):
 	Frmt 	     = logging.Formatter(fmt='%(asctime)s %(levelname)-8s %(message)s',
 								  datefmt='%Y-%m-%d %H:%M:%S')
