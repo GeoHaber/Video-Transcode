@@ -41,15 +41,14 @@ def FFProbe_run (File_in, Execute= ffprobe ):
 
 	start_time	= datetime.datetime.now()
 	message 	= sys._getframe().f_code.co_name + '|:'
-	print("  {}\t\tStart: {:%H:%M:%S}".format( message, start_time ) )
+	print(f"  {message}\t\tStart: {start_time:%H:%M:%S}")
 
 	if os.path.exists (File_in) :
 		file_size = os.path.getsize(File_in)
-		message = "\n{}\t{}\n".format(
-					File_in, HuSa(file_size) )
+		message = f"\n{File_in}\t{HuSa(file_size)}\n"
 		if DeBug :	print ( message )
 	else :
-		message += "No Input file:( \n {}" .format( File_in )
+		message += f"No Input file:( \n {File_in}"
 		print (message)
 		if DeBug : input ('Now WTF?')
 		return False
@@ -76,7 +75,7 @@ def FFProbe_run (File_in, Execute= ffprobe ):
 				universal_newlines = True,
 				encoding='utf-8')
 	except subprocess.CalledProcessError as err:	# XXX: TBD Fix error in some rare cases
-		message += " FFProbe: CalledProcessError" .format( err )
+		message += f" FFProbe: CalledProcessError {err}"
 		if DeBug : print( message ), input ('Next')
 		raise  Exception( message )
 	else:
@@ -84,19 +83,19 @@ def FFProbe_run (File_in, Execute= ffprobe ):
 		err = ff_out.stderr
 		bad = ff_out.returncode
 		if bad  :
-			message += "Oy vey {!r}\nIst mir {!r}\n".format( bad, err)
+			message += f"Oy vey {bad}\nIst mir {err}\n"
 			if DeBug : print( message ), input("Bad")
 			raise ValueError( message )
 		else:
 			jlist = json.loads( out )
 			if len (jlist) < 2 :
-				message += "Json out to small\n{}\n{!r}".format( File_in, jlist )
+				message += f"Json out to small\n{File_in}\n{jlist}"
 				if DeBug : print( message ), input(" Jlist to small ")
 				raise  Exception( message )
 		end_time    = datetime.datetime.now()
 		Tot_time	= end_time - start_time
 		Tot_time 	= Tot_time.total_seconds()
-		print('   End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, Tot_time ) )
+		print(f'   End  : {end_time:%H:%M:%S}\tTotal: {Tot_time}' )
 		return jlist
 ##===============================   End   ====================================##
 
@@ -106,7 +105,7 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 
 	start_time	= datetime.datetime.now()
 	message 	= sys._getframe().f_code.co_name + '-:'
-	print("  {}\t\tStart: {:%H:%M:%S}".format( message, start_time ) )
+	print(f"  {message}\t\tStart: {start_time:%H:%M:%S}" )
 
 #XXX FileName for the Title ...
 	Sh_fil_name    = os.path.basename( Fmpg_in_file ).title()
@@ -133,7 +132,7 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 				encoding='utf-8' )
 			errcode  = ff_out.returncode
 			if errcode :
-				message += " ErRor: ErRorde {!r}".format( errcode )
+				message += f" ErRor: ErRorde {errcode}"
 				print( message )
 				input('Next')
 				raise Exception( '$hit ', message )
@@ -148,22 +147,22 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 				encoding='utf-8' )
 	except subprocess.CalledProcessError as err:
 		ff_out.kill()
-		message += " ErRor: {!r} CalledProcessError :".format( err )
+		message += f" ErRor: {err} CalledProcessError :"
 		if DeBug : print( message ) , input('Next')
 		raise Exception( '$hit ', message )
 	except Exception as e:
 		ff_out.kill()
-		message += " ErRor: Exception {!r}:".format( e )
+		message += f" ErRor: Exception {e}:"
 		if DeBug : print( message ) , input('Next')
 		raise Exception( '$hit ', message )
 	else:
 		while ff_out.poll() is None:
 			lineo    = ff_out.stdout.readline()
+			if DeBug : print(f"<{lineo}>")
 			errcode  = ff_out.returncode
-			if DeBug : print("<Line:{} Err:{}>".format( lineo.rstrip('\r\n') ), errcode)
-#			stderri  = ff_out.stderr
-			if errcode :
-				message += " ErRor: ErRorde {!r} stderr {!r}:".format( errcode )
+			stderri  = ff_out.stderr
+			if errcode or stderri :
+				message += f" ErRor: ErRorde {errcode} stderr {stderri}:"
 				print( message )
 				raise ValueError ( '$hit ', message )
 			elif 'frame=' in lineo :
@@ -172,16 +171,11 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 				if loc == len(symbs) :
 					loc = 0
 			elif 'global headers:' and "muxing overhead:" in lineo :
-				print('\n|>+<| {}'.format( lineo ) )
-			else :
-				if DeBug : print("<{}>".format( lineo) )
-				if lineo is None :
-					break
-
+				print(f'\n|>+<| {lineo}' )
 	end_time    = datetime.datetime.now()
 	Tot_time	= end_time - start_time
 	Tot_time 	= Tot_time.total_seconds()
-	print('   End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, Tot_time ) )
+	print(f'   End  : {end_time:%H:%M:%S}\tTotal: {Tot_time}' )
 	message +="   FFMpeg Done !!"
 	print ( message )
 	return Fmpg_ou_file
@@ -295,11 +289,10 @@ def Prog_cal ( line_to, sy=False ) :
 	global Vi_Dur
 	message  = sys._getframe().f_code.co_name + '-:'
 
-	cnt = 0
 	_P =''
 	if DeBug : print ("\r", line_to, sy), input(message)
 	if not line_to and sy :
-		sy = "\r    | {} |Working:".format(sy)
+		sy = f"\r    | {sy} |Working:"
 		sys.stderr.write( sy )
 		sys.stderr.flush
 	elif 'frame=' and 'bitrate=' and not 'N/A' in line_to :
@@ -317,19 +310,12 @@ def Prog_cal ( line_to, sy=False ) :
 				eta   = round( dif / (float(sp) ))
 				mins, secs  = divmod(int(eta), 60)
 				hours, mins = divmod( mins, 60)
-				_Dur = '{:02d}:{:02d}:{:02d}'.format(hours, mins, secs)
-				if not cnt :
-					fp_av = float( fp )
-					sp_av = float( sp )
-				else :
-					fp_av += round( (float( fp ) - fp_av ) / cnt )
-					sp_av += round( (float( sp ) - sp_av ) / cnt )
-				_P   = '\r    | {} |Frame= {}|Fps= {}|BitRate= {}|Speed= {}|Size= {}Kb|Time Left= {}| '.format(sy, fr, fp_av, br, sp_av, sz, _Dur)
-				cnt += 1
+				_Dur = f'{hours:02d}:{mins:02d}:{secs:02d}'
+				_P   = f'\r    | {sy} |Frame: {fr}|Fps: {fp}|Siz: {sz}|BitRate : {br}|Speed: {sp}|Time Left: {_Dur}| '
 
 		except Exception as e:
 			print (line_to)
-			message += " ErRor: in Procesing data {!r}:".format( e )
+			message += f" ErRor: in Procesing data {e}:"
 			raise  Exception( message )
 		else:
 			sys.stderr.write( _P )
