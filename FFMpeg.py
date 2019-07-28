@@ -34,6 +34,7 @@ ffmpeg_exe  = "ffmpeg.exe"
 ffprobe_exe = "ffprobe.exe"
 ffmpeg		= os.path.join( ffmpeg_bin, ffmpeg_exe  )
 ffprobe		= os.path.join( ffmpeg_bin, ffprobe_exe )
+##>>============-------------------<  End  >------------------==============<<##
 
 def FFProbe_run (File_in, Execute= ffprobe ):
 #	global DeBug
@@ -175,8 +176,7 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 	message +="   FFMpeg Done !!"
 	print ( message )
 	return Fmpg_ou_file
-##===============================   End   ====================================##
-
+##>>============-------------------<  End  >------------------==============<<##
 def FFClean_up ( Inp_file, Out_file ):
 #	global DeBug
 #	DeBug = True
@@ -321,7 +321,7 @@ def Prog_cal ( line_to, sy=False ) :
 		sys.stderr.write( _P )
 		sys.stderr.flush
 	return True
-##===============================   End   ====================================##
+##>>============-------------------<  End  >------------------==============<<##
 
 if __name__=='__main__':
 #	global DeBug

@@ -35,10 +35,10 @@ Excepto	= 'C:\\Users\\Geo\\Desktop\\Except'
 Folder	= 'C:\\Users\\Geo\\Desktop\\downloads'
 
 
-VIDEO_EXTENSIONS = [ '.avchd', '.avi', '.dat', '.divx', '.dv', '.flic', '.flv', '.flx', '.h264', '.m4v', '.mkv',
+VIDEO_EXTENSIONS = ['.avchd', '.avi', '.dat', '.divx', '.dv', '.flic', '.flv', '.flx', '.h264', '.m4v', '.mkv',
 					'.moov', '.mov', '.movhd', '.movie', '.movx', '.mp4', '.mpe', '.mpeg', '.mpg', '.mpv', '.mpv2',
 					'.ram', '.rm', '.rmvb', '.swf', '.ts', '.vfw', '.vid', '.video', '.viv', '.vivo',
-					'.vro', '.wm', '.wmv', '.wmx', '.wrap', '.wvx', '.wx', '.x264', '.xvid']
+					'.vro', '.wm', '.wmv', '.wmx', '.wrap', '.wvx', '.webm', '.x264', '.xvid']
 
 This_File  = sys.argv[0].strip ('.py')
 Log_File   = This_File + '_run.log'
@@ -50,16 +50,14 @@ ffmpeg_exe  = "ffmpeg.exe"
 ffprobe_exe = "ffprobe.exe"
 ffmpeg		= os.path.join( ffmpeg_bin, ffmpeg_exe  )
 ffprobe		= os.path.join( ffmpeg_bin, ffprobe_exe )
-##===============================   End   ====================================##
+##>>============-------------------<  End  >------------------==============<<##
 
 def Move_Del_File (src, dst, DeBug=False ):
-#	DeBug = True
+	'''
+	If Debug then files are NOT deleted, only copied
+	'''
 	message = sys._getframe().f_code.co_name + '-:'
 
-	if DeBug > 2:
-		message += f' Src : {src}\n Dest : {dst}'
-		print( message )
-		if DeBug > 3 :	input( message )
 	try :
 		if os.path.isdir(src) and os.path.isdir(dst) :
 			shutil.copytree(src, dst)
@@ -73,21 +71,15 @@ def Move_Del_File (src, dst, DeBug=False ):
 					if DeBug : print( message )
 					raise  Exception( message )
 			else:
+				print (f" ! Placebo did NOT delete: {src}")
 				time.sleep ( 1 )
 	except OSError as e:  ## if failed, report it back to the user ##
 		message += f"\n!Error: Src {src} , Dst {dst}\n{e.filename}\n{e.strerror}\n"
 		if DeBug : print( message )
 		raise  Exception( message )
 	else:
-		if DeBug > 2 :
-			print ( "\n", "=" *40)
-#			print( f"Stack:\n{traceback.print_stack( limit=5 )}\n" )
-#			print ( "\n", "-" *40)
-			print( f"Exec:\n{traceback.print_exc( limit=5 )}\n" )
-			print ( "\n", "-" *40)
-#			input("\nNow what")
 		return True
-##===============================   End   ====================================##
+##>>============-------------------<  End  >------------------==============<<##
 
 def Create_File (dst, msge= '', times=1, DeBug=False ):
 #	DeBug = True
@@ -107,7 +99,7 @@ def Create_File (dst, msge= '', times=1, DeBug=False ):
 			if DeBug : print (message)
 			raise Exception( message )
 	return True
-##===============================   End   ====================================##
+##>>============-------------------<  End  >------------------==============<<##
 
 def Parse_year ( FileName ) :
 #	DeBug = True
@@ -126,7 +118,7 @@ def Parse_year ( FileName ) :
 	except :
 		za = 1
 	return za
-##===============================   End   ====================================##
+##>>============-------------------<  End  >------------------==============<<##
 
 def Sanitize_file ( root, one_file, extens ) :
 	message    = sys._getframe().f_code.co_name + '-:'
@@ -137,6 +129,7 @@ def Sanitize_file ( root, one_file, extens ) :
 	year_made	= Parse_year( fi_path )
 #XXX  |[0] Extension |[1] Full Path |[2] File Size |[3] File Info |[4] Year Made XXX
 	return	extens, fi_path, fi_size, fi_info, year_made
+##>>============-------------------<  End  >------------------==============<<##
 
 """ =============== The real McCoy =========== """
 def Build_List ( Top_dir, Ext_types, Sort_loc=2, Sort_ord=True  ) : # XXX: Sort_ord=True (Big First) Sort_loc = 2 => File Size: =4 => year_made
@@ -177,18 +170,12 @@ def Build_List ( Top_dir, Ext_types, Sort_loc=2, Sort_ord=True  ) : # XXX: Sort_
 # XXX: https://wiki.python.org/moin/HowTo/Sorting
 # XXX: Sort based in item [2] = filesize defined by Sort_loc :)
 	queue_list = sorted( queue_list, key=lambda Item: Item[Sort_loc], reverse=Sort_ord ) ## XXX: sort defined by caller
-
-	if DeBug > 1 :
-		print ("="*90)
-		for each in queue_list :
-			print ( each )
-		input ("Next:")
 	end_time    = datetime.datetime.now()
 	Tot_time	= end_time - start_time
 	Tot_time 	= Tot_time.total_seconds()
 	print(f'End  : {end_time:%H:%M:%S}\tTotal: {Tot_time}')
 	return queue_list
-##===============================   End   ====================================##
+##>>============-------------------<  End  >------------------==============<<##
 
 def Skip_Files ( File_dscrp, Min_fsize=10240 ) :
 #	DeBug = True
@@ -196,19 +183,11 @@ def Skip_Files ( File_dscrp, Min_fsize=10240 ) :
 	Returns True if lock file is NOT
 	'''
 	message = sys._getframe().f_code.co_name + '-:'
-
 #XXX  |[0] Extension |[1] Full Path |[2] File Size |[3] File Info |[4] Year Made XXX
 	The_file  = File_dscrp[1]
 	Fname, ex = os.path.splitext( The_file )
 	fi_size   = File_dscrp[2]
 
-# List Files in the Directory to be prccesed
-	if DeBug > 1 :
-		Dir, Fil = os.path.split ( The_file )
-		print (f"Dir : {Dir}\nFile: {Fil}")
-		for root, dirs, files in os.walk( Dir ):
-			for fi in files :
-				print (f"\nF: {fi}")
 ## XXX: File does not exist :(
 	if not os.path.exists ( The_file ) :
 		message += f"\n File Not Found {The_file}\n"
@@ -241,7 +220,7 @@ def Skip_Files ( File_dscrp, Min_fsize=10240 ) :
 		return False
 
 	return Lock_File
-##===============================   End   ====================================##
+##>>============-------------------<  End  >------------------==============<<##
 
 def Do_it ( List_of_files, Excluded ='' ):
 #	global DeBug
@@ -260,7 +239,6 @@ def Do_it ( List_of_files, Excluded ='' ):
 	elif len( Excluded ) :
 		message += " Excluding" + len( Excluded ) + Excluded
 		raise ValueError( message, 'Not Implemented yet :( ' )
-# XXX: TBD Skip those in the List
 
 	queue_list 	=[]
 	Fnum  		= 0
@@ -275,14 +253,12 @@ def Do_it ( List_of_files, Excluded ='' ):
 		The_file  = File_dscrp[1]
 		fi_size   = File_dscrp[2]
 		year_made = File_dscrp[4]
-		message = f'=> {extens} {ordinal(Fnum)} of {cnt}, {HuSa(fi_size)}, {year_made}, {The_file}'
+		message = f': {ordinal(Fnum)} of {cnt}, {HuSa(fi_size)}, {extens}, Year {year_made}\n: {The_file}'
 		print ( message )
 		start_time = datetime.datetime.now()
 		print ( f' Start: {start_time:%H:%M:%S}')
-		# XXX Scrub the Directory XXX New function
 		Lock_File = Skip_Files( File_dscrp )
 		if Lock_File :
-			#XXX Do it XXX
 			try:
 				if DeBug : print ("\nDo> FFProbe_run")
 				all_good = FFProbe_run( The_file )
@@ -393,6 +369,7 @@ def Do_it ( List_of_files, Excluded ='' ):
 		print(f' End  : {end_time:%H:%M:%S}\tTotal: {Tot_time}')
 		print('='*20)
 	return queue_list
+##>>============-------------------<  End  >------------------==============<<##
 ##===============================   End   ====================================##
 
 def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
@@ -512,7 +489,6 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 			message = f'File:\n{Ini_file}\n Has no Audio => Can\'t convert\n'
 			if DeBug : print( message ), input ('Next ?')
 			raise  ValueError( message )
-#			raise ValueError( message )
 
 # XXX: Let's print
 		mins,  secs = divmod(int(_mtdta['duration']), 60)
@@ -520,7 +496,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 		Vi_Dur = f'{hours:02d}:{mins:02d}:{secs:02d}'
 		frm_rate = float( Util_str_calc  (_vdata['avg_frame_rate']) )
 		Tot_Frms = round( frm_rate * int (_mtdta['duration']) )
-		message = f"    |< CT >|{Vi_Dur}| {_vdata['width']:^5}x{_vdata['height']:^5} | {Tot_Frms:>6,} frames| {len(Vi_strms)} Vid| {len(Au_strms)} Aud| {len(Su_strms)} Sub |"
+		message = f"    |< CT >|{Vi_Dur}| {_vdata['width']:^5}x{_vdata['height']:^5} |Tfr: {Tot_Frms:>6,}|Vi: {len(Vi_strms)}|Au: {len(Au_strms)}|Su: {len(Su_strms)}|"
 		print (message)
 
 # XXX: Video
@@ -540,7 +516,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				else:
 					print ( json.dumps( _vid, indent=2, sort_keys=True ) )
 					input("Pu_la is here")
-			message = f"    |<V:{_vid['index']:2}>| {_vid['codec_name']:^6} |Br: {HuSa(_vid['bit_rate']):>9}|Fps: {frm_rate:>5}| {extra}"
+			message = f"    |<V:{_vid['index']:2}>| {_vid['codec_name']:^6} |Br: {HuSa(_vid['bit_rate']):>9}|Fps: {frm_rate:>6}| {extra}"
 			print (message)
 
 			zzz = '0:' + str(_vid['index'])
@@ -597,7 +573,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				_lng['language'] = 'wtf'
 			else:
 				Parse_from_to ( _aud['tags'], _lng )
-			message = f"    |<A:{_aud['index']:2}>| {_aud['codec_name']:^6} |Br: {HuSa(_aud['bit_rate']):>9}|Fq: {HuSa(_aud['sample_rate']):>5}|Ch: {_aud['channels']}|{_lng['language']}|{_disp['default']}| {extra}"
+			message = f"    |<A:{_aud['index']:2}>| {_aud['codec_name']:^6} |Br: {HuSa(_aud['bit_rate']):>9}|Fq:  {HuSa(_aud['sample_rate']):>6}|Ch: {_aud['channels']}|{_lng['language']}|{_disp['default']}| {extra}"
 
 			zzz = '0:'+ str( _aud['index'] )
 			if NB_Astr == 0 :
@@ -672,20 +648,20 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 
 		if  _vid['codec_name'] == 'hevc' and ( 'aac' or 'opus' or 'vorbis' in aud['codec_name'] ) :
 			if _vid['bit_rate'] <= Max_v_btr and _vid['height'] <= 1090 and _aud['bit_rate'] <= Max_a_btr :
-				message = f"   <| Vid= {_vid['codec_name']} |Aud= {_aud['codec_name']}| _Skip_it : Nothing to Do { os.path.basename(Ini_file)}\n"
+				message = f"   <|V= {_vid['codec_name']} |A= {_aud['codec_name']}| _Skip_it : Nothing to Do { os.path.basename(Ini_file)}\n"
 				print( message )
-## XXX: Not the case				raise ValueError( message )
+				raise ValueError( message )
 
 		for pu in Prst_all :
 			if 'Pu_la' in pu.values() :
 				print ('   <|Had some Pu_la ¯\_(ツ)_/¯')
 				break
 
-		if _vid['codec_name'] != 'hevc'  :
-				message = f"   <| Vid= {_vid['codec_name']} |Aud= {_aud['codec_name']}| Should Be Converted {Ini_file}\n"
-				print( message )
-				time.sleep(1)
-				raise ValueError( message )
+#		if _vid['codec_name'] != 'hevc'  :
+#				message = f"   <| Vid= {_vid['codec_name']} |Aud= {_aud['codec_name']}| Convert {Ini_file}\n"
+#				print( message )
+#				time.sleep(1)
+#				raise ValueError( message )
 
 		end_time    = datetime.datetime.now()
 		Tot_time	= end_time - start_time
@@ -733,4 +709,4 @@ if __name__=='__main__':
 	print(f' \tEnd  : {end_time:%H:%M:%S}\tTotal: {end_time-start_time}')
 	input('All Done')
 	exit()
-##===============================   End   ====================================##
+##>>============-------------------<  End  >------------------==============<<##
