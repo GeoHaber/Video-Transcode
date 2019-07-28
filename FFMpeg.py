@@ -62,10 +62,6 @@ def FFProbe_run (File_in, Execute= ffprobe ):
 		'-hide_banner',
 		'-show_format',
 		'-show_error',
-	#		'-count_frames',
-	#		'-show_programs',
-	#		'-show_pixel_formats',
-	#		'-show_private_data',
 		'-show_streams' ]
 
 	try :
