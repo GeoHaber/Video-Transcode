@@ -5,10 +5,10 @@ __author__ = 'GeoHaZen'
 @author: 	  GeoHaZen
 #XXX KISS
 '''
-
 import os
 import re
 import sys
+import yaml
 import json
 import cgitb
 import shutil
@@ -20,44 +20,35 @@ from   My_Utils  import *
 
 DeBug		= False
 
-Vi_Dur		= ''
-Tot_Frms	= 0
-Max_v_btr	= 2300000
-Max_a_btr	= 380000
-Max_frm_rt	= 35
-
-Out_F_typ	= '.mkv'
-
-Tmp_F_Ext	= '_XY_' + Out_F_typ
-
-Excepto	= 'C:\\Users\\Geo\\Desktop\\Except'
-
-Folder	= 'C:\\Users\\Geo\\Desktop\\downloads'
-#Folder  = 'E:\\_Adlt'
-Folder	= 'E:\\Media\\Movie'
-#Folder	= 'E:\\Media\\TV'
-#Folder = '\\\\NAS-Q\\Multimedia\Movie'
-#Folder	= 'D:\\Media'
-#Folder	= 'C:\\Users\\Geo\\Desktop\\Except'
-
-
-VIDEO_EXTENSIONS = ['.avchd', '.avi', '.dat', '.divx', '.dv', '.flic', '.flv', '.flx', '.h264', '.m4v', '.mkv',
-					'.moov', '.mov', '.movhd', '.movie', '.movx', '.mp4', '.mpe', '.mpeg', '.mpg', '.mpv', '.mpv2',
-					'.ram', '.rm', '.rmvb', '.swf', '.ts', '.vfw', '.vid', '.video', '.viv', '.vivo',
-					'.vro', '.wm', '.wmv', '.wmx', '.wrap', '.wvx', '.webm', '.x264', '.xvid']
+Vi_Dur		= '30:00'
 
 This_File  = sys.argv[0].strip ('.py')
 Log_File   = This_File + '_run.log'
 Bad_Files  = This_File + '_bad.txt'
 Good_Files = This_File + '_good.txt'
 
-ffmpeg_bin  = 'C:\\Program Files\\ffmpeg\\bin'
-ffmpeg_exe  = "ffmpeg.exe"
-ffprobe_exe = "ffprobe.exe"
-ffmpeg		= os.path.join( ffmpeg_bin, ffmpeg_exe  )
-ffprobe		= os.path.join( ffmpeg_bin, ffprobe_exe )
-##>>============-------------------<  End  >------------------==============<<##
+try:
+	stream = open("config.yml", 'r')
+	cfg = yaml.safe_load(stream)
+except yaml.YAMLError as exc:
+	print(exc)
+else :
+	path		= cfg['Path']['fmpg_bin']
+	ffmpeg	= os.path.join( path, "ffmpeg.exe"  )
+	ffprobe	= os.path.join( path, "ffprobe.exe" )
 
+	Vdo_ext 	= cfg['Ext']
+	Max_v_btr	= cfg['Path']['Max_v_btr']
+	Max_a_btr	= cfg['Path']['Max_a_btr']
+	Max_frm_rt	= cfg['Path']['Max_frm_rt']
+	Tmp_F_Ext	= cfg['Path']['Tmp_F_Ext']
+	Excepto		= cfg['Path']['Excepto']
+	Folder		= cfg['Path']['Folder']
+
+#Folder		= 'C:\\Users\\Geo\\Desktop\\Except'
+
+
+##>>============-------------------<  End  >------------------==============<<##
 def Move_Del_File (src, dst, DeBug=False ):
 	'''
 	If Debug then files are NOT deleted, only copied
@@ -96,7 +87,7 @@ def Create_File (dst, msge= '', times=1, DeBug=False ):
 		return  False
 	else :
 		try :
-			Cre_lock = open( dst, "w",encoding="utf-8" )
+			Cre_lock = open( dst, "w", encoding="utf-8" )
 			if Cre_lock :
 				Cre_lock.write ( msge * times )
 				Cre_lock.flush()
@@ -105,6 +96,19 @@ def Create_File (dst, msge= '', times=1, DeBug=False ):
 			if DeBug : print (message)
 			raise Exception( message )
 	return True
+##>>============-------------------<  End  >------------------==============<<##
+
+def Sanitize_file ( root, one_file, extens ) :
+	message    = sys._getframe().f_code.co_name + '-:'
+
+	fi_path     = os.path.normpath( os.path.join( root, one_file ) )
+	fi_size     = os.path.getsize( fi_path )
+	fi_info     = os.stat( fi_path )
+	year_made	= Parse_year( fi_path )
+	clean		= re.sub('[_]', ' ', one_file ) #XXX TBD More clenup
+
+#XXX  |[0] Extension |[1] Full Path |[2] File Size |[3] File Info |[4] Year Made XXX
+	return	extens, fi_path, fi_size, fi_info, year_made
 ##>>============-------------------<  End  >------------------==============<<##
 
 def Parse_year ( FileName ) :
@@ -120,29 +124,19 @@ def Parse_year ( FileName ) :
 				za = 1954
 			if DeBug : print ( FileName, yr, len(yr), va, za )
 		else :
-			za = 1890
+			za = 1234
 	except :
 		za = 1
+
 	return za
 ##>>============-------------------<  End  >------------------==============<<##
 
-def Sanitize_file ( root, one_file, extens ) :
-	message    = sys._getframe().f_code.co_name + '-:'
-
-	fi_path     = os.path.normpath( os.path.join( root, one_file ) )
-	fi_size     = os.path.getsize( fi_path )
-	fi_info     = os.stat( fi_path )
-	year_made	= Parse_year( fi_path )
-#XXX  |[0] Extension |[1] Full Path |[2] File Size |[3] File Info |[4] Year Made XXX
-	return	extens, fi_path, fi_size, fi_info, year_made
-##>>============-------------------<  End  >------------------==============<<##
-
-""" =============== The real McCoy =========== """
-def Build_List ( Top_dir, Ext_types, Sort_loc=2, Sort_ord=True  ) : # XXX: Sort_ord=True (Big First) Sort_loc = 2 => File Size: =4 => year_made
+""" ======================= The real McCoy =================== """
+# XXX: Sort_ord=True (Big First) Sort_loc = 2 => File Size: =4 => year_made
+def Build_List ( Top_dir, Ext_types, Sort_loc=2, Sort_ord=True  ) :
 	'''
 	Create the list of Files to be proccesed
 	'''
-#	DeBug = True
 	message    = sys._getframe().f_code.co_name + '-:'
 
 	cnt 		= 0
@@ -151,8 +145,8 @@ def Build_List ( Top_dir, Ext_types, Sort_loc=2, Sort_ord=True  ) : # XXX: Sort_
 	print("=" * 60)
 	start_time = datetime.datetime.now()
 	value = HuSa (get_tree_size ( Top_dir ) )
-	print ('Dir: {}\tis: {}'.format( Top_dir, value ) )
-	print('Start: {:%H:%M:%S}'.format( start_time ))
+	print (f'Dir: {Top_dir}\tis: {value}' )
+	print (f'Start: {start_time:%H:%M:%S}')
 
 	# a Directory ?
 	if os.path.isdir ( Top_dir ) :
@@ -176,6 +170,7 @@ def Build_List ( Top_dir, Ext_types, Sort_loc=2, Sort_ord=True  ) : # XXX: Sort_
 # XXX: https://wiki.python.org/moin/HowTo/Sorting
 # XXX: Sort based in item [2] = filesize defined by Sort_loc :)
 	queue_list = sorted( queue_list, key=lambda Item: Item[Sort_loc], reverse=Sort_ord ) ## XXX: sort defined by caller
+
 	end_time    = datetime.datetime.now()
 	Tot_time	= end_time - start_time
 	Tot_time 	= Tot_time.total_seconds()
@@ -184,7 +179,6 @@ def Build_List ( Top_dir, Ext_types, Sort_loc=2, Sort_ord=True  ) : # XXX: Sort_
 ##>>============-------------------<  End  >------------------==============<<##
 
 def Skip_Files ( File_dscrp, Min_fsize=10240 ) :
-#	DeBug = True
 	'''
 	Returns True if lock file is NOT
 	'''
@@ -230,9 +224,6 @@ def Skip_Files ( File_dscrp, Min_fsize=10240 ) :
 ##>>============-------------------<  End  >------------------==============<<##
 
 def Do_it ( List_of_files, Excluded ='' ):
-#	global DeBug
-#	DeBug = True
-
 	message = sys._getframe().f_code.co_name +'-:'
 	print("=" * 60)
 	print( message )
@@ -351,9 +342,6 @@ def Do_it ( List_of_files, Excluded ='' ):
 ##>>============-------------------<  End  >------------------==============<<##
 
 def FFProbe_run (File_in, Execute= ffprobe ):
-#	global DeBug
-#	DeBug = True
-
 	start_time	= datetime.datetime.now()
 	message 	= sys._getframe().f_code.co_name + '|:'
 	print(f"  {message}\t\tStart: {start_time:%H:%M:%S}")
@@ -413,8 +401,6 @@ def FFProbe_run (File_in, Execute= ffprobe ):
 def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 	global Vi_Dur	# make it global so we can reuse for fmpeg check ...
 	global Tot_Frms
-#	global DeBug
-#	DeBug = True
 
 	start_time	= datetime.datetime.now()
 	message 	= sys._getframe().f_code.co_name + '/:'
@@ -535,7 +521,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 		Vi_Dur = f'{hours:02d}:{mins:02d}:{secs:02d}'
 		frm_rate = float( Util_str_calc  (_vdata['avg_frame_rate']) )
 		Tot_Frms = round( frm_rate * int (_mtdta['duration']) )
-		message = f"    |< CT >|{Vi_Dur}| {_vdata['width']:^5}x{_vdata['height']:^5} | {Tot_Frms:>6,} Tfrms| {len(Vi_strms)} Vid| {len(Au_strms)} Aud| {len(Su_strms)} Sub |"
+		message = f"    |< CT >|{Vi_Dur}| {_vdata['width']:^4}x{_vdata['height']:^4} |Tfr: {Tot_Frms:>6,}|Vi: {len(Vi_strms)}|Au: {len(Au_strms)}|Su: {len(Su_strms)}|"
 		print (message)
 
 # XXX: Video
@@ -561,8 +547,8 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 			zzz = '0:' + str(_vid['index'])
 			ff_video.extend( [ '-map', zzz ] )
 
-			if   _vid['height'] > 1090 :	# Scale to 1080p
-				ff_video.extend( [ '-vf', 'scale = -1:1080', '-c:v', 'libx265', '-crf', '25', '-preset', 'slow' ] )
+			if   _vid['height'] > 1440 :	# Scale to 1080p
+				ff_video.extend( [ '-vf', 'scale = -1:1440', '-c:v', 'libx265', '-crf', '25', '-preset', 'slow' ] )
 			elif _vid['codec_name'] == 'hevc' :
 				if _vid['bit_rate'] > Max_v_btr :
 					ff_video.extend( [ '-c:v', 'libx265', '-preset', 'slow',   '-b:v', str(Max_v_btr) ])
@@ -574,7 +560,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				elif _vid['height'] > 300 :
 					ff_video.extend( [ '-c:v', 'libx265', '-crf', '27', '-preset', 'medium' ] )
 				else :
-					ff_video.extend( [ '-c:v', 'libx265',                '-preset', 'fast'  ] )
+					ff_video.extend( [ '-c:v', 'libx265',               '-preset', 'fast'  ] )
 			if frm_rate > Max_frm_rt :
 #				ff_video.extend( = [ '-r', '25' ] )
 				message = f"    FYI Could conv Frame rate from {frm_rate} to 25"
@@ -612,7 +598,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				_lng['language'] = 'wtf'
 			else:
 				Parse_from_to ( _aud['tags'], _lng )
-			message = f"    |<A:{_aud['index']:2}>| {_aud['codec_name']:^6} |Br: {HuSa(_aud['bit_rate']):>9}|Fq: {HuSa(_aud['sample_rate']):>5}|Ch: {_aud['channels']}|{_lng['language']}|{_disp['default']}| {extra}"
+			message = f"    |<A:{_aud['index']:2}>| {_aud['codec_name']:^6} |Br: {HuSa(_aud['bit_rate']):>9}|Fq:  {HuSa(_aud['sample_rate']):>6}|Ch: {_aud['channels']}|{_lng['language']}|{_disp['default']}| {extra}"
 
 			zzz = '0:'+ str( _aud['index'] )
 			if NB_Astr == 0 :
@@ -685,10 +671,10 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 	else :
 		FFM_cmnd = ff_video + ff_audio + ff_subtl
 
-		if  _vid['codec_name'] == 'hevc' and ( 'aac' or 'opus' or 'vorbis' in aud['codec_name'] ) :
-			if _vid['bit_rate'] <= Max_v_btr and _vid['height'] <= 1090 and _aud['bit_rate'] <= Max_a_btr :
-				message = f"   <|V= {_vid['codec_name']} |A= {_aud['codec_name']}| _Skip_it : Nothing to Do { os.path.basename(Ini_file)}\n"
-				print( message )
+#		if  _vid['codec_name'] == 'hevc' and ( 'aac' or 'opus' or 'vorbis' in aud['codec_name'] ) :
+#			if _vid['bit_rate'] <= Max_v_btr and _vid['height'] <= 1090 and _aud['bit_rate'] <= Max_a_btr :
+#				message = f"   <|V= {_vid['codec_name']} |A= {_aud['codec_name']}| _Skip_it : Nothing to Do { os.path.basename(Ini_file)}\n"
+#				print( message )
 ## XXX: Not the case				raise ValueError( message )
 
 		for pu in Prst_all :
@@ -700,7 +686,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				message = f"   <| Vid= {_vid['codec_name']} |Aud= {_aud['codec_name']}| Should Be Converted {Ini_file}\n"
 				print( message )
 				time.sleep(1)
-				raise ValueError( message )
+#				raise ValueError( message )
 
 		end_time    = datetime.datetime.now()
 		Tot_time	= end_time - start_time
@@ -710,10 +696,6 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 ##===============================   End   ====================================##
 
 def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
-#	global DeBug
-#	DeBug = True
-	global Tot_Frms
-
 	start_time	= datetime.datetime.now()
 	message 	= sys._getframe().f_code.co_name + '-:'
 	print(f"  {message}\t\tStart: {start_time:%H:%M:%S}" )
@@ -831,8 +813,6 @@ Display 5 pictures in an area of 3x2 frames, with 7 pixels between them, and 2 p
 ##===============================   End   ====================================##
 
 def Prog_cal ( line_to, sy=False ) :
-#	global DeBug
-#	DeBug = True
 	global Vi_Dur
 	message  = sys._getframe().f_code.co_name + '-:'
 
@@ -854,11 +834,11 @@ def Prog_cal ( line_to, sy=False ) :
 				a_sec = sum( int(x)*60**i for i, x in enumerate( reversed( tm.split(":"))) )
 				b_sec = sum( int(x)*60**i for i, x in enumerate( reversed( Vi_Dur.split(":"))) )
 				dif   = abs( b_sec - a_sec )
-				eta  = round( dif / (float(sp) ))
+				eta   = round( dif / (float(sp) ))
 				mins, secs  = divmod(int(eta), 60)
 				hours, mins = divmod( mins, 60)
-				_Dur = f'{hours:02d}:{mins:02d}:{secs:02d}'
-				_P   = f'\r    | {sy} |Frame: {fr}|Fps: {fp}|Siz: {sz}|BitRate : {br}|Speed: {sp}|Time Left: {_Dur}| '
+				_eta = f'{hours:02d}:{mins:02d}:{secs:02d}'
+				_P   = f'\r    | {sy} |Frames: {int(fr):6,}|Size: {HuSa(sz)}|Fps: {fp}|Speed: {sp}|BitRate : {HuSa(br)}|ETA: {_eta}|   '
 
 		except Exception as e:
 			print (line_to)
@@ -875,9 +855,6 @@ def Prog_cal ( line_to, sy=False ) :
 ##>>============-------------------<  End  >------------------==============<<##
 
 if __name__=='__main__':
-#	global DeBug
-#	DeBug = False
-
 	cgitb.enable(format='text')
 
 	message = __file__ +'-:'
@@ -895,7 +872,7 @@ if __name__=='__main__':
 		exit()
 
 #XXX  |[0] Extension |[1] Full Path |[2] File Size |[3] File Info |[4] Year Made Sort = True => Largest First XXX
-	Qlist_of_Files  = Build_List( Folder, VIDEO_EXTENSIONS, Sort_loc=2, Sort_ord=False  )
+	Qlist_of_Files  = Build_List( Folder, Vdo_ext, Sort_loc=2, Sort_ord=False  )
 	if DeBug > 2 :  print (Qlist_of_Files), input ("Next :")
 
 	QExeption_ = Do_it( Qlist_of_Files )

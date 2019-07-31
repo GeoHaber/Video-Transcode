@@ -22,8 +22,7 @@ DeBug		= False
 
 Vi_Dur		= '30:00'
 
-Out_F_typ	= '.mkv'
-Tmp_F_Ext	= '_XY_' + Out_F_typ
+Tmp_F_Ext	= '.mkv'
 
 Excepto	= 'C:\\Users\\Geo\\Desktop\\Except'
 
@@ -37,9 +36,6 @@ ffprobe		= os.path.join( ffmpeg_bin, ffprobe_exe )
 ##>>============-------------------<  End  >------------------==============<<##
 
 def FFProbe_run (File_in, Execute= ffprobe ):
-#	global DeBug
-#	DeBug = True
-
 	start_time	= datetime.datetime.now()
 	message 	= sys._getframe().f_code.co_name + '|:'
 	print(f"  {message}\t\tStart: {start_time:%H:%M:%S}")
@@ -97,9 +93,6 @@ def FFProbe_run (File_in, Execute= ffprobe ):
 ##===============================   End   ====================================##
 
 def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
-#	global DeBug
-#	DeBug = True
-
 	start_time	= datetime.datetime.now()
 	message 	= sys._getframe().f_code.co_name + '-:'
 	print(f"  {message}\t\tStart: {start_time:%H:%M:%S}" )
@@ -107,7 +100,7 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 #XXX FileName for the Title ...
 	Sh_fil_name    = os.path.basename( Fmpg_in_file ).title()
 	Sh_fil_name,xt = os.path.splitext( Sh_fil_name )
-	Sh_fil_name   += Out_F_typ
+	Sh_fil_name   += Tmp_F_Ext
 
 	Fmpg_ou_file  = '_'+ Random_String( 15 ) + Tmp_F_Ext
 
@@ -178,9 +171,6 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 	return Fmpg_ou_file
 ##>>============-------------------<  End  >------------------==============<<##
 def FFClean_up ( Inp_file, Out_file ):
-#	global DeBug
-#	DeBug = True
-
 	start_time	= datetime.datetime.now()
 	message 	= sys._getframe().f_code.co_name + '\\:'
 	print("  {}\t\tStart: {:%H:%M:%S}".format( message, start_time ) )
@@ -234,9 +224,9 @@ def FFClean_up ( Inp_file, Out_file ):
 		else :
 			print (message, " Big BuBu ", To_delete, Inp_file )
 			return False
-## XXX: Extract ext remouve and change to Out_F_typ for ImpFile
+## XXX: Extract ext remouve and change to Tmp_F_Ext for ImpFile
 		f_name, xt 	 = os.path.splitext (Inp_file)
-		New_out_File = New_File_Name (Inp_file, Out_F_typ, xt)
+		New_out_File = New_File_Name (Inp_file, Tmp_F_Ext, xt)
 		if DeBug :
 			print ("Creating" , New_out_File)
 			input ("Shall we?")
@@ -280,8 +270,6 @@ def FFClean_up ( Inp_file, Out_file ):
 ##===============================   End   ====================================##
 
 def Prog_cal ( line_to, sy=False ) :
-#	global DeBug
-#	DeBug = True
 	global Vi_Dur
 	message  = sys._getframe().f_code.co_name + '-:'
 
@@ -306,8 +294,8 @@ def Prog_cal ( line_to, sy=False ) :
 				eta   = round( dif / (float(sp) ))
 				mins, secs  = divmod(int(eta), 60)
 				hours, mins = divmod( mins, 60)
-				_Dur = f'{hours:02d}:{mins:02d}:{secs:02d}'
-				_P   = f'\r    | {sy} |Frame: {fr}|Fps: {fp}|Siz: {sz}|BitRate : {br}|Speed: {sp}|Time Left: {_Dur}| '
+				_eta = f'{hours:02d}:{mins:02d}:{secs:02d}'
+				_P   = f'\r    | {sy} |Frames: {int(fr):6,}|Size: {HuSa(sz)}|Fps: {fp}|Speed: {sp}|BitRate : {HuSa(br)}|ETA: {_eta}|   '
 
 		except Exception as e:
 			print (line_to)
