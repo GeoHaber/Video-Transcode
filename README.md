@@ -17,4 +17,5 @@ While there are unprocessed files do :
 
   6) Cleanup
 
- Report results
+  7) Report results
+  
