@@ -45,7 +45,7 @@ else :
 	Excepto		= cfg['Path']['Excepto']
 	Folder		= cfg['Path']['Folder']
 
-#Folder		= 'C:\\Users\\Geo\\Desktop\\Except'
+Folder		= 'E:\\Media\\TV'
 
 
 ##>>============-------------------<  End  >------------------==============<<##
@@ -320,7 +320,8 @@ def Do_it ( List_of_files, Excluded ='' ):
 				Exeptions_File.flush()
 				Succesful_File.flush()
 				sys.stdout.flush()
-				input ("## Bad Error :")
+				time.sleep(3)
+#				input ("## Bad Error :")
 			else:
 				pass
 			Exeptions_File.flush()
@@ -838,7 +839,7 @@ def Prog_cal ( line_to, sy=False ) :
 				mins, secs  = divmod(int(eta), 60)
 				hours, mins = divmod( mins, 60)
 				_eta = f'{hours:02d}:{mins:02d}:{secs:02d}'
-				_P   = f'\r    | {sy} |Frames: {int(fr):6,}|Size: {HuSa(sz)}|Fps: {fp}|Speed: {sp}|BitRate : {HuSa(br)}|ETA: {_eta}|   '
+				_P   = f'\r    | {sy} |Size: {HuSa(sz):7}|Frames: {int(fr):6,}|Fps: {fp}|BitRate: {HuSa(br)}|Speed: {sp}|ETA: {_eta}|   '
 
 		except Exception as e:
 			print (line_to)

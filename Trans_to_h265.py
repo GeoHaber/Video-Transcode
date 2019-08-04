@@ -375,7 +375,6 @@ def Do_it ( List_of_files, Excluded ='' ):
 		print('='*20)
 	return queue_list
 ##>>============-------------------<  End  >------------------==============<<##
-##===============================   End   ====================================##
 
 def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 	global Vi_Dur	# make it global so we can reuse for fmpeg check ...
@@ -496,10 +495,10 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 # XXX: Let's print
 		mins,  secs = divmod(int(_mtdta['duration']), 60)
 		hours, mins = divmod(mins, 60)
-		Vi_Dur = f'{hours:02d}:{mins:02d}:{secs:02d}'
+		Vi_Dur   = f'{hours:02d}h {mins:02d}m' # {secs:02d}'
 		frm_rate = float( Util_str_calc  (_vdata['avg_frame_rate']) )
 		Tot_Frms = round( frm_rate * int (_mtdta['duration']) )
-		message = f"    |< CT >|{Vi_Dur}| {_vdata['width']:^4}x{_vdata['height']:^4} |Tfr: {Tot_Frms:>6,}|Vi: {len(Vi_strms)}|Au: {len(Au_strms)}|Su: {len(Su_strms)}|"
+		message = f"    |< CT >|{Vi_Dur}| {_vdata['width']:^4}x{_vdata['height']:^4} |Tfr: {HuSa(Tot_Frms):6}|Vid: {len(Vi_strms)}|Aud: {len(Au_strms)}|Sub: {len(Su_strms)}|"
 		print (message)
 
 # XXX: Video
@@ -519,7 +518,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				else:
 					print ( json.dumps( _vid, indent=2, sort_keys=True ) )
 					input("Pu_la is here")
-			message = f"    |<V:{_vid['index']:2}>| {_vid['codec_name']:^6} |Br: {HuSa(_vid['bit_rate']):>9}|Fps: {frm_rate:>6}| {extra}"
+			message = f"    |<V:{_vid['index']:2}>| {_vid['codec_name']:^5} |Br: {HuSa(_vid['bit_rate']):>7}|Fps: {frm_rate:>5}| {extra}"
 			print (message)
 
 			zzz = '0:' + str(_vid['index'])
@@ -529,8 +528,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				ff_video.extend( [ '-vf', 'scale = -1:1440', '-c:v', 'libx265', '-crf', '25', '-preset', 'slow' ] )
 			elif _vid['codec_name'] == 'hevc' :
 				if _vid['bit_rate'] > Max_v_btr :
-#					ff_video.extend( [ '-c:v', 'libx265', '-preset', 'slow',   '-b:v', str(Max_v_btr) ])
-					ff_video.extend( [ '-c:v', 'libx265', '-crf', '24', '-preset', 'slow' ] )
+					ff_video.extend( [ '-c:v', 'libx265', '-crf', '25', '-preset', 'slow' ] )
 				else:
 					ff_video.extend( [ '-c:v', 'copy'])
 			else :
@@ -577,7 +575,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				_lng['language'] = 'wtf'
 			else:
 				Parse_from_to ( _aud['tags'], _lng )
-			message = f"    |<A:{_aud['index']:2}>| {_aud['codec_name']:^6} |Br: {HuSa(_aud['bit_rate']):>9}|Fq:  {HuSa(_aud['sample_rate']):>6}|Ch: {_aud['channels']}|{_lng['language']}|{_disp['default']}| {extra}"
+			message = f"    |<A:{_aud['index']:2}>| {_aud['codec_name']:^5} |Br: {HuSa(_aud['bit_rate']):>7}|Fq:  {HuSa(_aud['sample_rate']):>6}|Ch: {_aud['channels']}|{_lng['language']}|{_disp['default']}| {extra}"
 
 			zzz = '0:'+ str( _aud['index'] )
 			if NB_Astr == 0 :
@@ -642,14 +640,18 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 						if DeBug : input ('Next Sub ?')
 				NB_Sstr += 1
 	except Exception as e:
-		message += f"FFZa_Brain: Exception => {e}\n"
+		message = f"FFZa_Brain: Exception => {e}\n"
 #		message += f":O: Meta_dta:\n{json.dumps( Meta_dta, indent=2 )}\n{_mtdta }"
-		print( f"Stack:\n{traceback.print_stack( limit=5 )}\n" )
-		if DeBug : print( message ), input ('Next')
+		print( message )
+		time.sleep(1)
+		input(e)
 		raise  Exception( message )
 	else :
 		FFM_cmnd = ff_video + ff_audio + ff_subtl
 
+		for pu in Prst_all :
+			if 'Pu_la' in pu.values() :
+				print ( f'   O| Had some Pu_la_la ¯\_(ツ)_/¯\n{pu}' )
 		'''
 		if  _vid['codec_name'] == 'hevc' and ( 'aac' or 'opus' or 'vorbis' in aud['codec_name'] ) :
 			if _vid['bit_rate'] <= Max_v_btr and _vid['height'] <= 1090 and _aud['bit_rate'] <= Max_a_btr :
@@ -657,13 +659,9 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				print( message )
 				raise ValueError( message )
 
-		for pu in Prst_all :
-			if 'Pu_la' in pu.values() :
-				print ('   <|Had some Pu_la ¯\_(ツ)_/¯')
-				break
 
 		if _vid['codec_name'] != 'hevc'  :
-				message = f"   <| Vid= {_vid['codec_name']} |Aud= {_aud['codec_name']}| Should Be Converted {Ini_file}\n"
+				message = f"   <| Vid= {_vid['codec_name']} |Aud= {_aud['codec_name']} | Should Convert {Ini_file}\n"
 				print( message )
 #				time.sleep(1)
 #				raise ValueError( message )
@@ -674,7 +672,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 		Tot_time 	= Tot_time.total_seconds()
 		print(f'   End  : {end_time:%H:%M:%S}\tTotal: {Tot_time}' )
 		return FFM_cmnd
-##===============================   End   ====================================##
+##>>============-------------------<  End  >------------------==============<<##
 
 
 if __name__=='__main__':

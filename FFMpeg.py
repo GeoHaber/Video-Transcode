@@ -92,7 +92,6 @@ def FFProbe_run (File_in, Execute= ffprobe ):
 		print(f'   End  : {end_time:%H:%M:%S}\tTotal: {Tot_time}' )
 		return jlist
 ##>>============-------------------<  End  >------------------==============<<##
-##===============================   End   ====================================##
 
 def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 	start_time	= datetime.datetime.now()
@@ -172,6 +171,7 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 	print ( message )
 	return Fmpg_ou_file
 ##>>============-------------------<  End  >------------------==============<<##
+
 def FFClean_up ( Inp_file, Out_file ):
 	start_time	= datetime.datetime.now()
 	message 	= sys._getframe().f_code.co_name + '\\:'
@@ -269,7 +269,7 @@ def FFClean_up ( Inp_file, Out_file ):
 		print('   End  : {:%H:%M:%S}\tTotal: {}'.format( end_time, Tot_time ) )
 
 		return (1 + abs ( Ini_file_size - Out_file_size ) )
-##===============================   End   ====================================##
+##>>============-------------------<  End  >------------------==============<<##
 
 def Prog_cal ( line_to, sy=False ) :
 	global Vi_Dur
@@ -322,3 +322,4 @@ if __name__=='__main__':
 	print("{}\t\tStart: {:%H:%M:%S}".format( message, start_time ) )
 	print ("{}".format ('='*60))
 #	cgitb.enable(format='text')
+##>>============-------------------<  End  >------------------==============<<##
