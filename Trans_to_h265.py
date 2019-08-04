@@ -17,6 +17,7 @@ import datetime
 import traceback
 import subprocess
 from	My_Utils import *
+from    FFMpeg  import *
 
 DeBug		= False
 
@@ -31,22 +32,25 @@ try:
 	stream = open("config.yml", 'r')
 	cfg = yaml.safe_load(stream)
 except yaml.YAMLError as exc:
-	print(exc)
+	input( exc )
 else :
-	path		= cfg['Path']['fmpg_bin']
-	ffmpeg	= os.path.join( path, "ffmpeg.exe"  )
-	ffprobe	= os.path.join( path, "ffprobe.exe" )
+	try :
+		path		= cfg['Path']['fmpg_bin']
+		ffmpeg	= os.path.join( path, "ffmpeg.exe"  )
+		ffprobe	= os.path.join( path, "ffprobe.exe" )
 
-	Vdo_ext 	= cfg['Ext']
-	Max_v_btr	= cfg['Path']['Max_v_btr']
-	Max_a_btr	= cfg['Path']['Max_a_btr']
-	Max_frm_rt	= cfg['Path']['Max_frm_rt']
-	Tmp_F_Ext	= cfg['Path']['Tmp_F_Ext']
-	Excepto		= cfg['Path']['Excepto']
-	Folder		= cfg['Path']['Folder']
+		Vdo_ext 	= cfg['Ext']
+		Max_v_btr	= cfg['Path']['Max_v_btr']
+		Max_a_btr	= cfg['Path']['Max_a_btr']
+		Max_frm_rt	= cfg['Path']['Max_frm_rt']
+#		Tmp_F_Ext	= cfg['Path']['Tmp_F_Ext']
+		Excepto		= cfg['Path']['Excepto']
+		Folder		= cfg['Path']['Folder']
+	except Exception as exc:
+		input( exc )
 
-Folder		= 'C:\\Users\\Geo\\Desktop\\Except'
-
+Folder		= 'C:\\Users\\Geo\\Desktop\\downloads'
+Folder		= 'E:\\Media\\TV'
 
 ##>>============-------------------<  End  >------------------==============<<##
 def Move_Del_File (src, dst, DeBug=False ):
@@ -137,6 +141,7 @@ def Build_List ( Top_dir, Ext_types, Sort_loc=2, Sort_ord=True  ) :
 	'''
 	Create the list of Files to be proccesed
 	'''
+#	DeBug = True
 	message    = sys._getframe().f_code.co_name + '-:'
 
 	cnt 		= 0
@@ -167,9 +172,9 @@ def Build_List ( Top_dir, Ext_types, Sort_loc=2, Sort_ord=True  ) :
 			Save_items	= Sanitize_file( root, one_file, extens )
 			queue_list += [ Save_items ]
 
-# XXX: https://wiki.python.org/moin/HowTo/Sorting
 # XXX: Sort based in item [2] = filesize defined by Sort_loc :)
 	queue_list = sorted( queue_list, key=lambda Item: Item[Sort_loc], reverse=Sort_ord ) ## XXX: sort defined by caller
+# XXX: https://wiki.python.org/moin/HowTo/Sorting
 
 	end_time    = datetime.datetime.now()
 	Tot_time	= end_time - start_time
@@ -179,6 +184,7 @@ def Build_List ( Top_dir, Ext_types, Sort_loc=2, Sort_ord=True  ) :
 ##>>============-------------------<  End  >------------------==============<<##
 
 def Skip_Files ( File_dscrp, Min_fsize=10240 ) :
+#	DeBug = True
 	'''
 	Returns True if lock file is NOT
 	'''
@@ -223,6 +229,7 @@ def Skip_Files ( File_dscrp, Min_fsize=10240 ) :
 ##>>============-------------------<  End  >------------------==============<<##
 
 def Do_it ( List_of_files, Excluded ='' ):
+#	DeBug = True
 	message = sys._getframe().f_code.co_name +'-:'
 	print("=" * 60)
 	print( message )
@@ -347,7 +354,8 @@ def Do_it ( List_of_files, Excluded ='' ):
 				Exeptions_File.flush()
 				Succesful_File.flush()
 				sys.stdout.flush()
-				input ("## Bad Error :")
+				time.sleep(3)
+#				input ("## Bad Error :")
 			else:
 				pass
 			Exeptions_File.flush()
@@ -521,7 +529,8 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				ff_video.extend( [ '-vf', 'scale = -1:1440', '-c:v', 'libx265', '-crf', '25', '-preset', 'slow' ] )
 			elif _vid['codec_name'] == 'hevc' :
 				if _vid['bit_rate'] > Max_v_btr :
-					ff_video.extend( [ '-c:v', 'libx265', '-preset', 'slow',   '-b:v', str(Max_v_btr) ])
+#					ff_video.extend( [ '-c:v', 'libx265', '-preset', 'slow',   '-b:v', str(Max_v_btr) ])
+					ff_video.extend( [ '-c:v', 'libx265', '-crf', '24', '-preset', 'slow' ] )
 				else:
 					ff_video.extend( [ '-c:v', 'copy'])
 			else :
@@ -641,6 +650,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 	else :
 		FFM_cmnd = ff_video + ff_audio + ff_subtl
 
+		'''
 		if  _vid['codec_name'] == 'hevc' and ( 'aac' or 'opus' or 'vorbis' in aud['codec_name'] ) :
 			if _vid['bit_rate'] <= Max_v_btr and _vid['height'] <= 1090 and _aud['bit_rate'] <= Max_a_btr :
 				message = f"   <|V= {_vid['codec_name']} |A= {_aud['codec_name']}| _Skip_it : Nothing to Do { os.path.basename(Ini_file)}\n"
@@ -657,6 +667,7 @@ def FFZa_Brain ( Ini_file, Meta_dta, verbose=False ) :
 				print( message )
 #				time.sleep(1)
 #				raise ValueError( message )
+		'''
 
 		end_time    = datetime.datetime.now()
 		Tot_time	= end_time - start_time

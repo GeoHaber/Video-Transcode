@@ -22,7 +22,7 @@ DeBug		= False
 
 Vi_Dur		= '30:00'
 
-Tmp_F_Ext	= '.mkv'
+Tmp_F_Ext	= '.mp4'
 
 Excepto	= 'C:\\Users\\Geo\\Desktop\\Except'
 
@@ -36,6 +36,7 @@ ffprobe		= os.path.join( ffmpeg_bin, ffprobe_exe )
 ##>>============-------------------<  End  >------------------==============<<##
 
 def FFProbe_run (File_in, Execute= ffprobe ):
+#	DeBug = True
 	start_time	= datetime.datetime.now()
 	message 	= sys._getframe().f_code.co_name + '|:'
 	print(f"  {message}\t\tStart: {start_time:%H:%M:%S}")
@@ -90,6 +91,7 @@ def FFProbe_run (File_in, Execute= ffprobe ):
 		Tot_time 	= Tot_time.total_seconds()
 		print(f'   End  : {end_time:%H:%M:%S}\tTotal: {Tot_time}' )
 		return jlist
+##>>============-------------------<  End  >------------------==============<<##
 ##===============================   End   ====================================##
 
 def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
@@ -102,7 +104,7 @@ def FFMpeg_run ( Fmpg_in_file, Za_br_com, Execute= ffmpeg ) :
 	Sh_fil_name,xt = os.path.splitext( Sh_fil_name )
 	Sh_fil_name   += Tmp_F_Ext
 
-	Fmpg_ou_file  = '_'+ Random_String( 15 ) + Tmp_F_Ext
+	Fmpg_ou_file  = '_'+ Random_String( 11 ) + Tmp_F_Ext
 
 	Title         = 'title=\" ' +Sh_fil_name + " (x265-aac) Encoded By: " + __author__ + " Master "
 
@@ -295,7 +297,7 @@ def Prog_cal ( line_to, sy=False ) :
 				mins, secs  = divmod(int(eta), 60)
 				hours, mins = divmod( mins, 60)
 				_eta = f'{hours:02d}:{mins:02d}:{secs:02d}'
-				_P   = f'\r    | {sy} |Frames: {int(fr):6,}|Size: {HuSa(sz)}|Fps: {fp}|Speed: {sp}|BitRate : {HuSa(br)}|ETA: {_eta}|   '
+				_P   = f'\r    | {sy} |Size: {HuSa(sz):7}|Frames: {int(fr):6,}|Fps: {fp}|BitRate: {HuSa(br)}|Speed: {sp}|ETA: {_eta}|   '
 
 		except Exception as e:
 			print (line_to)
