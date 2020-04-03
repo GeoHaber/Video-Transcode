@@ -1,0 +1,9 @@
+Skip_Files-:
+ To Small:| 0.0 B     | E:\Media\TV\The Boondocks (2005) [Animation + Comedy 8.7 TV-MA ]\S03\The Boondocks (2005) - 3x08 [ Sung Hoon Kim & Regina King + John Witherspoon + Jill Talley] 25 min.mp4
+: 132'nd of 3868, 29.5 M, .mp4, Year 2003
+: E:\Media\TV\Penn & Teller Bullshit! (2003) [Comedy + Reality 8.6 TV-MA ]\S02\Penn & Teller Bullshit! (2003) - 2x05 [ Star Price & Penn Jillette + Teller] 30 min.mp4
+
+ ValueError Exception ('\nE:\\Media\\TV\\Penn & Teller Bullshit! (2003) [Comedy + Reality 8.6 TV-MA ]\\S02\\Penn & Teller Bullshit! (2003) - 2x05 [ Star Price & Penn Jillette + Teller] 30 min.mp4\t29.5 M\nOy vey 1\nIst mir [mov,mp4,m4a,3gp,3g2,mj2 @ 000001fc9192d940] moov atom not found\n[AVIOContext @ 000001fc91936d80] Statistics: 65536 bytes read, 3 seeks\nE:\\Media\\TV\\Penn & Teller Bullshit! (2003) [Comedy + Reality 8.6 TV-MA ]\\S02\\Penn & Teller Bullshit! (2003) - 2x05 [ Star Price & Penn Jillette + Teller] 30 min.mp4: Invalid data found when processing input\n\n',): 133'rd of 3867, 29.5 M, .mp4, Year 2003
+: E:\Media\TV\Penn & Teller Bullshit! (2003) [Comedy + Reality 8.6 TV-MA ]\S02\Penn & Teller Bullshit! (2003) - 2x05 [360p Star Price & Penn Jillette + Teller] 30 min_avi.mp4
+
+ ValueError Exception ('\nE:\\Media\\TV\\Penn & Teller Bullshit! (2003) [Comedy + Reality 8.6 TV-MA ]\\S02\\Penn & Teller Bullshit! (2003) - 2x05 [360p Star Price & Penn Jillette + Teller] 30 min_avi.mp4\t29.5 M\nOy vey 1\nIst mir [mov,mp4,m4a,3gp,3g2,mj2 @ 0000026a5752d940] moov atom not found\n[AVIOContext @ 0000026a57536dc0] Statistics: 65536 bytes read, 3 seeks\nE:\\Media\\TV\\Penn & Teller Bullshit! (2003) [Comedy + Reality 8.6 TV-MA ]\\S02\\Penn & Teller Bullshit! (2003) - 2x05 [360p Star Price & Penn Jillette + Teller] 30 min_avi.mp4: Invalid data found when processing input\n\n',)

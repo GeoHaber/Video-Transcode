@@ -1,0 +1,40 @@
+Path:
+  host:       localhost
+  user:       root
+  passwd:     my secret password
+  fmpg_bin:   C:\\Program Files\\ffmpeg\\bin
+  Max_v_btr:  2300000
+  Max_a_btr:  380000
+  Max_frm_rt: 35
+  Tmp_F_Ext:  '.mkv'
+  Min_fsize:  200000
+# Folder:     C:\\Users\\Geo\\Videos
+  Folder:     C:\\Users\\Geo\\Desktop\\downloads
+  Excepto:    C:\\Users\\Geo\\Desktop\\Except
+Audio:
+    crf-25:
+      use_anonymous: yes
+Video:
+  crf-25:
+        - preprocessing.scale_and_center
+        - preprocessing.dot_reduction
+        - preprocessing.connect_lines
+Subtitle:
+    crf-25:
+      use_anonymous: yes
+
+UserData:
+    crf-25:
+      use_anonymous: yes
+
+# The file extensions to procces
+Ext:  { '.avchd', '.avi', '.dat', '.divx', '.dv', '.flic', '.flv', '.flx',
+    '.h264', '.m4v', '.mkv','.moov', '.mov', '.movhd', '.movie', '.movx',
+    '.mp4', '.mpe', '.mpeg', '.mpg', '.mpv', '.mpv2', '.ram', '.rm', '.rmvb',
+    '.swf', '.ts', '.vfw', '.vid', '.video', '.viv', '.vivo', '.vro', '.wm',
+    '.wmv', '.wmx', '.wrap', '.wvx', '.webm', '.x264', '.xvid' }
+
+GitHub:
+  url: www.github.com\\dvdzen
+  passwd: xxxxxxxx
+  user_name: wtf is this name for?
