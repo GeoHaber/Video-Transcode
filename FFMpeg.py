@@ -17,7 +17,6 @@ import traceback
 import subprocess
 
 from My_Utils import *
-
 from Yaml import *
 
 ffmpg_bin = 'C:\\Program Files\\ffmpeg\\bin'
@@ -27,11 +26,10 @@ ffprob = os.path.join(ffmpg_bin, "ffprobe.exe")
 if os.path.exists(ffmpeg) and os.path.exists(ffprob):
 	pass
 else:
-	print(message, " ffMpeg Path Does not Exist:")
-	input("exit")
+	message += f"{ffmpeg} Path Does not Exist:"
+	input(message)
 	raise OSError
 ##==============-------------------   End   -------------------==============##
-
 
 def Run_ff(args, **kwargs):
 #	DeBug = True

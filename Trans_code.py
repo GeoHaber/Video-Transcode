@@ -29,7 +29,11 @@ from Yaml import *
 #WFolder = '.'
 WFolder = r"C:\Users\Geo\Desktop\downloads"
 WFolder = r"C:\Users\Geo\Desktop\TestIng\_aDulT"
-
+WFolder = r"E:\Media\TV"
+#WFolder = r"E:\Media\Movie"
+WFolder = r"E:\_Adlt"
+#WFolder = r"C:\"
+#WFolder = r"C:\Users\Geo\Videos"
 
 # https://docs.python.org/3.2/library/time.html
 _time = datetime.datetime.now()
