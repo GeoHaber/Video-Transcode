@@ -156,7 +156,7 @@ def Run_FFMpego(Fmpg_in_file, Za_br_com, Execute=ffmpeg):
 			raise Exception('$hit ', message)
 		else:
 			end_t = datetime.datetime.now()
-			message = f"   -FFMpeg Done !!:  -End  : {end_t:%H:%M:%S}\tTotal: {(end_t-str_t).total_seconds()}"
+			message = f"  -FFMpeg Done !!:  -End  : {end_t:%H:%M:%S}\tTotal: {(end_t-str_t).total_seconds()}"
 			print(message)
 			return Fmpg_ou_file
 	else:
@@ -169,14 +169,13 @@ def Run_FFMpego(Fmpg_in_file, Za_br_com, Execute=ffmpeg):
 def Make_Matrix( Fmpg_in_file, Execute=ffmpeg, Embed_Subtitle = False, Compare_Files = False ):
 	str_t = datetime.datetime.now()
 	message = sys._getframe().f_code.co_name
-#	print(f"  +{message}=: Start: {str_t:%H:%M:%S}")
+	print(f"  +{message}=: Start: {str_t:%H:%M:%S}")
 
 # XXX Create Matrix Colage:
 	Sh_fil_name, _ = os.path.splitext(Fmpg_in_file)
 	Sh_fil_name += '.png'
 
 	if not os.path.isfile(Sh_fil_name):
-		print(f"  +{message}=: Start: {str_t:%H:%M:%S}")
 		'''
 		To make multiple screenshots and place them into a single image file (creating tiles), you can use FFmpeg's tile video filter, like this:
 		https://ffmpeg.org/ffmpeg-filters.html#Examples-129
@@ -233,7 +232,7 @@ def Make_Matrix( Fmpg_in_file, Execute=ffmpeg, Embed_Subtitle = False, Compare_F
 	else :
 		message = f"    |PNG Exists ¯\_(%)_/¯_Skip"
 		print(message)
-		return 0
+		return False
 
 # XXX:  Enbed Subtitle file
 	if Embed_Subtitle:

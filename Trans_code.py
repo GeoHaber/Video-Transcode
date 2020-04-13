@@ -28,10 +28,6 @@ from Yaml import *
 
 #WFolder = '.'
 WFolder = r"C:\Users\Geo\Desktop\downloads"
-WFolder = r"C:\Users\Geo\Desktop\TestIng\_aDulT"
-WFolder = r"E:\Media\TV"
-#WFolder = r"E:\Media\Movie"
-WFolder = r"E:\_Adlt"
 #WFolder = r"C:\"
 #WFolder = r"C:\Users\Geo\Videos"
 
@@ -184,7 +180,7 @@ def Pars_Clenup(Inp_file, Out_file):
 	f_name, xt = os.path.splitext(Inp_file)
 	New_out_File = New_File_Name(Inp_file, TmpF_Ex, xt)
 
-	Move_or_Copy( Out_file, New_out_File, Dont_del=True)
+	Move_or_Copy( Out_file, New_out_File )
 
 	messa = f"File: {os.path.basename(Inp_file)}\nWas: { HuSa(In_fi_sz)}\tIs: {HuSa(Ou_fi_sz)}\tSaved: {HuSa(In_fi_sz - Ou_fi_sz)} = {Ratio} % \n"
 	if abs( Ratio ) > 90 :
@@ -210,28 +206,13 @@ if __name__ == '__main__':
 	print(messa)
 	time.sleep(1)
 
-	'''
-	scan computer
-	for each Found
-		Sanitize sort prioritiza
-		Extract and Parse info
-		if to convert
-			convert_to_h265
-		if to insert Srt
-			insert
-		if to create PNG
-			create
-		if to compare File
-			Compare
-		Pars_Clenup
-		Log_File
 
 	'''
 	print("-" * 70)
 	if DeBug:
 		print(f'    | ¯\_(%)_/¯ DeBug\n')
 	File_Dict = Build_List(WFolder, File_extn)
-	File_Dict = Sort_Parse(File_Dict, Srt_item=1, Srt_ordr=False)
+	File_Dict = Sort_Parse(File_Dict, Srt_item=1, Srt_ordr=True)
 	cnt = len (File_Dict)
 	Fnum = 0
 	Save = 0
@@ -259,7 +240,7 @@ if __name__ == '__main__':
 			if '| =>  _Skip_it' in messa :
 				print(messa)
 				Success_File.write(f'-: {The_file}\n')
-				sys.stdout.flush()
+				Save    -= Make_Matrix( The_file )
 				pass
 			else:
 				print(messa)
@@ -271,20 +252,19 @@ if __name__ == '__main__':
 		except Exception as err:
 			messa += f'\n Exception {err.args}\nCopy & Delete {The_file}\n'
 			print(messa)
-			Move_or_Copy(The_file, Excepto, Dont_del=True)
+			Move_or_Copy(The_file, Excepto, False)
 			if DeBug :
 #				print(f"Stack:\n{traceback.print_stack( limit=6 )}\n\n")
 				print(f"Exec: \n{traceback.print_exc  ( limit=6 )}\n")
 				print("\n", "=" * 40)
 				input("Press Any Key to Continue")
 			Exeptin_File.write(messa)
-			sys.stdout.flush()
 			continue
 
 		else:
 			Success_File.write(f'-: {The_file}\n')
 			sys.stdout.flush()
-			print (f"  Saved {HuSa(Save)}")
+		print (f"  Saved {HuSa(Save)}")
 #	Do_it(File_Dict)
 
 	Exeptin_File.close()
