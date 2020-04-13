@@ -22,18 +22,14 @@ import datetime
 import traceback
 import subprocess
 
-from FFMpeg_new import Run_FFMpego, Run_FFProbe, FFZa_Braino, Make_Matrix
+from FFMpeg import Run_FFMpego, Run_FFProbe, FFZa_Braino, Make_Matrix
 from My_Utils import *
 from Yaml import *
 
 #WFolder = '.'
 WFolder = r"C:\Users\Geo\Desktop\downloads"
 WFolder = r"C:\Users\Geo\Desktop\TestIng\_aDulT"
-WFolder = r"E:\Media\TV"
-#WFolder = r"E:\Media\Movie"
-#WFolder = r"E:\_Adlt"
-#WFolder = r"C:\"
-#WFolder = r"C:\Users\Geo\Videos"
+
 
 # https://docs.python.org/3.2/library/time.html
 _time = datetime.datetime.now()
@@ -172,7 +168,6 @@ def Pars_Clenup(Inp_file, Out_file):
 	In_fi_sz = os.path.getsize(Inp_file)
 	Ratio = round(100 * ((Ou_fi_sz - In_fi_sz) / In_fi_sz))
 
-# XXX: Keep the old file
 	To_delete = New_File_Name(Inp_file, "_DeletMe.old", TmpF_Ex)
 	shutil.move(Inp_file, To_delete )
 

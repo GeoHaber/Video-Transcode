@@ -1,0 +1,52 @@
+
+Path:
+  host:             localhost
+  user:             root
+  passwd:           my secret password
+  Min_fsize:        120000
+  WFolder:          C:\\Users\\Geo\\Desktop\\downloads
+  Excepto:          C:\\Users\\Geo\\Desktop\\Except
+  Tmp_exte:         '.mp4' #.png or .mp4
+
+Action:
+  Skip_type:        '.lock'  # .png or .lock
+
+Audio:
+  crf-25:
+  Max_a_btr:        480000
+  use_anonymous:    yes
+
+Video:
+  Max_frm_r:        35
+  crf-25:
+  Max_v_btr:        3500000
+  Bl_and_Wh:        No
+
+Subtitle:
+  crf-25:           'handle substract'
+  use_anonymous:    yes
+# File extensions to procces
+Extensi:          { '.avchd', '.avi', '.divx', '.dv', '.flic', '.flv', '.flx',
+      '.h264', '.m4v', '.mkv','.moov', '.mov', '.movhd', '.movie', '.movx', '.mts',
+      '.mp4', '.mpe', '.mpeg', '.mpg', '.mpv', '.mpv2', '.ram', '.rmvb', '.ts',
+      '.vfw', '.vid', '.video', '.viv', '.vivo', '.vro', '.wm', '.wmv', '.wmx',
+      '.wrap', '.wvx', '.webm', '.x264', '.xvid' }
+
+Skip:
+  condition 1:
+  condition 2:
+    condtion 2.1:
+
+UserData:
+  crf-25:
+  use_anonymous:    yes
+
+FfMpegCom:
+  convert_to_h265:  'comend to convert'
+  subtitl_extract:  'flags to extract subs'
+  create_matrix:    'matrix creation flags'
+
+GitHub:
+  url:              www.github.com\\dvdzen
+  passwd:           xxxxxxxx
+  user_name:        wtf is this name for?
