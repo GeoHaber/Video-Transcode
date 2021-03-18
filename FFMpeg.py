@@ -1,349 +1,301 @@
-# -*- coding: utf-8 -*-
-#!/usr/bin/python3
-__author__ = 'GeoHaZen'
-'''
-@author: 	  GeoHaZen
-# XXX KISS
-# XXX:ToDo: multiple languages
-			raise exception to safe specifi files
-			pass comand line and atributes for behaiviour
-'''
+from Yaml import *
+
 import os
 import re
 import sys
 import json
 import datetime
-import traceback
 import subprocess
 
 from My_Utils import *
-from Yaml import *
 
 ffmpg_bin = 'C:\\Program Files\\ffmpeg\\bin'
+
 ffmpeg = os.path.join(ffmpg_bin, "ffmpeg.exe")
 ffprob = os.path.join(ffmpg_bin, "ffprobe.exe")
+ffplay = os.path.join(ffmpg_bin, "ffplay.exe")
 
-if os.path.exists(ffmpeg) and os.path.exists(ffprob):
-	pass
-else:
+if not os.path.exists(ffmpeg) or not os.path.exists(ffprob):
 	message += f"{ffmpeg} Path Does not Exist:"
 	input(message)
 	raise OSError
-##==============-------------------   End   -------------------==============##
 
-def Run_ff(args, **kwargs):
-#	DeBug = True
-	'''
-	Returns True or if compleated
-	'''
-	message = sys._getframe().f_code.co_name + '|:'
-
-	try:
-		if DeBug:
-			print(f'{message} Debug Mode\n{args}\n')
-			time.sleep(5)
-
-			Run = subprocess.Popen(args)
-			out, err = Run.communicate()
-			message += f'\nDone\tO= {out}\tE= {err}'
-			print(message)
-			return True
-		else:
-			loc = 0
-			symbls = '|/-+\\'
-			Run = subprocess.Popen(args, stderr=subprocess.STDOUT,
-								   stdout=subprocess.PIPE,
-								   universal_newlines=True)
-#								   encoding='utf-8')
-			while Run.poll() is None:
-				lineo = Run.stdout.readline()
-				Prog_cal(lineo, symbls[loc])
-				loc += 1
-				if loc == len(symbls):
-					loc = 0
-			return True
-	except Exception as e:
-		Run.kill()
-		message += f"Exception => {e}\n"
-		print(message)
-		return False
-	else:
-		return False
 ##==============-------------------   End   -------------------==============##
 
 
-def Run_FFProbe(File_in, Execute=ffprob):
-	DeBug = True
+def ffprob_run(in_file, execu=ffprob):
 
 	str_t = datetime.datetime.now()
 	message = sys._getframe().f_code.co_name
-	print(f"  +{message}=: Start: {str_t:%H:%M:%S}")
+	print(f"  +{message}=: Start: {str_t:%T}")
 
-	Comand = (Execute,
-			  '-i', File_in,
-			  '-analyzeduration', '200000000000',
-			  '-probesize',       '200000000000',
-			  '-v', 'verbose',		# XXX quiet, panic, fatal, error, warning, info, verbose, debug, trace
-			  '-of', 'json',		# XXX default, csv, xml, flat, ini
-			  '-hide_banner',
-			  '-show_format',
-			  '-show_error',
-			  '-show_streams')
+	ff_args = (execu, '-i', in_file,
+					  '-analyzeduration', '2000000000000',
+					  '-probesize',       '2000000000000',
+					  '-v', 'warning',		# XXX quiet, panic, fatal, error, warning, info, verbose, debug, trace
+					  '-of', 'json',		# XXX default, csv, xml, flat, ini
+					  '-hide_banner',
+					  '-show_format',
+					  '-show_error',
+					  '-show_streams')
 
 	try:
-		Run = subprocess.Popen(Comand, stderr=subprocess.PIPE,
-							   stdout=subprocess.PIPE)
-		out, err = Run.communicate()
-		if Run.poll():
-			message += f'\nError:\nO= {out}\nE= {err}'
-			raise Exception (message)
+		runit = subprocess.Popen( ff_args,	stderr=subprocess.PIPE,
+											stdout=subprocess.PIPE )
+		out, err = runit.communicate()
 
 	except Exception as e:
-		Run.kill()
-#		message += f"\nException => {e.args}\n"
-		print (message)
-		if DeBug :
-			message += f"Json:\n{ json.dumps(json.loads(out), indent=2) }\n"
+		runit.kill()
+		message += f"\nException: {e}\n"
+		raise Exception(message)
+
+	jlist = json.loads(out)
+	if len(jlist) < 2:
+		message += f"F:{in_file} Json Small Error\nE:{err}\nOut:{out}\nJson:{jlist}"
+		print(message)
+		raise Exception(message)
 
 	else:
-		jlist = json.loads(out)
-		if len(jlist) < 2:
-			message += f"Json out to small\n{File_in}\n{jlist}"
-			if DeBug:
-				print(message), input(" Jlist to small ")
-			raise Exception(message)
-		else :
-			end_t = datetime.datetime.now()
-			print(
-				f'  -End  : {end_t:%H:%M:%S}\tTotal: {(end_t-str_t).total_seconds()}')
-			return jlist
+		end_t = datetime.datetime.now()
+		message =f'  -End  : {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),1):,}'
+#		print ( message)
+		return jlist
 
 ##>>============-------------------<  End  >------------------==============<<##
 
 
-def Run_FFMpego(Fmpg_in_file, Za_br_com, Execute=ffmpeg):
-	##	DeBug = True
-	global Tot_Frms
-	global Vid_With
-
+def ffmpeg_run(input_file, ff_com, execu=ffmpeg):
 	str_t = datetime.datetime.now()
 	message = sys._getframe().f_code.co_name
-	print(f"  +{message}=: Start: {str_t:%H:%M:%S}")
+	print(f"  +{message}=: Start: {str_t:%T}")
 
-	Fmpg_ou_file = '_' + Random_String(11) + TmpF_Ex
+	out_file = '_0-' + random_string(7) + TmpF_Ex
 
-	Sh_fil_name = os.path.basename(Fmpg_in_file).title()
-	Sh_fil_name, _ = os.path.splitext(Sh_fil_name)
-# TODO: Sanitize / parse name
+	file_name, _ = os.path.splitext( os.path.basename(input_file) )
 
-# XXX Convert to HEVC FileName for the Title ...
-	# TODO: If .mp4 exists skip
+	ff_head = [execu, '-i', input_file, '-hide_banner']
 
-	ff_head = [Execute, '-i', Fmpg_in_file, '-hide_banner']
+	banner = 'title= ' + file_name + ' x256 '
 
-	ff_tail = ['-dn', '-movflags', '+faststart', '-fflags',
-			   'genpts', '-flags', 'global_header', '-y', Fmpg_ou_file]
+	ff_tail = ['-dn', '-metadata', banner, '-movflags', '+faststart','-fflags',
+				'+genpts', '-y', out_file]
 
-	Cmd = ff_head + Za_br_com + ff_tail
-
-	if DeBug :
-		print("    |>-:", Cmd )  # XXX:  Skip First 4 and Last 6
-
-	if Run_ff(Cmd):
-		if not os.path.exists(Fmpg_ou_file):
-			message += f'\n No Outpu Error'
+	todo = ff_head + ff_com + ff_tail
+# XXX:
+	if run_ffm(todo):
+		if not os.path.exists(out_file) or os.path.getsize(out_file) < 1000 :
+			message += f'\n No Output Error\nExecute in Debug Mode'
 			print(message)
+			run_ffm(todo, message)
+			input('message')
 			raise Exception('$hit ', message)
 		else:
 			end_t = datetime.datetime.now()
-			message = f"  -FFMpeg Done !!:  -End  : {end_t:%H:%M:%S}\tTotal: {(end_t-str_t).total_seconds()}"
-			print(message)
-			return Fmpg_ou_file
+			message = f"  -FFMpeg Done !!:  -End  : {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),1):,}"
+#			print(message)
+			return out_file
 	else:
 		message += f" -> FFMpeg failed :("
 		raise Exception(message)
 
-	return Fmpg_ou_file
+	return out_file
 ##>>============-------------------<  End  >------------------==============<<##
 
-def Make_Matrix( Fmpg_in_file, Execute=ffmpeg, Embed_Subtitle = False, Compare_Files = False ):
+
+def run_ffm(args, *debug):
+
+	message = sys._getframe().f_code.co_name + '|:'
+	if debug :
+		print(f'{message}\nDebug Mode\n{args[4:]}\n')
+		runit = subprocess.Popen(args)
+		out, err = runit.communicate()
+		message = f'\nDone\tOut: {out}\nErr: {err}'
+		print(message)
+		time.sleep(5)
+	else:
+		try:
+			runit = subprocess.Popen(args,	stderr=subprocess.STDOUT,
+											stdout=subprocess.PIPE,
+											universal_newlines=True,
+											encoding='utf-8')
+			loc = 0
+			symbls = '|/-+O\\'
+			sy_len = len(symbls)
+			while not runit.poll() :
+				lineo = runit.stdout.readline()
+				if len(lineo):
+					prgrs_dis(lineo, symbls[loc])
+					loc += 1
+					if  loc == sy_len:
+						loc = 0
+				else:
+					out, err = runit.communicate()
+					if err or out :
+						print(f'Done:\nE:{err}\nO:{out}')
+					break
+		except (Exception, PermissionError, OSError) as e:
+			runit.kill()
+			message += f"Exception => {e}\n"
+			print(message)
+			return False
+	message += f"\n Done"
+	if DeBug : print (message)
+
+	return True
+
+##==============-------------------   End   -------------------==============##
+
+
+def banner_new ( fname, *other ) :
 	str_t = datetime.datetime.now()
 	message = sys._getframe().f_code.co_name
-	print(f"  +{message}=: Start: {str_t:%H:%M:%S}")
+	print(f"  +{message}=: Start: {str_t:%T}")
+
+# https://trac.ffmpeg.org/wiki/Map#Chooseallstreams
+	todo = [ '-map', '0', '-c', 'copy']
+	return todo
+
+def speed_up ( fname, *other) :
+# https://trac.ffmpeg.org/wiki/How%20to%20speed%20up%20/%20slow%20down%20a%20video
+#	ffmpeg -i input.mkv -filter:v "setpts=0.5*PTS" output.mkv #Frame Rate Chage
+	print(f"  +{message}=: Start: {str_t:%T}")
+	todo = [ '-filter_complex "[0:v]setpts=0.25*PTS[v];[0:a]atempo=2.0,atempo=2.0[a]" -map "[v]" -map "[a]" ']
+	return todo
+
+
+##>>============-------------------<  End  >------------------==============<<##
+
+
+def make_matrx(input_file, execu=ffmpeg, embed_sub=False, comp_file=False):
+	str_t = datetime.datetime.now()
+	message = sys._getframe().f_code.co_name
+	print(f"  +{message}=: Start: {str_t:%T}")
 
 # XXX Create Matrix Colage:
-	Sh_fil_name, _ = os.path.splitext(Fmpg_in_file)
-	Sh_fil_name += '.png'
-
-	if not os.path.isfile(Sh_fil_name):
-		'''
-		To make multiple screenshots and place them into a single image file (creating tiles), you can use FFmpeg's tile video filter, like this:
-		https://ffmpeg.org/ffmpeg-filters.html#Examples-129
-		"ffmpeg -loglevel panic -i \"$MOVIE\" -y -frames 1 -q:v 1 -vf \"select=not(mod(n\,$NTH_FRAME)),scale=-1:${HEIGHT},tile=${COLS}x${ROWS}\" \"$OUT_FILEPATH\""
-		# `-loglevel panic` We don’t want to see any output. You can remove this option if you’re having any problem to see what went wrong
-		# `-i "$MOVIE"` Input file
-		# `-y` Override any existing output file
-		# `-frames 1` Tell `ffmpeg` that output from this command is just a single image (one frame).
-		# `-q:v 3` Output quality where `0` is the best.
-		# `-vf \"select=` That's where all the magic happens. Selector function for [video filter](https://trac.ffmpeg.org/wiki/FilteringGuide).
-		# # `not(mod(n\,58))` Select one frame every `58` frames [see the documentation](https://www.ffmpeg.org/ffmpeg-filters.html#Examples-34).
-		# # `scale=-1:120` Resize to fit `120px` height, width is adjusted automatically to keep correct aspect ration.
-		# # `tile=${COLS}x${ROWS}` Layout captured frames into this grid
-
-		Produce 8x8 PNG tiles of all keyframes (-skip_frame nokey) in a movie:
-		ffmpeg -skip_frame nokey -i file.avi -vf 'scale=128:72,tile=8x8' -an -vsync 0 keyframes%03d.png
-		The -vsync 0 is necessary to prevent ffmpeg from duplicating each output frame to accommodate the originally detected frame rate.
-
-		Display 5 pictures in an area of 3x2 frames, with 7 pixels between them, and 2 pixels of initial margin, using mixed flat and named options:
-		tile=3x2:nb_frames=5:padding=7:margin=2
-
-		ffmpeg -ss 00:00:10 -i movie.avi -frames 1 -vf "select=not(mod(n\,1000)),scale=320:240,tile=2x3" out.png
-		That will seek 10 seconds into the movie, select every 1000th frame, scale it to 320x240 pixels and create 2x3 tiles in the output image out.png, which will look like this:
-		-frames 1 -vf "select=not(mod(n\,400)),scale=160:120,tile=4x3" tile.png
-		-vf select='gt(scene\,0.4)', scale=160:120, tile -frames:v 1 Yosemite_preview.png
-		'-skip_frame', 'nokey', '-vsync', 'vfr',
-		'''
-		skip0 = '00:00:29'
-		width = str(round(Vid_With / 3))
-		slice = str(round(Tot_Frms / 9.01))  # We have 9 tiles plus a bit more
-		zzzle = "[0:v]select=not(mod(n\," + slice + ")), scale=" + \
-				width + ":-1:, tile=3x3:nb_frames= 9:padding= 2:margin= 2 "
-	#	slice = str( round( Tot_Frms / 16.003 ) ) # We have 16 tiles plus a bit more
-	#	zzzle = "[0:v]select=not(mod(n\," + slice + ")), scale=-1:280, tile=4x4:nb_frames=16:padding=4:margin=4"
-
-		if Tot_Frms > 6000:
-			Cmd = (Execute, '-ss', skip0, '-vsync', 'vfr', '-i',
-				   Fmpg_in_file, '-frames', '1', '-vf', zzzle, '-y', Sh_fil_name)
-		else:
-			Cmd = (Execute, '-vsync', 'vfr', '-i',
-				   Fmpg_in_file, '-frames', '1', '-vf', zzzle, '-y', Sh_fil_name)
-		# XXX:
-		if DeBug :
-			print("    |>-:", Cmd )  # XXX:  Skip First 4 and Last 6
-		if Run_ff(Cmd):
-			message = f"   = PNG Created >"
-			print(message)
-			end_t = datetime.datetime.now()
-			message = f" -Make_Matrix Done !!:  -End  : {end_t:%H:%M:%S}\tTotal: {(end_t-str_t).total_seconds()}"
-			return os.path.getsize(Sh_fil_name)
-		else:
-			message = f"   = Faled to Created PNG >"
-			raise Exception (message)
-	else :
+	file_name, _ = os.path.splitext(input_file)
+#	print(f' file  {input_file}')
+	'''
+	hack to eliminate doublee
+	'''
+	_name, _ = os.path.splitext(file_name)
+	if _ in File_extn:
+		file_name, _ = os.path.splitext(file_name)
+#	print(f' looking for {file_name}')
+#	_, _, filenames = next(os.walk(input_file))
+#	print (filenames)
+#	input ('next')
+	if os.path.isfile(file_name + '.jpg') or os.path.isfile(file_name + '.png'):
 		message = f"    |PNG Exists ¯\_(%)_/¯_Skip"
 		print(message)
 		return False
 
-# XXX:  Enbed Subtitle file
-	if Embed_Subtitle:
-		Sh_fil_name, _ = os.path.splitext(Fmpg_in_file)
-		Sh_fil_name += '.srt'
+	else:
+		file_name += '.png'
 
-		if os.path.isfile(Sh_fil_name) :
-			Fmpg_ou_ = Sh_fil_name + TmpF_Ex
+		skip0 = '00:00:43'
+		width = str(round(vid_width / 2 ))
+		# We have 9 tiles plus a bit more
+		slice = str(round(total_frms / 9.01))
+		zzzle = "[0:v]select=not(mod(n\," + slice + ")), scale=" + width + ":-1:, tile=3x3:nb_frames= 9:padding=3:margin=3"
 
-			ff_head = [ffmpeg, '-i', Fmpg_in_file,
-							   '-f', 'srt', '-i', Sh_fil_name]
-			ff_tail = ['-c:v', 'copy', '-c:a', 'copy',
-							   '-c:s', 'mov_text', '-y', Fmpg_ou_]
-			Cmd = ff_head + ff_tail
-			if DeBug  or True :
-				print("    |>-:", Cmd)  # XXX:
-				input ( " Ready to do srt add? " )
-			if Run_ff(Cmd):
-				message = f"   = Embed Subtitle >\n"
-				print(message)
-			else:
-				message = f"   = Faled to Embed Subtitle >\n"
-				raise Exception (message)
+		if total_frms > 6400:
+			todo = (execu, '-ss', skip0, '-vsync', 'vfr', '-i',
+					input_file, '-frames', '1', '-vf', zzzle, '-y', file_name)
 		else:
-			input (" No .srt file with the same name")
-# XXX:  Visualy Compare in and out files
-# https://stackoverflow.com/questions/25774996/how-to-compare-show-the-difference-between-2-videos-in-ffmpeg
-
-	if Compare_Files:
-		ff_head = [ffmpeg, '-i', Fmpg_in_file, '-i', Fmpg_ou_file]
-		ff_tail = ['-filter_complex', "blend=all_mode=difference",
-				   "format=yuv420p", '-c:v', 'libx265', '-c:a', 'copy', '-y', "out.mp4"]
-		Cmd = ff_head + ff_tail
-		if DeBug :
-			print("    |>-:", Cmd)  # XXX:
-		if Run_ff(Cmd):
-			message = f"   = Compare Files >\n"
+			todo = (execu, '-vsync', 'vfr', '-i',
+					input_file, '-frames', '1', '-vf', zzzle, '-y', file_name)
+		# XXX:
+		if run_ffm(todo):
+			message = f"\r    |3x3| .png Matrix Created"
 			print(message)
+			end_t = datetime.datetime.now()
+			message = f" -make_matrx Done !!:  -End  : {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),1):,}"
+			return os.path.getsize(file_name)
 		else:
-			message = f"   = Faled to Compare Files >\n"
-			raise Exception (message)
-
-	print(message)
+			message = f"   = Failed to Created .PNG >"
+			raise Exception(message)
 ##>>============-------------------<  End  >------------------==============<<##
 
 
-def Pars_MetaData(Meta_dta, verbose=False):
-
-	str_t = datetime.datetime.now()
-	message = sys._getframe().f_code.co_name + '/:'
-	#	print(f"    /{message}\t\tStart: {str_t:%H:%M:%S}")
-
-	All_Audio = []
-	All_Video = []
-	All_Subtt = []
-
-	Al_strms = Meta_dta.get('streams', 'WTF?')
-	for Strm_X in Al_strms:
-		if 'video' in Strm_X['codec_type']:
-			All_Video.append(Strm_X)
-		elif 'audio' in Strm_X['codec_type']:
-			All_Audio.append(Strm_X)
-		elif 'subtitle' in Strm_X['codec_type']:
-			All_Subtt.append(Strm_X)
-		else:
-			message += f" Type: {Strm_X['codec_type']}\n{ json.dumps(Strm_X, indent=2) }"
-
-	Al_strms = Meta_dta.get('format', 'WTF?')
-
-# XXX: Check it :)
-	if len(Al_strms) == 0:
-		message += f"\n{ json.dumps(Meta_dta, indent=2) }\n"
-		message += f'File: !! No MetaData\n'
-		raise ValueError(message)
-	if len(All_Video) == 0:
-		message += f"\n{ json.dumps(Meta_dta, indent=2) }\n"
-		message += f'File  !! No Video => Can\'t convert\n'
-		raise ValueError(message)
-	if len(All_Audio) == 0:
-		message += f"\n{ json.dumps(Meta_dta, indent=2) }\n"
-		message += f'File: !! No Audio\n'
-#		raise  ValueError( message )
-	if len(All_Subtt) == 0:
-		message += f"\n{ json.dumps(Meta_dta, indent=2) }\n"
-		message += f'File: !! No Subtitle\n'
-#		raise  ValueError( message )
-
-	end_t = datetime.datetime.now()
-#	print(f'    -End  : {end_t:%H:%M:%S}\tTotal: {(end_t-str_t).total_seconds()}')
-
-	return All_Video, All_Audio, All_Subtt, Al_strms
-##>>============-------------------<  End  >------------------==============<<##
-
-
-def FFZa_Braino(Ini_file, Meta_dta, verbose=False):
-	global Vi_Dur  # make it global so we can reuse for fmpeg check ...
-	global Tot_Frms
-	global Vid_With
-
-#	global DeBug
-	DeBug = True
+def video_diff(file1, file2) :
+	# XXX:  Visualy Compare in and out files
+	# https://stackoverflow.com/questions/25774996/how-to-compare-show-the-difference-between-2-videos-in-ffmpeg
 
 	str_t = datetime.datetime.now()
 	message = sys._getframe().f_code.co_name
-	print(f"  +{message}=: Start: {str_t:%H:%M:%S}")
-	if not Meta_dta :
-		message +=' Nothing to do here move on\nNoMetadata'
+	print(f"  +{message}=: Start: {str_t:%T}")
+
+	cmprd_file = get_new_fname(file1, "_Video_comp.mp4", TmpF_Ex)
+
+	todo = (ffmpeg, '-i', file1, '-i', file2, '-filter_complex', "blend=all_mode=difference", '-c:v', 'libx265', '-preset', 'faster', '-c:a', 'copy', '-y', cmprd_file)
+
+	if run_ffm(todo):
+		return cmprd_file
+	else:
+		message += f"   = Failed to Compare Files >\n"
+		raise Exception(message)
+##>>============-------------------<  End  >------------------==============<<##
+
+
+def parse_mtdata(mta_dta, verbose=False):
+
+	str_t = datetime.datetime.now()
+	message = sys._getframe().f_code.co_name + '/:'
+	#	print(f"    /{message}\t\tStart: {str_t:%T}")
+
+	all_audio = []
+	all_video = []
+	all_subtl = []
+
+	all_strms = mta_dta.get('streams', 'WTF?')
+	for strm_x in all_strms:
+		if 'video' in strm_x['codec_type']:
+			all_video.append(strm_x)
+		elif 'audio' in strm_x['codec_type']:
+			all_audio.append(strm_x)
+		elif 'subtitle' in strm_x['codec_type']:
+			all_subtl.append(strm_x)
+		else:
+			message += f" Type: {strm_x['codec_type']}\n{ json.dumps(strm_x, indent=2) }"
+
+	all_strms = mta_dta.get('format', 'WTF?')
+
+# XXX: Check it :)
+	if len(all_strms) == 0:
+		message += f"\n{ json.dumps(mta_dta, indent=2) }\n"
+		message += f'File: !! No MetaData\n'
+		raise ValueError(message)
+	if len(all_video) == 0:
+		message += f"\n{ json.dumps(mta_dta, indent=2) }\n"
+		message += f'File  !! No Video => Can\'t convert\n'
+		raise ValueError(message)
+	if len(all_audio) == 0:
+		message += f"\n{ json.dumps(mta_dta, indent=2) }\n"
+		message += f'File: !! No Audio\n'
+#?		raise  ValueError( message )
+	if len(all_subtl) == 0:
+		message += f"\n{ json.dumps(mta_dta, indent=2) }\n"
+		message += f'File: !! No Subtitle\n'
+#?		raise  ValueError( message )
+
+	return all_video, all_audio, all_subtl, all_strms
+##>>============-------------------<  End  >------------------==============<<##
+
+
+def thza_brain(in_file, mta_dta, verbose=False):
+	global vid_dur  # make it global so we can reuse for fmpeg check ...
+	global total_frms
+	global vid_width
+
+	str_t = datetime.datetime.now()
+	message = sys._getframe().f_code.co_name
+	print(f"  +{message}=: Start: {str_t:%T}")
+	if not mta_dta:
+		message += ' on NoMetadata Nothing to do here'
 		raise Exception(message)
 	try:
-		Vi_strms, Au_strms, Su_strms, Metata = Pars_MetaData(
-			Meta_dta, verbose=False)
+		vdo_strm, aud_strm, sub_strm, meta_dta = parse_mtdata(
+			mta_dta, verbose=False)
 
 		_mtdta = dict(filename='',
 					  nb_streams=int(0),
@@ -351,7 +303,7 @@ def FFZa_Braino(Ini_file, Meta_dta, verbose=False):
 					  bit_rate=int(0),
 					  size=float(0)
 					  )
-		Parse_from_to(Metata, _mtdta)
+		prs_frm_to(meta_dta, _mtdta)
 
 		_vdata = dict(index=int(0),
 					  codec_name='',
@@ -363,9 +315,9 @@ def FFZa_Braino(Ini_file, Meta_dta, verbose=False):
 					  avg_frame_rate=''
 					  )
 # XXX: Presumes that the first Video is the real one !
-		Parse_from_to(Vi_strms[0], _vdata)
+		prs_frm_to(vdo_strm[0], _vdata)
 		if 'Pu_la' in _mtdta.values():
-			message += f" :O: Meta_dta has Pu_la\n"
+			message += f" :O: mta_dta has Pu_la\n"
 			if 'Pu_la' in _mtdta['duration']:
 				_mtdta['duration'] = '55'
 			elif 'Pu_la' in _mtdta['bit_rate']:
@@ -378,32 +330,32 @@ def FFZa_Braino(Ini_file, Meta_dta, verbose=False):
 		mins,  secs = divmod(int(_mtdta['duration']), 60)
 		hours, mins = divmod(mins, 60)
 
-		Vi_Dur = f'{hours:02d}:{mins:02d}:{secs:02d}'
-		frm_rate = float(String_div(_vdata['avg_frame_rate']))
+		vid_dur = f'{hours:02d}:{mins:02d}:{secs:02d}'
+		frm_rate = float(divd_strn(_vdata['avg_frame_rate']))
 		if frm_rate == 0:
 			print(json.dumps(_vdata, indent=2))
 			frm_rate = 25
-		Tot_Frms = round(frm_rate * int(_mtdta['duration']))
-		Vid_With = _vdata['width']
+		total_frms = round(frm_rate * int(_mtdta['duration']))
+		vid_width = _vdata['width']
 
 # XXX: Compute expected BitRate
-		TotPixls = int(_vdata['width'] * _vdata['height'])
+		totl_pixls = int(_vdata['width'] * _vdata['height'])
 		# NOTE: Set BPP expectation between 0.1 to 0.05.
-		BitPerPix = 0.075 * (1080 / Vid_With)
+		exp_bpp = 0.09 * (1080 / vid_width)
 		# NOTE: Expected Bitrate
-		XBitRt = round(TotPixls * BitPerPix * frm_rate)
+		expctd = round(totl_pixls * frm_rate * exp_bpp)
 
 # XXX: Print Banner
-		message = f"    |< CT >|{f'{hours:02d}h:{mins:02d}m'} |{Vid_With:>4}x{_vdata['height']:<4} |Tfm: {HuSa(Tot_Frms):6}|Tpx: {HuSa(TotPixls)}|Xbr: {HuSa(XBitRt)}|Vid: {len(Vi_strms)}|Aud: {len(Au_strms)}|Sub: {len(Su_strms)}|"
+		message = f"    |< CT >|{f'{hours:02d}h:{mins:02d}m'} | {vid_width:>4}x{_vdata['height']:<4} |Tfm: {hm_sz(total_frms):6}|Tpx: {hm_sz(totl_pixls)}|Xbr: {hm_sz(expctd)}|Vid: {len(vdo_strm)}|Aud: {len(aud_strm)}|Sub: {len(sub_strm)}|"
 		print(message)
 
 # XXX: Video
 		ff_video = []
-		if len(Vi_strms) :
+		if len(vdo_strm):
 			extra = ''
-			streamCounter = -1
-			for _vid in Vi_strms:
-				streamCounter += 1
+			count = -1
+			for _vid in vdo_strm:
+				count += 1
 				if 'bit_rate' in _vid:
 					_vi_btrt = int(_vid['bit_rate'])
 				else:
@@ -419,27 +371,28 @@ def FFZa_Braino(Ini_file, Meta_dta, verbose=False):
 					_vid['codec_name'] = 'No Name ?'
 
 				if _vid['codec_name'].lower() == 'mjpeg':
-					print("    > Skipo MjpeG ")
-#					ff_video.extend ( ['-map', '0:' + str(_vid['index']), '-c:v:' + str(_vid['index']), 'mjpeg'] )
+					message = f"    |<V:{_vid['index']:2}>|{_vid['codec_name']:7} > Skip"
+					print(message)
+#					ff_video.extend ( ['-map', '0:' + str(_vid['index']), '-c:v:' + str(count), 'mjpeg'] )
 					continue
 
 				ff_video.extend(
-					['-map', '0:' + str(_vid['index']), '-c:v:' + str(streamCounter)])
+					['-map', '0:' + str(_vid['index']), '-c:v:' + str(count)])
 
 				if frm_rate > Max_frm_r:
 					#					ff_video.extend( [ '-r', '25', 'libx265', '-crf', '26' ] )
 					message = f"    ! FYI Frame rate convert {frm_rate} to 25"
 					print(message)
 
-				Bl_and_Wh = False
+				blk_white = False
 
-				if Bl_and_Wh:  # Black and White
+				if blk_white:  # Black and White
 					ff_video.extend(['libx265', '-vf', 'hue=s=0'])
 					input('Black and White')
 				elif _vid['height'] > 2160:  # # XXX: Scale Down to
 					extra += '\t\tScale Down'
 					ff_video.extend(['-vf scale=-1:1440 libx265'])
-				elif _vi_btrt < XBitRt :  # XXX: 25% grace :D
+				elif _vi_btrt < expctd * 1.33 :  # XXX: 25% grace :D
 					if _vid['codec_name'] == 'hevc':
 						extra += '\t\t\tHevc'
 						ff_video.extend(['copy'])
@@ -447,36 +400,37 @@ def FFZa_Braino(Ini_file, Meta_dta, verbose=False):
 						extra += '\t\t\tConvert to Hevc '
 						if _vid['height'] > 620:
 							ff_video.extend(['libx265'])
-						elif _vid['height'] > 240:
-							ff_video.extend(['libx265'])
+						elif _vid['height'] > 400:
+							ff_video.extend(['libx265', '-preset', 'fast'])
 						else:
-							ff_video.extend(['libx265'])
+							ff_video.extend(['libx265', '-preset', 'faster'])
 				else:
 					if _vid['codec_name'] == 'hevc':
-						extra += '\t\t\tHevc Reduce Bitrate'
+						extra += '\t\t\tBitRate Reduce: ' + hm_sz(expctd)
 						ff_video.extend(
-							['libx265', '-b:v', str(XBitRt)])
+							#							['libx265', '-b:v', str(expctd)])
+							['libx265'])
 					else:
 						extra += '\t\t\tConvert to Hevc'
 						ff_video.extend(
 							['libx265'])
 
-				message = f"    |<V:{_vid['index']:2}>|{_vid['codec_name']:7} |Br: {HuSa(_vi_btrt):>6}|Fps: {frm_rate:>6}| {extra}"
+				message = f"    |<V:{_vid['index']:2}>|{_vid['codec_name']:7} |Br: {hm_sz(_vi_btrt):>7}|Fps: {frm_rate:>6}| {extra}"
 				print(message)
 
 		else:
 			print('    |<V:No>| No Video')
 
 # XXX: Audio
-		Special = False
+		special = False
 		ff_audio = []
-		if len(Au_strms) :
-			Aud_typ = []
+		if len(aud_strm):
+			aud_typ = []
 			_au_btrt = 0
 			extra = ''
-			streamCounter = -1
-			for _aud in Au_strms:
-				streamCounter += 1
+			count = -1
+			for _aud in aud_strm:
+				count += 1
 				_disp = dict(default=int(0), forced=int(0))
 				_lng = dict(language='')
 				if 'bit_rate' in _aud:
@@ -488,78 +442,73 @@ def FFZa_Braino(Ini_file, Meta_dta, verbose=False):
 					extra += ' BitRate Estimate'
 
 				if 'tags' in _aud:
-					Parse_from_to(_aud['tags'], _lng)
+					prs_frm_to(_aud['tags'], _lng)
 					if 'Pu_la' in _lng:
 						_lng['language'] = '_wtf?_'
 				if 'disposition' in _aud:
-					Parse_from_to(_aud['disposition'], _disp)
+					prs_frm_to(_aud['disposition'], _disp)
 
 				ff_audio.extend(
-					['-map', '0:' + str(_aud['index']), '-c:a:' + str(streamCounter)])
+					['-map', '0:' + str(_aud['index']), '-c:a:' + str(count)])
 
-				if (_aud['codec_name'] in ('aac', 'opus', 'vorbis')) and (_aud['channels'] < 3):
-					if _au_btrt <= Max_a_btr:
+				if _aud['codec_name'] in ('aac', 'vorbis'):
+					if _au_btrt <= Max_a_btr *1.33:
 						extra += '\tCopy'
 						ff_audio.extend(['copy'])
 					else:
 						extra += '\tReduce BitRate'
-						ff_audio.extend(['libvorbis', '-q:a', '7'])
+						ff_audio.extend(['libvorbis', '-q:a', '8'])
 				else:
 					extra += '\tConvert'
-					ff_audio.extend(['libvorbis', '-q:a', '7', '-ac', '2'])
+					ff_audio.extend(['libvorbis', '-q:a', '8'])
 
-				Aud_typ.append(_lng['language'])
+				aud_typ.append(_lng['language'])
 
-			if len(Aud_typ) > 1:
-				if ('eng' in Aud_typ) and (('rus' in Aud_typ) or ('und' in Aud_typ)):
+			if len(aud_typ) > 1:
+				if ('eng' in aud_typ) and (('rus' in aud_typ) or ('und' in aud_typ)):
 					# XXX: Select English only
 					extra += f"Map only English"
 					ff_audio = ['-map', '0:m:language:eng']
-					print(f"    | {len (Aud_typ)} AuD: {Aud_typ} => {ff_audio}")
-					Special = True
+					print(
+						f"    | {len (aud_typ)} AuD: {aud_typ} => {ff_audio}")
+					special = True
 
-			message = f"    |<A:{_aud['index']:2}>|{_aud['codec_name']:7} |Br: {HuSa(_au_btrt):>6}|Fq : {HuSa(_aud['sample_rate']):>6}|Ch: {_aud['channels']}|{_lng['language']}|{_disp['default']}| {extra}"
+			message = f"    |<A:{_aud['index']:2}>|{_aud['codec_name']:7} |Br: {hm_sz(_au_btrt):>7}|Fq : {hm_sz(_aud['sample_rate']):>6}|Ch: {_aud['channels']}|{_lng['language']}|{_disp['default']}| {extra}"
 			print(message)
+
 		else:
 			print('    |<A:No>| No Audio')
 
 # XXX subtitle
 		ff_subtl = []
-		if len(Su_strms) :
-			streamCounter = -1
-			for _sub in Su_strms:
-				streamCounter += 1
+		if len(sub_strm):
+			count = -1
+			for _sub in sub_strm:
+				count += 1
 				extra = ''
 				_lng = dict(language='')
 				if 'tags' in _sub:
-					Parse_from_to(_sub['tags'], _lng)
+					prs_frm_to(_sub['tags'], _lng)
 					if 'Pu_la' in _sub['tags']:
 						_lng['language'] = 'wtf'
 				ff_subtl.extend(
-					['-map', '0:' + str(_sub['index']), '-c:s:' + str(streamCounter)])
+					['-map', '0:' + str(_sub['index']), '-c:s:' + str(count)])
 
 # XXX: #https://askubuntu.com/questions/214199/how-do-i-add-and-or-keep-subtitles-when-converting-video
-				if _sub['codec_name'] in ('hdmv_pgs_subtitle', 'dvd_subtitle'):
+				if _sub['codec_name'].lower() in ('hdmv_pgs_subtitle', 'dvd_subtitle', 'ass'):
 					extra += f"Skip {_sub['codec_name']}"
-					ff_subtl = []  # XXX: Dont know how to do it :(
+					ff_subtl = [ '-sn']
 				else:
 					if _lng['language'] == 'eng':
 						extra += f"Move Make Default {_sub['codec_name']}"
 						ff_subtl.extend(
-							['mov_text', '-metadata:s:s:' + str(streamCounter) , 'language=' + _lng['language'], '-disposition:s:s:'+ str(streamCounter), 'forced'])
-#                    elif _lng['language'] not in ('eng', 'rus'):
-#                        Sub_fi_name = Ini_file + '_' + \
-#                            str(_lng['language']) + '_' + \
-#                            str(_sub['index']) + '.srt'
-#                        extra = '* Xtract *'
-#                        ff_subtl.extend(['mov_text', '-y', Sub_fi_name])
+							['mov_text', '-metadata:s:s:' + str(count), 'language=' + _lng['language'], '-disposition:s:s:' + str(count), 'forced'])
 					else:
-						#						ff_subtl = ['-map', '0:s', '-c:s', 'mov_text', '-metadata:s:s:0', 'language=' + _lng['language'] ]
 						extra += f"Move Default {_sub['codec_name']}"
 						ff_subtl.extend(
-							['mov_text', '-metadata:s:s:' + str(streamCounter), 'language=' + _lng['language']])
+							['mov_text', '-metadata:s:s:' + str(count), 'language=' + _lng['language']])
 
-				message = f"    |<S:{_sub['index']:2}>|{_sub['codec_name']:7}|{_sub['codec_type']:^10} |{_lng['language']:3}| {extra}"
+				message = f"    |<S:{_sub['index']:2}>|{_sub['codec_name']:8}|{_sub['codec_type']:^10} |{_lng['language']:3}| {extra}"
 				print(message)
 
 		else:
@@ -571,37 +520,40 @@ def FFZa_Braino(Ini_file, Meta_dta, verbose=False):
 		raise Exception(message)
 
 	else:
-		FFM_cmnd = ff_video + ff_audio + ff_subtl
+		ffmpeg_cmnd = ff_video + ff_audio + ff_subtl
 
-		_, extens = os.path.splitext(Ini_file)
-		if len(Au_strms) :
-			_au_code  = _aud['codec_name']
-		else :
-			_au_code  = 'HoFuckingAudio'
+		_, extens = os.path.splitext(in_file)
+		if len(aud_strm):
+			_au_code = _aud['codec_name']
+		else:
+			_au_code = 'HoFuckingAudio'
 
-		if not Special and (extens.lower() in TmpF_Ex.lower()) and (_vid['codec_name'] == 'hevc') and (_au_code in ('aac', 'opus', 'vorbis', 'nofuckingaudio')):
-			# XXX: 25% Generous Bitrate forgiveness for Video and audio
-			if _vi_btrt <= XBitRt * 1.25 and _au_btrt <= Max_a_btr * 1.25 and _vid['height'] <= 1440 :
+		if not special and (extens.lower() in TmpF_Ex.lower()) and (_vid['codec_name'] == 'hevc') and (_au_code in ('aac', 'opus', 'vorbis', 'nofuckingaudio')):
+			# XXX: 33% Generous Bitrate forgiveness for Video and audio
+			if (_vi_btrt < expctd * 1.33) and (_au_btrt < Max_a_btr * 1.33 ):
 				message = f"    |V={_vid['codec_name']}|A={_au_code:^5}| =>  _Skip_it"
-				raise ValueError( message )
-#				FFM_cmnd = ['-c', 'copy']
+				raise ValueError(message)
 
 		end_t = datetime.datetime.now()
-		print(
-			f'  -End  : {end_t:%H:%M:%S}\tTotal: {(end_t-str_t).total_seconds()}')
+		message = f'  -End  : {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),1):,}'
 
-	return FFM_cmnd
+	return ffmpeg_cmnd
 ##>>============-------------------<  End  >------------------==============<<##
 
-
-def Prog_cal(line_to, sy=False):
-	global Vi_Dur
+def prgrs_dis(line_to, sy=False):
+#	return True
+#	global vid_dur
 	message = sys._getframe().f_code.co_name + '-:'
 
+	_P = ''
 	if 'size=N/A' in line_to:
 		_P = f"\r    | {sy} | Work:"
 	elif 'global headers:' and "muxing overhead:" in line_to:
-		_P = f'\n    |>+<| Done: {line_to}'
+		_P = f'\r    |<+>|      {line_to}'
+	elif 'encoded' in line_to:
+		_P = f'    |>+<|Done: {line_to}'
+	elif '[info]' in line_to:
+		return False
 	elif 'speed=' in line_to:
 		try:
 			fr = re.search(r'frame=\s*([0-9]+)',	 line_to).group(1)
@@ -616,25 +568,19 @@ def Prog_cal(line_to, sy=False):
 				a_sec = sum(int(x) * 60**i for i,
 							x in enumerate(reversed(tm.split(":"))))
 				b_sec = sum(int(x) * 60**i for i,
-							x in enumerate(reversed(Vi_Dur.split(":"))))
+							x in enumerate(reversed(vid_dur.split(":"))))
 				dif = abs(b_sec - a_sec)
 				eta = round(dif / (float(sp)))
-				mins, secs = divmod(int(eta), 60)
-				hours, mins = divmod(mins, 60)
-				_eta = f'{hours:02d}:{mins:02d}:{secs:02d}'
-				_P = f'\r    | {sy} |Size: {HuSa(sz):>5}|Frames: {int(fr):>5}|Fps: {fp:>3}|BitRate: {br:>6}|Speed: {sp:>5}|ETA: {_eta:>8}|'
-			else:
-				_P = ''
+				mints, secs = divmod(int(eta), 60)
+				hours, mints = divmod(mints, 60)
+				_eta = f'{hours:02d}:{mints:02d}:{secs:02d}'
+				_P = f'\r    | {sy} |Size: {hm_sz(sz):>5}|Frames: {int(fr):>5}|Fps: {fp:>3}|BitRate: {br:>6}|Speed: {sp:>5}|ETA: {_eta:>8}|    '
 		except Exception as e:
 			print(line_to)
 			message += f" ErRor: in Procesing data {e}:"
 			raise Exception(message)
-	else:
-		_P = f'\n    |WTF| {line_to}'
-		return False
-#	print(_P, end='')
+
 	sys.stderr.write(_P)
 	sys.stderr.flush
-
 	return True
 ##>>============-------------------<  End  >------------------==============<<##
