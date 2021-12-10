@@ -10,17 +10,6 @@ from FFMpeg import *
 from My_Utils import *
 from Yaml import *
 
-#WFolder = r"C:\Users\Geo\Desktop\downloads"
-
-#WFolder = '.'
-#WFolder = r"E:\Media"
-#WFolder = r"E:\Media\TV"
-#WFolder = r"E:\Media\Movie"
-#WFolder = r"E:\Media\MasterClass Collection"
-#WFolder = r"E:\_Adlt"
-#WFolder = r"C:\Users\Geo\Videos"
-#WFolder = r"C:\Users\Geo\Desktop\_2Conv"
-
 # https://docs.python.org/3.2/library/time.html
 ancr_time = f"{datetime.datetime.now(): %Y %j %H-%M-%S }"
 
