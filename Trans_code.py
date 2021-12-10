@@ -1,4 +1,3 @@
-
 import os
 import re
 import sys
@@ -13,20 +12,17 @@ from Yaml import *
 
 #WFolder = r"C:\Users\Geo\Desktop\downloads"
 
-
 #WFolder = '.'
 #WFolder = r"E:\Media"
 #WFolder = r"E:\Media\TV"
 #WFolder = r"E:\Media\Movie"
 #WFolder = r"E:\Media\MasterClass Collection"
 #WFolder = r"E:\_Adlt"
-#WFolder = r"C:\"
 #WFolder = r"C:\Users\Geo\Videos"
-#WFolder = r"C:\Users\Geo\Desktop\TestIng\_test"
+#WFolder = r"C:\Users\Geo\Desktop\_2Conv"
 
-_time = datetime.datetime.now()
-ancr_time = f"{_time: %Y %a %b %d %H_%M_%S}"
 # https://docs.python.org/3.2/library/time.html
+ancr_time = f"{datetime.datetime.now(): %Y %j %H-%M-%S }"
 
 This_File = sys.argv[0].strip('.py')
 
@@ -42,13 +38,13 @@ print(messa)
 
 ##>>============-------------------<  End  >------------------==============<<##
 
-def list_build(root, _exten):
+def build_list(root, _exten):
 	'''
 	Create the list of Files from "root with _exten" to Proces
 	'''
 	str_t = datetime.datetime.now()
 	messa = sys._getframe().f_code.co_name
-	print(f" +{messa}=: Start: {str_t:%T}")
+	print(f" +{messa}=:\t{root}\tStart: {str_t:%T}")
 
 	print(f'Dir: {root}\tSize: {hm_sz(get_tree_size(root))}')
 	queue_list = []
@@ -94,7 +90,7 @@ def post_clean(input_file, output_file):
 
 	messa = f"  File: {os.path.basename(input_file)}\n    Was: { hm_sz(inpf_sz)}\t Is: {hm_sz(outf_sz)}\t Saved: {hm_sz(inpf_sz - outf_sz)} = {ratio} %"
 	if abs( ratio ) > 90 :
-		messa += " Ouch Huge Difference ?"
+		messa += "\n    ! Huge Difference !"
 	print(messa)
 
 	end_t = datetime.datetime.now()
@@ -117,7 +113,7 @@ if __name__ == '__main__':
 
 	print("-" * 70)
 
-	fl_lst = list_build( WFolder, File_extn )
+	fl_lst = build_list( WFolder, File_extn )
 	# XXX: Sort Order True -> Biggest first
 	fl_lst = sorted(fl_lst, key=lambda Item: (Item[1], Item[2]), reverse=False)
 
@@ -125,49 +121,53 @@ if __name__ == '__main__':
 	Fnum = 0
 	Save = 0
 	for each in fl_lst:
-		Fnum += 1
-		file_p = each[0]
-		file_s = each[1]
-		ext = each[2]
+		Fnum	+= 1
+		file_p	= each[0]
+		file_s	= each[1]
+		ext		= each[2]
 		messa = f'\n{file_p}\n{ordinal(Fnum)} of {cnt}, {ext}, {hm_sz(file_s)}'
-		if os.path.isfile(file_p):
-			disk_free_space = shutil.disk_usage(file_p)[2]
-			if disk_free_space < ( 5 * file_s ):
-				print ('!! ', file_p[0:2], hm_sz(disk_free_space), " Free Space" )
-				input ("Stop Not Enoug space on Drive")
+		if os.path.isfile(file_p) and len (file_p) < 256 :
 			print(messa)
+			disk_free_space = shutil.disk_usage( file_p )[2]
+			if disk_free_space < ( 3 * file_s ):
+				print ('\n!!! ', file_p[0:2], hm_sz(disk_free_space), " Free Space" )
+				input ("Not Enoug space on Drive")
+#			print (repr( file_p ))
 			try:
+#				print ("Here I am"), time.sleep(2)
+#
 				all_good = ffprob_run( file_p )
+# XXX:				make_matrx( file_p )
 				all_good = thza_brain( file_p, all_good )
 
-#				all_good = banner_new( file_p )
+#				all_good = short_ver( file_p )
 				all_good = ffmpeg_run( file_p, all_good )
 #				video_diff( file_p, all_good )
 				if not all_good:
 					input('WTF')
-				make_matrx( file_p )
 				Save += post_clean( file_p, all_good )
 
 			except ValueError as err:
-				messa = f"{err}"
-				if '| =>  _Skip_it' in messa:
+				messa = str( err )
+				if '| <¯\_(%)_/¯>  Skip' in messa:
 					print(messa)
-					Success_File.write(f'-: {file_p}\n')
+					Success_File.write(f'=: {file_p}\n')
 				else:
 					print(messa)
 					sys.stdout.flush()
 				continue
 
 			except Exception :
-				print(f"Exec: \n{traceback.print_exc  ( limit=8 )}\n")
-				print(f"Stack:\n{traceback.print_stack( limit=8 )}\n")
+				print("\n", "v" * 40)
+				print(f"Exec: \n{traceback.print_exc  ( limit=32 )}\n")
+				print(f"Stack:\n{traceback.print_stack( limit=32 )}\n")
 				print("\n", "^" * 40)
 #				input("Exception !!! Press Any Key to Continue")
 				file_name = os.path.basename(file_p)
 				dirc_name = os.path.dirname(file_p)
 				mess = f'-: {dirc_name}\n\t\t{file_name}\t{hm_sz(file_s)}\n'
 				print(mess)
-				copy_move(file_p, Excepto, False)
+				copy_move(file_p, Excepto, True)
 				sys.stdout.flush()
 				continue
 
@@ -183,7 +183,6 @@ if __name__ == '__main__':
 			continue
 # continue forces the loop to start at the next iteration
 # pass will continue through the remainder or the loop body
-#	Do_it(fl_lst)
 	sys.stdout.flush()
 	Success_File.close()
 

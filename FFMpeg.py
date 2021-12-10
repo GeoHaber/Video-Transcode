@@ -13,9 +13,9 @@ ffmpg_bin = 'C:\\Program Files\\ffmpeg\\bin'
 
 ffmpeg = os.path.join(ffmpg_bin, "ffmpeg.exe")
 ffprob = os.path.join(ffmpg_bin, "ffprobe.exe")
-ffplay = os.path.join(ffmpg_bin, "ffplay.exe")
+# ffplay = os.path.join(ffmpg_bin, "ffplay.exe")
 
-if not os.path.exists(ffmpeg) or not os.path.exists(ffprob):
+if not (os.path.exists(ffmpeg) and os.path.exists(ffprob) ):
 	message += f"{ffmpeg} Path Does not Exist:"
 	input(message)
 	raise OSError
@@ -24,7 +24,7 @@ if not os.path.exists(ffmpeg) or not os.path.exists(ffprob):
 
 
 def ffprob_run(in_file, execu=ffprob):
-
+#Returns Json list
 	str_t = datetime.datetime.now()
 	message = sys._getframe().f_code.co_name
 	print(f"  +{message}=: Start: {str_t:%T}")
@@ -35,8 +35,10 @@ def ffprob_run(in_file, execu=ffprob):
 					  '-v', 'warning',		# XXX quiet, panic, fatal, error, warning, info, verbose, debug, trace
 					  '-of', 'json',		# XXX default, csv, xml, flat, ini
 					  '-hide_banner',
-					  '-show_format',
 					  '-show_error',
+					  '-show_format',
+#					  '-show_private_data',
+#					  '-show_data',
 					  '-show_streams')
 
 	try:
@@ -58,18 +60,20 @@ def ffprob_run(in_file, execu=ffprob):
 	else:
 		end_t = datetime.datetime.now()
 		message =f'  -End  : {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),1):,}'
-#		print ( message)
+		print ( message )
+#		print ( json.dumps(jlist, indent=2 ) )
 		return jlist
 
 ##>>============-------------------<  End  >------------------==============<<##
 
 
 def ffmpeg_run(input_file, ff_com, execu=ffmpeg):
+#Returns file_name
 	str_t = datetime.datetime.now()
 	message = sys._getframe().f_code.co_name
 	print(f"  +{message}=: Start: {str_t:%T}")
 
-	out_file = '_0-' + random_string(7) + TmpF_Ex
+	out_file = '_' + random_string(7) + TmpF_Ex
 
 	file_name, _ = os.path.splitext( os.path.basename(input_file) )
 
@@ -103,7 +107,7 @@ def ffmpeg_run(input_file, ff_com, execu=ffmpeg):
 
 
 def run_ffm(args, *debug):
-
+#	debug = True
 	message = sys._getframe().f_code.co_name + '|:'
 	if debug :
 		print(f'{message}\nDebug Mode\n{args[4:]}\n')
@@ -119,12 +123,12 @@ def run_ffm(args, *debug):
 											universal_newlines=True,
 											encoding='utf-8')
 			loc = 0
-			symbls = '|/-+O\\'
+			symbls = '|/-O+\\'
 			sy_len = len(symbls)
 			while not runit.poll() :
 				lineo = runit.stdout.readline()
-				if len(lineo):
-					prgrs_dis(lineo, symbls[loc])
+				if len(lineo) :
+					show_progrs(lineo, symbls[loc])
 					loc += 1
 					if  loc == sy_len:
 						loc = 0
@@ -146,7 +150,7 @@ def run_ffm(args, *debug):
 ##==============-------------------   End   -------------------==============##
 
 
-def banner_new ( fname, *other ) :
+def short_ver ( fname, *other ) :
 	str_t = datetime.datetime.now()
 	message = sys._getframe().f_code.co_name
 	print(f"  +{message}=: Start: {str_t:%T}")
@@ -185,20 +189,20 @@ def make_matrx(input_file, execu=ffmpeg, embed_sub=False, comp_file=False):
 #	print (filenames)
 #	input ('next')
 	if os.path.isfile(file_name + '.jpg') or os.path.isfile(file_name + '.png'):
-		message = f"    |PNG Exists ¯\_(%)_/¯_Skip"
+		message = f"    |PNG Exists ¯\_(%)_/¯ Skip"
 		print(message)
 		return False
 
 	else:
 		file_name += '.png'
 
-		skip0 = '00:00:43'
-		width = str(round(vid_width / 2 ))
+		skip0 = '00:00:51'
+		width = str(round(vid_width))
 		# We have 9 tiles plus a bit more
-		slice = str(round(total_frms / 9.01))
-		zzzle = "[0:v]select=not(mod(n\," + slice + ")), scale=" + width + ":-1:, tile=3x3:nb_frames= 9:padding=3:margin=3"
+		slice = str(round(total_frms / 9))
+		zzzle = "[0:v]select=not(mod(n\," + slice + ")), scale=" + width + ":-1:, tile=3x3:nb_frames=9:padding=3:margin=3"
 
-		if total_frms > 6400:
+		if total_frms > 6600:
 			todo = (execu, '-ss', skip0, '-vsync', 'vfr', '-i',
 					input_file, '-frames', '1', '-vf', zzzle, '-y', file_name)
 		else:
@@ -283,7 +287,7 @@ def parse_mtdata(mta_dta, verbose=False):
 
 
 def thza_brain(in_file, mta_dta, verbose=False):
-	global vid_dur  # make it global so we can reuse for fmpeg check ...
+	global vid_lengt  # make it global so we can reuse for fmpeg check ...
 	global total_frms
 	global vid_width
 
@@ -327,26 +331,30 @@ def thza_brain(in_file, mta_dta, verbose=False):
 				input('Meta WTF')
 				raise ValueError(json.dumps(_mtdta, indent=2))
 
-		mins,  secs = divmod(int(_mtdta['duration']), 60)
+		vid_lengt = int(_mtdta['duration'])
+		vid_width = _vdata['width']
+		vid_heigh = _vdata['height']
+
+		mins,  secs = divmod(vid_lengt, 60)
 		hours, mins = divmod(mins, 60)
 
-		vid_dur = f'{hours:02d}:{mins:02d}:{secs:02d}'
 		frm_rate = float(divd_strn(_vdata['avg_frame_rate']))
 		if frm_rate == 0:
 			print(json.dumps(_vdata, indent=2))
 			frm_rate = 25
 		total_frms = round(frm_rate * int(_mtdta['duration']))
-		vid_width = _vdata['width']
 
 # XXX: Compute expected BitRate
-		totl_pixls = int(_vdata['width'] * _vdata['height'])
+		totl_pixls = int(vid_width * vid_heigh)
 		# NOTE: Set BPP expectation between 0.1 to 0.05.
-		exp_bpp = 0.09 * (1080 / vid_width)
+		exp_bpp = 0.1 * (1080 / vid_width)
+#		exp_bpp = 0.1
 		# NOTE: Expected Bitrate
 		expctd = round(totl_pixls * frm_rate * exp_bpp)
+		special = False
 
 # XXX: Print Banner
-		message = f"    |< CT >|{f'{hours:02d}h:{mins:02d}m'} | {vid_width:>4}x{_vdata['height']:<4} |Tfm: {hm_sz(total_frms):6}|Tpx: {hm_sz(totl_pixls)}|Xbr: {hm_sz(expctd)}|Vid: {len(vdo_strm)}|Aud: {len(aud_strm)}|Sub: {len(sub_strm)}|"
+		message = f"    |< CT >|{f'{hours:02d}h:{mins:02d}m'} | {vid_width:>4}x{vid_heigh:<4} |Tfm: {hm_sz(total_frms):6}|Tpx: {hm_sz(totl_pixls)}|Xbr: {hm_sz(expctd)}|Vid: {len(vdo_strm)}|Aud: {len(aud_strm)}|Sub: {len(sub_strm)}|"
 		print(message)
 
 # XXX: Video
@@ -359,7 +367,7 @@ def thza_brain(in_file, mta_dta, verbose=False):
 				if 'bit_rate' in _vid:
 					_vi_btrt = int(_vid['bit_rate'])
 				else:
-					# XXX approximation 80% video
+					# XXX approximation 80% is video
 					if _mtdta['bit_rate'] != "Pu_la":
 						_vi_btrt = int(float(_mtdta['bit_rate']) * 0.80)
 # XXX: There must be a better way
@@ -380,33 +388,34 @@ def thza_brain(in_file, mta_dta, verbose=False):
 					['-map', '0:' + str(_vid['index']), '-c:v:' + str(count)])
 
 				if frm_rate > Max_frm_r:
-					#					ff_video.extend( [ '-r', '25', 'libx265', '-crf', '26' ] )
+#					ff_video.extend( [ '-r', '25', 'libx265', '-crf', '26' ] )
 					message = f"    ! FYI Frame rate convert {frm_rate} to 25"
 					print(message)
 
-				blk_white = False
-
-				if blk_white:  # Black and White
-					ff_video.extend(['libx265', '-vf', 'hue=s=0'])
-					input('Black and White')
-				elif _vid['height'] > 2160:  # # XXX: Scale Down to
-					extra += '\t\tScale Down'
-					ff_video.extend(['-vf scale=-1:1440 libx265'])
-				elif _vi_btrt < expctd * 1.33 :  # XXX: 25% grace :D
+				if vid_heigh > 1100:  # # XXX: Scale Down to 1080p
+					special = True
+					extra += f'\t\tScale from {vid_heigh} to 1080p'
+					ff_video.extend(['libx265', '-vf', 'scale=-1:1080'])
+#					print ("\tIt's 2160")
+				elif _vi_btrt < expctd * 1.30 :  # XXX: 30% grace :D
 					if _vid['codec_name'] == 'hevc':
 						extra += '\t\t\tHevc'
 						ff_video.extend(['copy'])
 					else:
 						extra += '\t\t\tConvert to Hevc '
-						if _vid['height'] > 620:
-							ff_video.extend(['libx265'])
-						elif _vid['height'] > 400:
-							ff_video.extend(['libx265', '-preset', 'fast'])
+						if vid_heigh   > 1500:
+							ff_video.extend(['libx265', '-preset', 'slow'])
+						elif vid_heigh > 1080:
+							ff_video.extend(['libx265', '-crf', '26', '-preset', 'slow'])
+						elif vid_heigh > 700:
+							ff_video.extend(['libx265', '-preset', 'slow'])
+						elif vid_heigh > 600:
+							ff_video.extend(['libx265', '-preset', 'medium'])
 						else:
-							ff_video.extend(['libx265', '-preset', 'faster'])
+							ff_video.extend(['libx265', '-preset', 'fast'])
 				else:
 					if _vid['codec_name'] == 'hevc':
-						extra += '\t\t\tBitRate Reduce: ' + hm_sz(expctd)
+						extra += '\t\t\tReduce BitRate: ' + hm_sz(expctd)
 						ff_video.extend(
 							#							['libx265', '-b:v', str(expctd)])
 							['libx265'])
@@ -422,7 +431,6 @@ def thza_brain(in_file, mta_dta, verbose=False):
 			print('    |<V:No>| No Video')
 
 # XXX: Audio
-		special = False
 		ff_audio = []
 		if len(aud_strm):
 			aud_typ = []
@@ -495,7 +503,7 @@ def thza_brain(in_file, mta_dta, verbose=False):
 					['-map', '0:' + str(_sub['index']), '-c:s:' + str(count)])
 
 # XXX: #https://askubuntu.com/questions/214199/how-do-i-add-and-or-keep-subtitles-when-converting-video
-				if _sub['codec_name'].lower() in ('hdmv_pgs_subtitle', 'dvd_subtitle', 'ass'):
+				if _sub['codec_name'].lower() in ('hdmv_pgs_subtitle', 'dvd_subtitle', 'ass', 'mov_text'):
 					extra += f"Skip {_sub['codec_name']}"
 					ff_subtl = [ '-sn']
 				else:
@@ -530,8 +538,8 @@ def thza_brain(in_file, mta_dta, verbose=False):
 
 		if not special and (extens.lower() in TmpF_Ex.lower()) and (_vid['codec_name'] == 'hevc') and (_au_code in ('aac', 'opus', 'vorbis', 'nofuckingaudio')):
 			# XXX: 33% Generous Bitrate forgiveness for Video and audio
-			if (_vi_btrt < expctd * 1.33) and (_au_btrt < Max_a_btr * 1.33 ):
-				message = f"    |V={_vid['codec_name']}|A={_au_code:^5}| =>  _Skip_it"
+			if (_vi_btrt < expctd * 1.33) and (_au_btrt < Max_a_btr * 1.33 ) and True :
+				message = f"    | {_vid['codec_name']} | {_au_code:^5} | <¯\_(%)_/¯>  Skip"
 				raise ValueError(message)
 
 		end_t = datetime.datetime.now()
@@ -540,45 +548,43 @@ def thza_brain(in_file, mta_dta, verbose=False):
 	return ffmpeg_cmnd
 ##>>============-------------------<  End  >------------------==============<<##
 
-def prgrs_dis(line_to, sy=False):
+def show_progrs(line_to, sy=False):
 #	return True
-#	global vid_dur
+#	DeBug = True
 	message = sys._getframe().f_code.co_name + '-:'
 
 	_P = ''
-	if 'size=N/A' in line_to:
-		_P = f"\r    | {sy} | Work:"
-	elif 'global headers:' and "muxing overhead:" in line_to:
-		_P = f'\r    |<+>|      {line_to}'
-	elif 'encoded' in line_to:
-		_P = f'    |>+<|Done: {line_to}'
-	elif '[info]' in line_to:
+	if 'N/A' in line_to:
 		return False
+	elif 'global headers:' and "muxing overhead:" in line_to:
+		_P = f'\r    |<+>| Ok: {line_to}'
+	elif 'encoded' in line_to:
+		_P = f'    |>+<| Done: {line_to}'
 	elif 'speed=' in line_to:
 		try:
 			fr = re.search(r'frame=\s*([0-9]+)',	 line_to).group(1)
-			fp = re.search(r'fps=\s*([0-9]+)',		 line_to).group(1)
 			sz = re.search(r'size=\s*([0-9]+)',		 line_to).group(1)
-			tm = re.search(r'time=\S([0-9:]+)',		 line_to).group(1)
-			# Can have value of N/A
-			br = re.search(r'bitrate=\s*([0-9\.]+)', line_to).group(1)
-			# Can have value of N/A
 			sp = re.search(r'speed=\s*([0-9\.]+)',	 line_to).group(1)
-			if int(fp) > 0:
+			br = re.search(r'bitrate=\s*([0-9\.]+)', line_to).group(1)
+			tm = re.search(r'time=\S([0-9:]+)',		 line_to).group(1)
+			fp = re.search(r'fps=\s*([0-9]+)',		 line_to).group(1)
+			if int(fp) > 1 :
 				a_sec = sum(int(x) * 60**i for i,
 							x in enumerate(reversed(tm.split(":"))))
-				b_sec = sum(int(x) * 60**i for i,
-							x in enumerate(reversed(vid_dur.split(":"))))
-				dif = abs(b_sec - a_sec)
+				dif = abs(vid_lengt - a_sec)
 				eta = round(dif / (float(sp)))
-				mints, secs = divmod(int(eta), 60)
+				mints, secs  = divmod(int(eta), 60)
 				hours, mints = divmod(mints, 60)
 				_eta = f'{hours:02d}:{mints:02d}:{secs:02d}'
 				_P = f'\r    | {sy} |Size: {hm_sz(sz):>5}|Frames: {int(fr):>5}|Fps: {fp:>3}|BitRate: {br:>6}|Speed: {sp:>5}|ETA: {_eta:>8}|    '
+				if DeBug :
+					print (f'\n {line_to} | {sy} |Size: {hm_sz(sz):>5}|Frames: {int(fr):>5}|Fps: {fp:>3}|BitRate: {br:>6}|Speed: {sp:>5}|ETA: {_eta:>8}|' )
 		except Exception as e:
-			print(line_to)
+			print (line_to)
 			message += f" ErRor: in Procesing data {e}:"
-			raise Exception(message)
+			print (message)
+			time.sleep(3)
+#			raise Exception(message)
 
 	sys.stderr.write(_P)
 	sys.stderr.flush

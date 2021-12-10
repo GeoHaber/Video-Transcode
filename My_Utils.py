@@ -17,22 +17,21 @@ import traceback
 
 class Tee (list):
 
-    def __init__(self, *targets):
-        self.targets = targets
+	def __init__(self, *targets):
+		self.targets = targets
 
-    def __del__(self):
-        for ftarg in self.targets:
-        	if ftarg != sys.stdout and ftarg != sys.stderr:
-        		ftarg.close()
+	def __del__(self):
+		for ftarg in self.targets:
+			if ftarg != sys.stdout and ftarg != sys.stderr:
+				ftarg.close()
 
-    def write(self, obj):
-        for ftarg in self.targets:
-            ftarg.write(obj)
-            ftarg.flush()
+	def write(self, obj):
+		for ftarg in self.targets:
+			ftarg.write(obj)
+			ftarg.flush()
 
-    def flush(self):
-        for ftarg in self.targets:
-            ftarg.flush()
+	def flush(self):
+		return
 
 ##>>============-------------------<  End  >------------------==============<<##
 
@@ -77,7 +76,7 @@ def divd_strn(the_string, dbg=False):
 
 def random_string(length=13):
 	_time = datetime.datetime.now()
-	rand_string = f"{_time:%j-%H-%M-%S_}"
+	rand_string = f"{_time:%Y %j %H-%M-%S }"
 	for char in random.sample( string.ascii_letters + string.hexdigits, length):
 		rand_string += char
 	return rand_string
@@ -116,12 +115,16 @@ def hm_sz(nbyte):
 	Returns a human readable string from a number
 	+ or -
 	'''
-	sufix = ['B', 'K', 'M', 'G', 'Tera', 'Peta', 'Exa', 'Zetta', 'Yotta']
+	if not nbyte:
+		return '0 B'
+
+	sufix = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
 
 	indx = 0
 	sign = ''
 	if int(nbyte) < 0 :
 		sign = '-'
+
 	valu = abs(float(nbyte))
 	while valu >= 1024 and indx < len(sufix) - 1:
 		valu /= 1024
@@ -245,26 +248,25 @@ def get_tree_size(path):
 ##==============-------------------   End   -------------------==============##
 
 def copy_move(src, dst, keep_it=False):
-# https://stackoverflow.com/questions/7419665/python-move-and-overwrite-files-and-folders
-#	message = sys._getframe().f_code.co_name + '-:'
+	# https://stackoverflow.com/questions/7419665/python-move-and-overwrite-files-and-folders
+	#	message = sys._getframe().f_code.co_name + '-:'
 
 	do_it = shutil.move
 	if keep_it:
 		do_it = shutil.copy2
 		print(f" ! Placebo will NOT delete: {src}")
-		time.sleep(1)
+		time.sleep(2)
 	try:
-		if os.path.exists(dst):
-			# in case of the src and dst are the same file
-			if os.path.samefile(src, dst):
-				os.utime(dst, None)
-				return True
-		do_it ( src, dst )
+#        if os.path.exists(dst) and os.path.samefile(src, dst):
+#            os.utime(dst, None)
+#            os.remove(src)
+#            return True
+		do_it(src, dst)
 
 	except (PermissionError, OSError) as e:
-		print (f'Exception: {e}')
+		print(f'Exception: {e}')
+		time.sleep(3)
 #		input ("Delete?")
-		time.sleep(1)
-		os.remove( src )
+		os.remove(src)
 	return True
 	##==============-------------------   End   -------------------==============##
