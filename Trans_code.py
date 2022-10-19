@@ -2,13 +2,23 @@ import os
 import re
 import sys
 import json
-import cgitb
 import datetime
 import traceback
 
-from FFMpeg import *
-from My_Utils import *
-from Yaml import *
+from FFMpeg		import *
+from My_Utils	import *
+from Yaml		import *
+
+#WFolder = r"C:\Users\Geo\Desktop\downloads"
+
+#WFolder = '.'
+#WFolder = r"F:\Media"
+#WFolder = r"F:\Media\TV"
+#WFolder = r"F:\Media\Movie"
+#WFolder = r"C:\Users\Geo\Desktop\Except"
+#WFolder = r"F:\Media\MasterClass Collection"
+#WFolder = r"C:\Users\Geo\Desktop\_2Conv"
+#WFolder = r"C:\Users\Geo\Desktop\TestIng"
 
 # https://docs.python.org/3.2/library/time.html
 ancr_time = f"{datetime.datetime.now(): %Y %j %H-%M-%S }"
@@ -27,7 +37,7 @@ print(messa)
 
 ##>>============-------------------<  End  >------------------==============<<##
 
-def build_list(root, _exten):
+def scan_folder(root, _exten):
 	'''
 	Create the list of Files from "root with _exten" to Proces
 	'''
@@ -59,41 +69,55 @@ def build_list(root, _exten):
 ##>>============-------------------<  End  >------------------==============<<##
 
 
-def post_clean(input_file, output_file):
+def post_clean(input_file, outpt_file):
 
 	str_t = datetime.datetime.now()
 	messa = sys._getframe().f_code.co_name
 	print(f"  +{messa}=: Start: {str_t:%T}")
 
 # XXX: Check that in and out Files are okay
-	outf_sz = os.path.getsize(output_file)
+	outf_sz = os.path.getsize(outpt_file)
 	inpf_sz = os.path.getsize(input_file)
-	ratio = round(100 * ((outf_sz - inpf_sz) / inpf_sz),1)
+
+	rati = abs(100 * ((outf_sz - inpf_sz) / inpf_sz))
+	if rati > 9:
+		ratio = round(rati)
+	else :
+		ratio = round(rati, 1)
 
 	delte_me_fnam = get_new_fname(input_file, "_DeletMe.old", TmpF_Ex)
 	copy_move( input_file, delte_me_fnam )
 
 	f_name, xt = os.path.splitext(input_file)
 	new_done_fnam = get_new_fname(input_file, TmpF_Ex, xt)
-	copy_move( output_file, new_done_fnam )
+	copy_move( outpt_file, new_done_fnam )
 
-	messa = f"  File: {os.path.basename(input_file)}\n    Was: { hm_sz(inpf_sz)}\t Is: {hm_sz(outf_sz)}\t Saved: {hm_sz(inpf_sz - outf_sz)} = {ratio} %"
+	messa = f"  File: {os.path.basename(input_file)}\n    Was: { hm_sz(inpf_sz)}\tIs: {hm_sz(outf_sz)}\t"
+	if   inpf_sz >  outf_sz :
+		messa += f"Saved : {ratio}%"
+	elif inpf_sz == outf_sz :
+		messa += "Same Size"
+	else:
+		messa += f"Lost  : {ratio}%"
+
 	if abs( ratio ) > 90 :
-		messa += "\n    ! Huge Difference !"
+		messa += "\n\t\t! Difference is Huge !"
 	print(messa)
 
 	end_t = datetime.datetime.now()
 	print( f'  -End  : {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),1):,}')
 
-	return (1 + abs(inpf_sz - outf_sz))
+	return (inpf_sz - outf_sz)
 ##>>============-------------------<  End  >------------------==============<<##
 
 
 if __name__ == '__main__':
 
-	cgitb.enable(format='text')
-
 	str_t = datetime.datetime.now()
+	if not os.path.exists(Excepto):
+		print (f"Creating dir: {Excepto}")
+		os.mkdir(Excepto)
+
 	print(f' +Start: {str_t:%T}')
 
 	messa = __file__ + '-:'
@@ -102,9 +126,9 @@ if __name__ == '__main__':
 
 	print("-" * 70)
 
-	fl_lst = build_list( WFolder, File_extn )
-	# XXX: Sort Order True -> Biggest first
-	fl_lst = sorted(fl_lst, key=lambda Item: (Item[1], Item[2]), reverse=False)
+	fl_lst = scan_folder( WFolder, File_extn )
+	# XXX: Sort Order reverse = True -> Biggest first
+	fl_lst = sorted(fl_lst, key=lambda Item: (Item[1], Item[2]), reverse=False )
 
 	cnt = len(fl_lst)
 	Fnum = 0
@@ -124,13 +148,12 @@ if __name__ == '__main__':
 #			print (repr( file_p ))
 			try:
 #				print ("Here I am"), time.sleep(2)
-#
-				all_good = ffprob_run( file_p )
-# XXX:				make_matrx( file_p )
+				all_good = run_ffprob( file_p )
 				all_good = thza_brain( file_p, all_good )
+#				make_matrx( file_p )
 
-#				all_good = short_ver( file_p )
 				all_good = ffmpeg_run( file_p, all_good )
+#				all_good = short_ver( file_p )
 #				video_diff( file_p, all_good )
 				if not all_good:
 					input('WTF')
@@ -146,12 +169,9 @@ if __name__ == '__main__':
 					sys.stdout.flush()
 				continue
 
-			except Exception :
-				print("\n", "v" * 40)
-				print(f"Exec: \n{traceback.print_exc  ( limit=32 )}\n")
-				print(f"Stack:\n{traceback.print_stack( limit=32 )}\n")
-				print("\n", "^" * 40)
-#				input("Exception !!! Press Any Key to Continue")
+			except Exception as e:
+				Trace (messa, e)
+
 				file_name = os.path.basename(file_p)
 				dirc_name = os.path.dirname(file_p)
 				mess = f'-: {dirc_name}\n\t\t{file_name}\t{hm_sz(file_s)}\n'
@@ -176,7 +196,8 @@ if __name__ == '__main__':
 	Success_File.close()
 
 	end_t = datetime.datetime.now()
-	print(f' -End  : {end_t:%T}\tTotal: {end_t-str_t}')
+	print(f' -End: {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),1):,}')
+
 	input('All Done')
 	exit()
 ##>>============-------------------<  End  >------------------==============<<##
