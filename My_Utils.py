@@ -48,9 +48,12 @@ class Tee (list):
 
 	def write(self, obj):
 		for ftarg in self.targets:
-			ftarg.write(obj)
-			ftarg.flush()
-
+			try:
+				ftarg.write(obj)
+				ftarg.flush()
+			except Exception as e:
+				messa += " WTF? Exception "
+				Trace (messa, e)
 	def flush(self):
 		return
 
@@ -93,7 +96,6 @@ def divd_strn( val ):
 	elif '.' in val:
 		r = float(val)
 	return round( r, 2)
-
 ##==============-------------------   End   -------------------==============##
 
 
@@ -154,26 +156,38 @@ def hm_sz( nbyte, type = "B" ):
 		indx += 1
 
 	return f'{sign}{round(valu + 0.05,1)} {sufix[indx]}{type}'
-
 ##==============-------------------   End   -------------------==============##
 
 def prs_frm_to(strm, dictio, DeBug =False ):
 	messa = sys._getframe().f_code.co_name
 	str_t = datetime.datetime.now()
-
-	if DeBug :		print(f"  +{messa}=: Start: {str_t:%T}")
-	if not strm  :
-		print ("WTF:? No Stream for Dictio" ,'\n', dictio )
-		for key in ( dictio.keys() ) :
-			dictio[key] = 'Pu_la'
-		raise Except
-	if not dictio :
-		print ("WTF:? No Dictio for Strm ",'\n', repr(dictio) )
-		raise Except
+	'''
+	rsult = dict ()
+	# XXX: Fast version only defined data is caopied if done reversed walk over js_info could see the extra unused information  :D
+	for key in _mtdta.keys():
+		rsult[key] = js_info.get(key)
+		if not rsult[key]  :
+			pass
+		if DeBug:	print (key, ' = ', rsult[key] )
+	if DeBug:	print ( json.dumps( rsult, indent=2 ) )
+	'''
 
 	if DeBug :
+		print(f"  +{messa}=: Start: {str_t:%T}")
+
+		if not strm  :
+			print ("WTF:? No Stream for Dictio" ,'\n', dictio )
+			for key in ( dictio.keys() ) :
+				dictio[key] = 'Pu_la'
+			raise Except
+
+		if not dictio :
+			print ("WTF:? No Dictio for Strm ",'\n', repr(dictio) )
+			raise Except
+
 		print( type (strm),  '\n', len(strm),  'Items:\n', json.dumps(strm,   indent=2), '\n',
 		       type(dictio), '\n', len(dictio),'Items:\n', json.dumps(dictio, indent=2) )
+
 	resul = dictio
 	try:
 		for key in dictio.keys():

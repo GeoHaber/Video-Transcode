@@ -5,15 +5,6 @@ Path:
   passwd:           my secret password
   Min_fsize:        120000
   WFolder:          C:\\Users\\Geo\\Desktop\\downloads
-#  WFolder:          C:\\Users\\Geo\\Desktop\\Except
-#  WFolder:          E:\\Media\\TV\\The Wire (2002) [Crime + Drama @ 8.4]
-#  WFolder:  E:\\_Adlt
-#  WFolder:  E:\\Media\\Movie
-#  WFolder:  E:\\Media\\TV
-#  WFolder:  E:\\Media\\MasterClass Collection
-#  WFolder = r"C:\"
-#  WFolder = r"C:\Users\Geo\Videos"
-#  WFolder = r"C:\Users\Geo\Desktop\TestIng\_test"
   Excepto:          C:\\Users\\Geo\\Desktop\\Except
   Tmp_exte:         '.mp4' #.png or .jpg
 

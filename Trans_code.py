@@ -4,73 +4,64 @@ import sys
 import json
 import datetime
 import traceback
+import multiprocessing
 
 from FFMpeg		import *
 from My_Utils	import *
 from Yaml		import *
 
-#WFolder = r"C:\Users\Geo\Desktop\downloads"
-
-#WFolder = '.'
-#WFolder = r"F:\Media"
 #WFolder = r"F:\Media\TV"
-#WFolder = r"F:\Media\Movie"
 #WFolder = r"C:\Users\Geo\Desktop\Except"
-#WFolder = r"F:\Media\MasterClass Collection"
-#WFolder = r"C:\Users\Geo\Desktop\_2Conv"
-#WFolder = r"C:\Users\Geo\Desktop\TestIng"
 
-# https://docs.python.org/3.2/library/time.html
+## XXX:  https://docs.python.org/3.2/library/time.html
 ancr_time = f"{datetime.datetime.now(): %Y %j %H-%M-%S }"
-
 This_File = sys.argv[0].strip('.py')
 
-Log_File = This_File + ancr_time + ' all.log'
-sys.stdout = Tee(sys.stdout, open(Log_File, 'w', encoding="utf-8"))
+Log_File  = This_File + ancr_time + 'all.log'
+sys.stdout = Tee(sys.stdout, open(Log_File, 'w', encoding=console_encoding))
 
-Oky_File = This_File + ancr_time + ' oky.txt'
-Success_File = open(Oky_File, 'w', encoding="utf-8")
+ok_f_name = This_File + ancr_time + 'oky.txt'
+Success_File = open(ok_f_name, 'w', encoding=console_encoding)
 
-messa  = f"## Time: {ancr_time}\t{Oky_File}\n"
-messa += f'    | ¯\_(%)_/¯\n'
-print(messa)
+print(f"\n Time: {ancr_time}\t{ok_f_name}" )
+print(f" Number of CPUs: {multiprocessing.cpu_count()}  ¯\_(%)_/¯" )
+print(f" Pyton Version:  {sys.version}\n" )
 
 ##>>============-------------------<  End  >------------------==============<<##
 
-def scan_folder(root, _exten):
+def scan_folder(root, xtnsio):
 	'''
-	Create the list of Files from "root with _exten" to Proces
+	Create the list of Files from "root with xtnsio" to Proces
 	'''
 	str_t = datetime.datetime.now()
 	messa = sys._getframe().f_code.co_name
 	print(f" +{messa}=:\t{root}\tStart: {str_t:%T}")
 
 	print(f'Dir: {root}\tSize: {hm_sz(get_tree_size(root))}')
-	queue_list = []
+	_lst = []
 	# a Directory ?
 	if os.path.isdir(root):
 		for roota, dirs, files in os.walk( root ):
 			for one_file in files:
-				x, ext = os.path.splitext(one_file.lower())
-				if ext in _exten:
+				_, ext = os.path.splitext(one_file.lower())
+				if ext in xtnsio:
 					f_path = os.path.normpath(os.path.join(roota, one_file))
 					file_s = os.path.getsize(f_path)
 					# XXX  |[0] Full Path |[1] File Size |[3] ext |[4] Year Made XXX
-					f_dict = f_path, file_s, ext
-					queue_list.append(f_dict)
+					_lst.append([f_path, file_s, ext])
 	else:
-		print(f"It's Not a Directory {root}")
+		print(f"Is Not a Directory\n{root}\n")
 		return False
 
 	end_t = datetime.datetime.now()
-	messa = (f' { len(queue_list):,} Files\n End  : {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),1):,}')
+	messa = (f' { len(_lst):,} Files\n End  : {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),1):,}')
 	print( messa )
-	return queue_list
+
+	# XXX: Sort Order reverse = True -> Biggest first
+	return sorted(_lst, key=lambda Item: (Item[1], Item[2]), reverse=True )
 ##>>============-------------------<  End  >------------------==============<<##
 
-
 def post_clean(input_file, outpt_file):
-
 	str_t = datetime.datetime.now()
 	messa = sys._getframe().f_code.co_name
 	print(f"  +{messa}=: Start: {str_t:%T}")
@@ -85,24 +76,27 @@ def post_clean(input_file, outpt_file):
 	else :
 		ratio = round(rati, 1)
 
+	if abs( ratio ) > 90 :
+		seems_to_small = get_new_fname(input_file, "_Seems_Small.mp4", TmpF_Ex)
+		copy_move( outpt_file, seems_to_small )
+		messa = f"\n\t! Huge Difference was {hm_sz(inpf_sz)} is {hm_sz(outf_sz)}\n Out File: {seems_to_small}"
+		print(messa)
+		return 0
+
+	_, xt = os.path.splitext(input_file)
 	delte_me_fnam = get_new_fname(input_file, "_DeletMe.old", TmpF_Ex)
 	copy_move( input_file, delte_me_fnam )
-
-	f_name, xt = os.path.splitext(input_file)
 	new_done_fnam = get_new_fname(input_file, TmpF_Ex, xt)
 	copy_move( outpt_file, new_done_fnam )
 
-	messa = f"  File: {os.path.basename(input_file)}\n    Was: { hm_sz(inpf_sz)}\tIs: {hm_sz(outf_sz)}\t"
-	if   inpf_sz >  outf_sz :
+	messa = f"  File: {os.path.basename(input_file)}\n\t Was: {hm_sz(inpf_sz)}\t Is: {hm_sz(outf_sz)}\t"
+	if   inpf_sz > outf_sz :
 		messa += f"Saved : {ratio}%"
-	elif inpf_sz == outf_sz :
-		messa += "Same Size"
-	else:
+	elif inpf_sz < outf_sz :
 		messa += f"Lost  : {ratio}%"
-
-	if abs( ratio ) > 90 :
-		messa += "\n\t\t! Difference is Huge !"
-	print(messa)
+	else :
+		messa += "Same Size"
+	print( messa )
 
 	end_t = datetime.datetime.now()
 	print( f'  -End  : {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),1):,}')
@@ -110,15 +104,13 @@ def post_clean(input_file, outpt_file):
 	return (inpf_sz - outf_sz)
 ##>>============-------------------<  End  >------------------==============<<##
 
-
 if __name__ == '__main__':
-
 	str_t = datetime.datetime.now()
+	print(f' +Start: {str_t:%T}')
+
 	if not os.path.exists(Excepto):
 		print (f"Creating dir: {Excepto}")
 		os.mkdir(Excepto)
-
-	print(f' +Start: {str_t:%T}')
 
 	messa = __file__ + '-:'
 	print(messa)
@@ -127,8 +119,6 @@ if __name__ == '__main__':
 	print("-" * 70)
 
 	fl_lst = scan_folder( WFolder, File_extn )
-	# XXX: Sort Order reverse = True -> Biggest first
-	fl_lst = sorted(fl_lst, key=lambda Item: (Item[1], Item[2]), reverse=False )
 
 	cnt = len(fl_lst)
 	Fnum = 0
@@ -161,7 +151,7 @@ if __name__ == '__main__':
 
 			except ValueError as err:
 				messa = str( err )
-				if '| <¯\_(%)_/¯>  Skip' in messa:
+				if '\t| <¯\_(%)_/¯>  Skip |' in messa:
 					print(messa)
 					Success_File.write(f'=: {file_p}\n')
 				else:
