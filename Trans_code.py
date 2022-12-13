@@ -6,11 +6,12 @@ import datetime
 import traceback
 import multiprocessing
 
+from Yaml		import *
 from FFMpeg		import *
 from My_Utils	import *
-from Yaml		import *
 
-#WFolder = r"F:\Media\TV"
+WFolder = r"F:\Media\TV"
+#WFolder = r"F:\Media\Movie"
 #WFolder = r"C:\Users\Geo\Desktop\Except"
 
 ## XXX:  https://docs.python.org/3.2/library/time.html
@@ -22,8 +23,10 @@ sys.stdout = Tee(sys.stdout, open(Log_File, 'w', encoding=console_encoding))
 
 ok_f_name = This_File + ancr_time + 'oky.txt'
 Success_File = open(ok_f_name, 'w', encoding=console_encoding)
+err_f_nam = This_File + ancr_time + 'ERR.txt'
+ERR_file = open(err_f_nam, 'w', encoding=console_encoding)
 
-print(f"\n Time: {ancr_time}\t{ok_f_name}" )
+print(f" Time: {ancr_time}" )
 print(f" Number of CPUs: {multiprocessing.cpu_count()}  ¯\_(%)_/¯" )
 print(f" Pyton Version:  {sys.version}\n" )
 
@@ -35,26 +38,26 @@ def scan_folder(root, xtnsio):
 	'''
 	str_t = datetime.datetime.now()
 	messa = sys._getframe().f_code.co_name
-	print(f" +{messa}=:\t{root}\tStart: {str_t:%T}")
+	print(f"+{messa}=:\t{root}\tStart: {str_t:%T}")
 
 	print(f'Dir: {root}\tSize: {hm_sz(get_tree_size(root))}')
 	_lst = []
 	# a Directory ?
 	if os.path.isdir(root):
-		for roota, dirs, files in os.walk( root ):
+		for rot, dirs, files in os.walk( root ):
 			for one_file in files:
 				_, ext = os.path.splitext(one_file.lower())
 				if ext in xtnsio:
-					f_path = os.path.normpath(os.path.join(roota, one_file))
+					f_path = os.path.join(rot, one_file) # XXX: # TODO: ? normpath ?
 					file_s = os.path.getsize(f_path)
-					# XXX  |[0] Full Path |[1] File Size |[3] ext |[4] Year Made XXX
+					# XXX  |[0] Full Path |[1] File Size |[3] ext | XXX
 					_lst.append([f_path, file_s, ext])
 	else:
-		print(f"Is Not a Directory\n{root}\n")
+		print(f"\n{root} Is Not a Directory\n")
 		return False
 
 	end_t = datetime.datetime.now()
-	messa = (f' { len(_lst):,} Files\n End  : {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),1):,}')
+	messa = (f'{len(_lst):,} Files\nEnd: {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),2)} sec')
 	print( messa )
 
 	# XXX: Sort Order reverse = True -> Biggest first
@@ -64,7 +67,7 @@ def scan_folder(root, xtnsio):
 def post_clean(input_file, outpt_file):
 	str_t = datetime.datetime.now()
 	messa = sys._getframe().f_code.co_name
-	print(f"  +{messa}=: Start: {str_t:%T}")
+	#print(f"  +{messa}=: Start: {str_t:%T}")
 
 # XXX: Check that in and out Files are okay
 	outf_sz = os.path.getsize(outpt_file)
@@ -76,7 +79,7 @@ def post_clean(input_file, outpt_file):
 	else :
 		ratio = round(rati, 1)
 
-	if abs( ratio ) > 90 :
+	if abs( ratio ) > 96 :
 		seems_to_small = get_new_fname(input_file, "_Seems_Small.mp4", TmpF_Ex)
 		copy_move( outpt_file, seems_to_small )
 		messa = f"\n\t! Huge Difference was {hm_sz(inpf_sz)} is {hm_sz(outf_sz)}\n Out File: {seems_to_small}"
@@ -99,14 +102,14 @@ def post_clean(input_file, outpt_file):
 	print( messa )
 
 	end_t = datetime.datetime.now()
-	print( f'  -End  : {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),1):,}')
+	#print (f'  -End: {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),2)}' )
 
 	return (inpf_sz - outf_sz)
 ##>>============-------------------<  End  >------------------==============<<##
 
 if __name__ == '__main__':
 	str_t = datetime.datetime.now()
-	print(f' +Start: {str_t:%T}')
+	print(f'Main Start: {str_t:%T}')
 
 	if not os.path.exists(Excepto):
 		print (f"Creating dir: {Excepto}")
@@ -119,29 +122,30 @@ if __name__ == '__main__':
 	print("-" * 70)
 
 	fl_lst = scan_folder( WFolder, File_extn )
-
-	cnt = len(fl_lst)
-	Fnum = 0
+	nu_fi = len(fl_lst)
 	Save = 0
-	for each in fl_lst:
-		Fnum	+= 1
+	for cnt, each in enumerate(fl_lst) :
+		cnt += 1
 		file_p	= each[0]
 		file_s	= each[1]
 		ext		= each[2]
-		messa = f'\n{file_p}\n{ordinal(Fnum)} of {cnt}, {ext}, {hm_sz(file_s)}'
+
 		if os.path.isfile(file_p) and len (file_p) < 256 :
-			print(messa)
+			print(f'\n{file_p}\n{ordinal(cnt)} of {nu_fi}, {ext}, {hm_sz(file_s)}')
 			disk_free_space = shutil.disk_usage( file_p )[2]
 			if disk_free_space < ( 3 * file_s ):
 				print ('\n!!! ', file_p[0:2], hm_sz(disk_free_space), " Free Space" )
 				input ("Not Enoug space on Drive")
-#			print (repr( file_p ))
+			tmp_free_space = shutil.disk_usage( Log_File )[2]
+			if tmp_free_space < ( 3 * file_s ):
+				print ('\n!!! ', file_p[0:2], hm_sz(tmp_free_space), " Free Space" )
+				input ("Not Enoug space on Drive")
+
 			try:
-#				print ("Here I am"), time.sleep(2)
 				all_good = run_ffprob( file_p )
 				all_good = thza_brain( file_p, all_good )
 #				make_matrx( file_p )
-
+# XXX: all_good is the encoded file Name
 				all_good = ffmpeg_run( file_p, all_good )
 #				all_good = short_ver( file_p )
 #				video_diff( file_p, all_good )
@@ -149,10 +153,13 @@ if __name__ == '__main__':
 					input('WTF')
 				Save += post_clean( file_p, all_good )
 
+				file_p = file_p.encode( console_encoding, errors='ignore')
+
 			except ValueError as err:
 				messa = str( err )
-				if '\t| <¯\_(%)_/¯>  Skip |' in messa:
-					print(messa)
+				if '| <¯\_(%)_/¯>  Skip |' in messa:
+					print(' ',messa)
+					file_p = file_p.encode( console_encoding, errors='ignore')
 					Success_File.write(f'=: {file_p}\n')
 				else:
 					print(messa)
@@ -160,13 +167,13 @@ if __name__ == '__main__':
 				continue
 
 			except Exception as e:
-				Trace (messa, e)
-
+				print(' Exception', repr( e ), '\nCopy file to: Except' )
 				file_name = os.path.basename(file_p)
 				dirc_name = os.path.dirname(file_p)
 				mess = f'-: {dirc_name}\n\t\t{file_name}\t{hm_sz(file_s)}\n'
 				print(mess)
 				copy_move(file_p, Excepto, True)
+				Trace (messa, e)
 				sys.stdout.flush()
 				continue
 
@@ -176,17 +183,20 @@ if __name__ == '__main__':
 			print(f"  Saved {hm_sz(Save)}")
 
 		else:
-			messa += f'\nNot Found !!\nNext'
-			print(messa)
-			time.sleep(1)
+			file_name = os.path.basename(file_p)
+			dirc_name = os.path.dirname(file_p)
+			mess = f'\nNot Found-: {dirc_name}\n\t\t{file_name}\t{hm_sz(file_s)}\nNext??'
+			ERR_file.write(f'{file_p}\n')
+			print(mess)
+			sys.stdout.flush()
+			time.sleep(3)
 			continue
-# continue forces the loop to start at the next iteration
-# pass will continue through the remainder or the loop body
+# continue forces the loop to start the next iteration pass will continue through the remainder or the loop body
 	sys.stdout.flush()
 	Success_File.close()
 
 	end_t = datetime.datetime.now()
-	print(f' -End: {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),1):,}')
+	print(f' -End: {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),2)} sec')
 
 	input('All Done')
 	exit()

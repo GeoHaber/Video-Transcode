@@ -22,7 +22,6 @@ if not ( os.path.exists(ffmpeg) and os.path.exists(ffprob) ):
 
 ##==============-------------------   End   -------------------==============##
 
-
 def run_ffprob(in_file, execu=ffprob, DeBug=False ):
 # Returns Json list
 	str_t = datetime.datetime.now()
@@ -30,7 +29,7 @@ def run_ffprob(in_file, execu=ffprob, DeBug=False ):
 	print(f"  +{message}=: Start: {str_t:%T}")
 
 	ff_args = (execu, '-hide_banner',
-				  	  '-analyzeduration', '100000000',
+					  '-analyzeduration', '100000000',
 					  '-probesize',		  '50000000',
 					  '-v', 'warning',		# XXX quiet, panic, fatal, error, warning, info, verbose, debug, trace
 					  '-of', 'json',		# XXX default, csv, xml, flat, ini
@@ -45,15 +44,9 @@ def run_ffprob(in_file, execu=ffprob, DeBug=False ):
 		runit = subprocess.Popen( ff_args,	stderr=subprocess.PIPE,
 											stdout=subprocess.PIPE )
 		out, err = runit.communicate()
-
 		jlist = json.loads(out.decode(console_encoding, errors='ignore'))
-		if DeBug  :
-			print ( json.dumps(jlist, indent=2 ) )
 		if err :
 			message += f" Error: { repr(err) }\n"
-			if DeBug :
-				message += f"\n{json.dumps(jlist, indent=2 )}\n"
-				print(f'  !:{message}' )
 		if len(jlist) < 2 :
 			message += f"F:{in_file}\nJson:\n{json.dumps(jlist, indent=2 )}"
 			print(message)
@@ -66,7 +59,7 @@ def run_ffprob(in_file, execu=ffprob, DeBug=False ):
 		raise Exception(message)
 
 	end_t = datetime.datetime.now()
-	message =f'  -End  : {end_t:%T}\tTotal: {(end_t-str_t).total_seconds():,}'
+	message =f'  -End: {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),2)} sec'
 	print ( message )
 
 	return jlist
@@ -88,27 +81,26 @@ def ffmpeg_run(input_file, ff_com, execu=ffmpeg):
 
 	banner = "title= " + file_name + " x256 "
 
-	ff_tail = ["-dn",
-				"-metadata", banner,
+	ff_tail =	[ "-metadata", banner,
 				"-movflags", "+faststart",
 				"-fflags", "+fastseek",
 #				"-fflags", "+genpts,+igndts",
 				"-y", out_file,
 #				"-f", "matroska"
-			 ]
+				]
 
 	todo = ff_head + ff_com + ff_tail
 # XXX:
-	if run_ffm(todo):
+	if run_ffm( todo ):
 		if not os.path.exists(out_file) or os.path.getsize(out_file) < 1000 :
 			message += f'\n No Output Error\n Execute in Debug Mode for more details'
 			print(message)
-			run_ffm(todo, message)
+	#		run_ffm(todo, message)
 			time.sleep(3)
 			raise Exception('$hit ', message)
 		else:
 			end_t = datetime.datetime.now()
-			message = f"  -Done:  -End  : {end_t:%T}\tTotal: {(end_t-str_t).total_seconds():,}"
+			message =f'  -End: {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),2)} sec'
 			print(message)
 			return out_file
 	else:
@@ -119,14 +111,14 @@ def ffmpeg_run(input_file, ff_com, execu=ffmpeg):
 ##>>============-------------------<  End  >------------------==============<<##
 
 
-def run_ffm(args, *debug):
-#	debug = True
+def run_ffm(args, *DeBug):
+#	DeBug = True
 	message = sys._getframe().f_code.co_name + '|:'
-	if debug :
+	if DeBug :
 		print(f'{message}\nDebug Mode\n{args[4:]}\n')
 		runit = subprocess.Popen(args)
 		out, err = runit.communicate()
-		message = f'\nDone\tOut: {out}\nErr: {err}'
+		message += f'\nDone\tOut: {out}\nErr: {err}\n'
 		print(message)
 		time.sleep(5)
 	else:
@@ -139,30 +131,42 @@ def run_ffm(args, *debug):
 			symbls = '|/-o+\\'
 			sy_len = len(symbls)
 			while not runit.poll() :
-				lineo = runit.stdout.readline()
-				if len(lineo) :
-					show_progrs(lineo, symbls[loc])
-					loc += 1
-					if  loc == sy_len:
-						loc = 0
-				else:
-					out, err = runit.communicate()
-					if err or out :
-						print(f'Erro:\nE:{err}\nO:{out}')
-						time.sleep(3)
-					break
-		except (Exception, PermissionError, OSError) as e:
-			runit.kill()
-			message += f" Exception => {e}\n"
+				try :
+					lineo = runit.stdout.readline()
+					if len(lineo) :
+						show_progrs(lineo, symbls[loc])
+						loc += 1
+						if  loc == sy_len:
+							loc = 0
+					else:
+						out, err = runit.communicate()
+						if err or out :
+							print(f'Error :\nE:{err}\nO:{out}')
+							time.sleep(3)
+						break
+				except Exception as x:
+					if DeBug : print (repr(x))
+					continue
+		except :
+			message += f" Exception => So lets try DEBUG mode"
 			print(message)
-			return False
-	message += f"\n Done"
+			try :
+				runit.kill()
+				runit = subprocess.Popen(args)
+				out, err = runit.communicate()
+				if out or err :
+					print (f'\nOut: {out}\nErr{err}\n' )
+				print('\nDone Looking Good :D')
+				return True
+			except :
+				print (':( Looking Bad :D')
+				return False
+
+	message += f"\n is Done"
 	if DeBug : print (message)
 
 	return True
-
 ##==============-------------------   End   -------------------==============##
-
 
 # XXX: New Code
 def pars_mtdta ( js_info , DeBug=False ) :
@@ -203,7 +207,7 @@ def pars_mtdta ( js_info , DeBug=False ) :
 					if years :
 						Leng =	f"{years:02d}y:{months:02d}m:{weeks:02}w:{days:02}d:{hours:02d}h:{minut:02d}m:{secs:2d}s"
 	# XXX: Print Banner
-	message = f"    |< MD >| Size: {hm_sz( _mtdta['size'])} | {Leng} | Strms: {_mtdta['nb_streams']} | BitRate: {hm_sz( glb_bitrate )} |"
+	message = f"    |< MD >|Size: {hm_sz( _mtdta['size'])} |L: {Leng} |Strms: {_mtdta['nb_streams']} |BitRate: {hm_sz( glb_bitrate )} |"
 	print(message)
 
 ##>>============-------------------<  End  >------------------==============<<##
@@ -227,42 +231,45 @@ def pars_video ( js_info , DeBug=False ) :
 		'tags' :{}
 		}
 # XXX: Presumes that the first Video is the real one !
-	count = -1
 	ff_video = []
-	for this_vid in js_info :
+	for count, this_vid in enumerate(js_info) :
 		extra = ''
-		count += 1
 
-		prs_frm_to(this_vid, _vdata, DeBug )
+		prs_frm_to(this_vid, _vdata, DeBug)
+
 		vid_width = _vdata['width']
 		vid_heigh = _vdata['height']
 		frm_rate = divd_strn(_vdata['r_frame_rate'])
 		if not frm_rate :
 			print(json.dumps(_vdata, indent=2))
 			frm_rate = 25
-
-		glb_totfrms = round(frm_rate * glb_vidolen)
-
 		if 'avg_frame_rate' in _vdata :
 			av_frm_rate = divd_strn(_vdata['avg_frame_rate'])
 			if av_frm_rate != frm_rate :
 				print(f' Diff fmr rate avg_frame_rate = {av_frm_rate} != r_frame_rate = {frm_rate}')
-		# NOTE: Expected Bitrate
+
 		glb_totfrms = round(frm_rate * glb_vidolen)
-		totl_pixl = vid_width * vid_heigh * glb_totfrms
-		exp_bitpp = 0.01
+
+		# NOTE: Expected Bitrate Kind of ... should be bigger 2 for low res and smaler for high 1.2 # XXX:
+		totl_pixl = vid_width * vid_heigh
+		if vid_heigh  < 720 :
+			expctd    = totl_pixl * 3
+		elif vid_heigh < 1080 :
+			expctd    = totl_pixl * 2.2
+		else :
+			expctd    = totl_pixl * 1.5
 
 		if re.search (r"yuv[a-z]?[0-9]{3}", _vdata['pix_fmt']) :
 			messa = f" {_vdata['pix_fmt']}"
 			if re.search (r"10le", _vdata['pix_fmt']) :
 				messa += " 10 Bit"
-# XXX: 			exp_bitpp *= 2 # 10/8 * 3
+				expctd *= 1.25 # 30/24
 
-		expctd      = round( totl_pixl * exp_bitpp )/1000
 		mins,  secs = divmod(glb_vidolen, 60)
 		hours, mins = divmod(mins, 60)
+
 # XXX: Print Banner
-		message = f"    |< CT >|{f'{hours:02d}h:{mins:02d}m'} |  {vid_width:>4}x{vid_heigh:<4} |Tfm: {hm_sz(glb_totfrms,'F'):7}|Tpx: {hm_sz(totl_pixl, 'P')}|Xbr: {hm_sz(expctd,'R')}|Vid: {len(js_info)}| {messa}"
+		message = f"    |< CT >|{vid_width:>4}x{vid_heigh:<4}|Tfm: {hm_sz(glb_totfrms,'F'):7}|Tpx: {hm_sz(totl_pixl, 'P')}|Xbr: {hm_sz(round(expctd),'x')}|V: {len(js_info)}| {messa}"
 		print(message)
 
 		if 'codec_name' not in _vdata:
@@ -270,7 +277,7 @@ def pars_video ( js_info , DeBug=False ) :
 			message = f"   No Video Codec |<V:{_vdata}\n"
 			raise Exception(message)
 		elif _vdata['codec_name'].lower() in ['mjpeg', 'png'] :
-			message = f"    |<V:{_vdata['index']:2}>|{_vdata['_vdata']:7} | > Skip this "
+			message = f"    |<V:{_vdata['index']:2}>|{_vdata['_vdata']:8} | > Skip this "
 			print(message)
 			continue
 
@@ -280,31 +287,31 @@ def pars_video ( js_info , DeBug=False ) :
 				_vi_btrt = glb_bitrate * 0.8	# estimate 80% is video
 				extra = ' BitRate Estimate'
 			else :
-				_vi_btrt = 123456
+				_vi_btrt = int(_vdata['bit_rate'])
 		else:
 			_vi_btrt = int(_vdata['bit_rate'])
 
 		ff_vid = ['-map', '0:' + str(_vdata['index']), '-c:v:' + str(count)]
 
-		if vid_width > 1920 or vid_heigh > 1080 :
+		if vid_width > 2592 or vid_heigh > 1280 :
 			output = "2K"
-			factore_w = round(vid_width / 1920, 1)
-			factore_h = round(vid_heigh / 1080, 1)
-			nw = round( vid_width/factore_w)
-			nh = round( vid_heigh/factore_h)
 			if   vid_width >= 7600 or vid_heigh >= 4300:
 				output = "8K"
 			elif vid_width >= 3800 or vid_heigh >= 2100:
 				output = "4K"
+			factore_w = round(vid_width / 1920)
+			factore_h = round(vid_heigh / 1080)
+			if factore_h != factore_w :
+				output +=f"  W != H, {factore_w}, {factore_h}"
+			nw = round( vid_width/factore_w)
+			nh = round( vid_heigh/factore_h)
 			extra += f'\t{output} Scale {vid_width}x{vid_heigh} to {nw}x{nh}'
 			scalare = 'scale= ' +str(nw) +':' +str(nh)
 			ff_vid.extend(['libx265', '-vf', scalare, '-preset', 'slow'])
-			if factore_h != factore_w :
-				output +="  W != H, factore_w, factore_h"
 
-		elif _vi_btrt < expctd :
+		elif _vi_btrt < (expctd) :
 			if _vdata['codec_name'] == 'hevc':
-				extra += '\t\tCopy'
+				extra += '\tCopy'
 				ff_vid.extend(['copy'])
 			else:
 				ff_vid.extend(['libx265'])
@@ -313,21 +320,21 @@ def pars_video ( js_info , DeBug=False ) :
 					ff_vid.extend(['-preset', 'slow'])
 				elif vid_width >= 720 or vid_heigh >= 500:
 					output = "HD"
-					ff_vid.extend(['-preset', 'medium'])
+					ff_vid.extend(['-preset', 'slow'])
 				else:
 					output = "SD"
-					ff_vid.extend(['-preset', 'fast'])
+					ff_vid.extend(['-preset', 'medium'])
 				extra += f'\t{output} Convert to x265'
 		else:
 			if _vdata['codec_name'] == 'hevc':
-				extra += '\t\t\tReduce BitRate: ' + hm_sz(expctd)
+				extra += '\tReduce to: ' + hm_sz(expctd)
 				#				['libx265', '-b:v', str(expctd)])
 				ff_vid.extend(['libx265'])
 			else:
-				extra += '\t\t\tConvert to Hevc'
+				extra += '\tConvert to Hevc'
 				ff_vid.extend(['libx265'])
 			ff_vid.extend(['-preset', 'slow'])
-		message = f"    |<V:{_vdata['index']:2}>|{_vdata['codec_name']:7} |Br: {hm_sz(_vi_btrt,'R'):>8}|Fps: {frm_rate:>7}| {extra}"
+		message = f"    |<V:{_vdata['index']:2}>|{_vdata['codec_name']:8} |Br: {hm_sz(_vi_btrt,'R'):>9}|Xbr: {hm_sz(expctd,'R'):>8}|Fps: {frm_rate:>7}| {extra}"
 		print(message)
 		if (DeBug) :print (ff_vid)
 
@@ -342,26 +349,27 @@ def pars_audio ( js_info , DeBug=False ) :
 	_adata = {
 		'index': int,
 		'codec_name': str,
-    	"codec_type": str,
-        'language': str,
-        'title': str,
-    	"sample_rate": int,
-    	"channels": int,
-    	"channel_layout": str,
-    	"time_base": str,
-    	"start_pts": int,
-    	"start_time": str,
-    	"bit_rate": str,
-        'disposition': {},
+		"codec_type": str,
+		'language': str,
+		'title': str,
+		"sample_rate": int,
+		"channels": int,
+		"channel_layout": str,
+		"time_base": str,
+		"start_pts": int,
+		"start_time": str,
+		"bit_rate": str,
+		'disposition': {},
 		'tags':{}
 		}
 	# XXX: Audio
-	count = -1
 	ff_audio =[]
-	for this_aud in js_info :
+	for count, this_aud in enumerate(js_info) :
 		prs_frm_to(this_aud, _adata, DeBug )
 		extra = ''
-		count += 1
+
+#		print ( json.dumps(_adata, indent=3 ) )
+
 		if DeBug :
 			print(f"    +{message}=: Start: {str_t:%T}\n {json.dumps(_adata, indent=2)}" )
 		try :
@@ -370,7 +378,6 @@ def pars_audio ( js_info , DeBug=False ) :
 			if 'bit_rate' in _adata:
 				if (_adata['bit_rate']) == "Pu_la" :
 # XXX: Probably aac ?
-#					print ( json.dumps(_adata, indent=3 ) )
 					_au_btrt = glb_bitrate * 0.2	# estimate 20% is video
 					extra = ' BitRate Estimate'
 				else :
@@ -379,7 +386,7 @@ def pars_audio ( js_info , DeBug=False ) :
 				print (json.dumps(js_info, indent=2))
 				extra = "Audio Bitrate Extimate"
 				_au_btrt = 123
-			if 'tags' and 'language' in _adata :
+			if 'language' in _adata['tags'] :
 				_lng = _adata['tags']['language']
 			else :
 				_lng = 'wtf'
@@ -397,12 +404,14 @@ def pars_audio ( js_info , DeBug=False ) :
 			else:
 				extra += '\tConvert'
 				ff_aud.extend(['libvorbis', '-q:a', '8'])
-			message = f"    |<A:{_adata['index']:2}>|{_adata['codec_name']:7} |Br: {hm_sz(_au_btrt):>8}|Fq : {hm_sz(_adata['sample_rate']):>6}|Ch: {_adata['channels']}|{_lng}|Dispo: default={_dflt}, forced={_disp}| {extra}"
+			message = f"    |<A:{_adata['index']:2}>|{_adata['codec_name']:8} |Br: {hm_sz(_au_btrt):>8}|Fq : {hm_sz(_adata['sample_rate']):>8}|Cha: {_adata['channels']}|Ln: {_lng}|Dispo: default={_dflt}, forced={_disp}| {extra}"
 			print( message )
 			if (DeBug) : print (ff_aud)
+
 		except Exception as e:
 			message += f" Exception"
 			Trace (message, e)
+
 		ff_audio += ff_aud
 	if DeBug : print("  ", ff_audio )
 
@@ -413,38 +422,37 @@ def pars_subtl ( js_info , DeBug=False ) :
 	message = sys._getframe().f_code.co_name + ':'
 	_sdata = {
 		'index': int,
-        'codec': str,
+		'codec': str,
 		'codec_name': str,
 		'codec_type': str,
-        'language': str,
-        'title': str,
-        'map': int,
-        'source': int,
-        'path': str,
-        'disposition': {},
+		'language': str,
+		'title': str,
+		'map': int,
+		'source': int,
+		'path': str,
+		'disposition': {},
 		'tags':{}
-    }
+	}
 	# XXX: Subtitle
-	count = -1
 	ff_subtl =[]
-	for this_sub in js_info :
+	for count, this_sub in enumerate(js_info) :
 		extra = ''
-		count += 1
 		prs_frm_to(this_sub, _sdata, DeBug )
 		if DeBug :
-			print(f"    +{message}=: Start: {str_t:%T}\n {json.dumps(_adata, indent=2)}" )
+			print(f"    +{message}=: Start: {str_t:%T}\n {json.dumps(_sdata, indent=2)}" )
 		try :
 			ff_sub = ['-map', '0:' + str(_sdata['index']), '-c:s:' + str(count)]
 # XXX:
-			if 'tags' in _sdata:
+			if ('tags' and 'language') in _sdata['tags'] :
 				_lng = _sdata['tags']['language']
-				if 'Pu_la' in _sdata['tags']:
-					_lng = 'wtf'
+			else :
+				_lng = 'wtf'
+
 # XXX: #https://askubuntu.com/questions/214199/how-do-i-add-and-or-keep-subtitles-when-converting-video
-			if _sdata['codec_name'].lower() in ('hdmv_pgs_subtitle', 'dvd_subtitle', 'ass' ):
+			if _sdata['codec_name'].lower() in ('hdmv_pgs_subtitle', 'dvd_subtitle', 'ass'):
 				extra += f"Skip {_sdata['codec_name']}"
-				ff_sub = [ '-sn']
-			else:
+				ff_sub = []
+			else :
 				if _lng == 'eng':
 					extra += f"Move Text & Make Default {_sdata['codec_name']}"
 					ff_sub.extend(['mov_text'])
@@ -460,11 +468,44 @@ def pars_subtl ( js_info , DeBug=False ) :
 		except Exception as e:
 			message += f" Exception"
 			Trace (message, e)
+		if DeBug :
+			print(f"\n {json.dumps(_sdata, indent=2)}\n{ff_sub}\n" )
 		ff_subtl += ff_sub
 	if DeBug : print ("  ", ff_subtl )
 
 	return( ff_subtl )
 ##>>============-------------------<  End  >------------------==============<<##
+
+def pars_extdta( js_info, DeBug ) :
+	str_t = datetime.datetime.now()
+	message = sys._getframe().f_code.co_name + ':'
+	_ddata = {
+		'index': int,
+		'codec': str,
+		'codec_name': str,
+		'codec_type': str,
+		'language': str,
+		'tags':{}
+	}
+	# XXX: Data
+	ff_dext =[]
+	for this_dat in js_info :
+		prs_frm_to(this_dat, _ddata, DeBug )
+		if DeBug : print(f"    +{message}=: Start: {str_t:%T}\n {json.dumps(_ddata, indent=2)}" )
+		try :
+			ff_dat = ['-map', '0:' + str(_ddata['index']), '-dn']
+			message = f"    |<D:{_ddata['index']:2}>|{_ddata['codec']:8}|{_ddata['codec_name']:8}|{_ddata['codec_type']:^11} |"
+			print(message)
+			if (DeBug) : print (ff_dat)
+
+		except Exception as e:
+			message += f" Exception"
+			Trace (message, e)
+		ff_dext += ff_dat
+
+	return ff_dext
+##>>============-------------------<  End  >------------------==============<<##
+
 
 def pars_metadta(mta_dta, DeBug=False):
 	str_t = datetime.datetime.now()
@@ -472,38 +513,33 @@ def pars_metadta(mta_dta, DeBug=False):
 	if DeBug :		print(f"  +{message}=: Start: {str_t:%T}")
 
 	all_formt = mta_dta.get('format')
-	if len(all_formt) :
-		pars_mtdta ( all_formt , DeBug )
-	else :
-		message += f"\n{ json.dumps(mta_dta, indent=2) }\n No Format\n"
-		raise ValueError(message)
 
 	all_strms = mta_dta.get('streams')
 	if len (all_strms) :
-		all_audio = []
 		all_video = []
+		all_audio = []
 		all_subtl = []
+		all_datas = []
 		for strm_x in all_strms:
 			if   strm_x['codec_type'] == 'video' :
 				all_video.append(strm_x)
 			elif strm_x['codec_type'] == 'audio' :
 				all_audio.append(strm_x)
-			elif strm_x['codec_type'] == 'subtitle':
+			elif strm_x['codec_type'] == 'subtitle' :
 				all_subtl.append(strm_x)
-			elif strm_x['codec_type'] == 'data':
-				print ("\nWe have data:")
-#				print (json.dumps(strm_x, indent=2))
+			elif strm_x['codec_type'] == 'data' :
+				all_datas.append(strm_x)
 			else:
-				message += f"\n  Unknown Codec Type: {strm_x['codec_type']}\n"
+				message += f"\n Unknown Codec Type: {strm_x['codec_type']}\n"
 				print (message)
 				print (json.dumps(strm_x, indent=2))
-				time.sleep(3)
+				time.sleep(5)
 			if DeBug :	print (json.dumps(strm_x, indent=2))
 	else :
-		message += f"\n{ json.dumps(mta_dta, indent=2) }\n No Stream\n"
+		message += f"\n{ json.dumps(mta_dta, indent=2) }\n\n No Streams\n"
 		raise ValueError(message)# XXX: Check it :)
 
-	return all_video, all_audio, all_subtl, all_formt
+	return all_formt, all_video, all_audio, all_subtl, all_datas
 ##>>============-------------------<  End  >------------------==============<<##
 
 def thza_brain(in_file, mta_dta, DeBug=False):
@@ -515,27 +551,44 @@ def thza_brain(in_file, mta_dta, DeBug=False):
 		message += ' No Metadata Nothing to do here'
 		raise Exception(message)
 	try:
-		vdo_strm, aud_strm, sub_strm, frmt_inf = pars_metadta( mta_dta, DeBug )
+		frmt_inf, vdo_strm, aud_strm, sub_strm, ext_data = pars_metadta( mta_dta, DeBug )
 
-# XXX: Video
+		# XXX: Meta Data
+		if len(frmt_inf) :
+			pars_mtdta ( frmt_inf, DeBug )
+		else :
+			message += f"\n{ json.dumps(mta_dta, indent=2) }\n No Format\n"
+			raise ValueError(message)
+
+		# XXX: Video
 		if len ( vdo_strm) :
 			ff_video = pars_video( vdo_strm, DeBug )
 		else :
 			ff_video = ['-vn']
-			print("f    |<no:V>|\n")
+			print("    |<no:V>|")
 
-# XXX: Audio
+		# XXX: Audio
 		if len ( aud_strm ):
 			ff_audio = pars_audio( aud_strm, DeBug )
 		else :
 			ff_audio = ['-an']
-			print("f    |<A:no>|\n")
-# XXX Subtitle
+			print("    |<A:no>|")
+
+		# XXX Subtitle
 		if len ( sub_strm ):
 			ff_subtl = pars_subtl( sub_strm, DeBug )
+			if not len (ff_subtl) :
+				ff_subtl = ['-sn']
 		else :
 			ff_subtl = ['-sn']
-			print(f"    |<S:no>|\n")
+			print("    |<S:no>|")
+
+		# XXX Data
+		if len ( ext_data ):
+			ff_exdta = pars_extdta( ext_data, DeBug  )
+		else :
+			ff_exdta = []
+			print("    |<D:no>|")
 
 	except Exception as e:
 		message += f" FFZa_Brain: Exception"
@@ -544,18 +597,16 @@ def thza_brain(in_file, mta_dta, DeBug=False):
 
 # XXX: Do nothing if all is well needs to rework it a bit
 	_, extens = os.path.splitext(in_file)
-	if (extens.lower() == TmpF_Ex.lower()) and ('copy' in ff_video) and ('copy' or '-an' in ff_audio) and ('copy' or '-sn' in ff_subtl) :
-			print ( "NOTHING to DO" )
-			message = f"\t| <¯\_(%)_/¯>  Skip |"
-			raise ValueError(message)
+	if (extens.lower() == TmpF_Ex.lower()) and ('copy' in ff_video) and ('copy' or '-an' in ff_audio) and ('copy' or '-sn' in ff_subtl) :# and ('-dn' in ff_exdta) :
+		raise ValueError(f"| <¯\_(%)_/¯>  Skip |")
 	else:
-		ffmpeg_cmnd = ff_video + ff_audio + ff_subtl
+		ffmpeg_cmnd = ff_video + ff_audio + ff_subtl +ff_exdta
 
 	if (DeBug) :
 		print (ffmpeg_cmnd)
 
 	end_t = datetime.datetime.now()
-	message = f'  -End  : {end_t:%T}\tTotal: {(end_t-str_t).total_seconds():,}'
+	message =f'  -End: {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),2)} sec'
 	print (message)
 
 	return ffmpeg_cmnd
@@ -643,7 +694,7 @@ def make_matrx(input_file, execu=ffmpeg, ext = '.png'):
 			message = f"\r    |3x3| Matrix Created {ext}"
 			print(message)
 			end_t = datetime.datetime.now()
-			message = f" -make_matrx Done !!:  -End  : {end_t:%T}\tTotal: {(end_t-str_t).total_seconds():,}"
+			message = f" -make_matrx Done !!: {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),2)} sec"
 			return os.path.getsize(file_name)
 		else:
 			message = f"   = Failed to Created .PNG >"

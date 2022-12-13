@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # XXX KISS
+
 import os
 import sys
 import time
@@ -34,10 +35,10 @@ def file_size(path):
 		return sum(f.stat().st_size for f in path.glob('**/*') if f.is_file()) / mb
 	else:
 		return 0.0
+##>>============-------------------<  End  >------------------==============<<##
 
 # XXX: https://shallowsky.com/blog/programming/python-tee.html
 class Tee (list):
-
 	def __init__(self, *targets):
 		self.targets = targets
 
@@ -47,18 +48,45 @@ class Tee (list):
 				ftarg.close()
 
 	def write(self, obj):
+		DeBug = False
 		for ftarg in self.targets:
 			try:
 				ftarg.write(obj)
 				ftarg.flush()
-			except Exception as e:
-				messa += " WTF? Exception "
-				Trace (messa, e)
+			except Exception as x:
+				if DeBug : print (repr(x))
+				continue
 	def flush(self):
 		return
 
 ##>>============-------------------<  End  >------------------==============<<##
 
+
+def copy_move(src, dst, keep_it=False):
+	# https://stackoverflow.com/questions/7419665/python-move-and-overwrite-files-and-folders
+	messa = sys._getframe().f_code.co_name + '-:'
+
+	do_it = shutil.move
+	if keep_it:
+		do_it = shutil.copy2
+		print(f"Placebo Copied to {dst} Not Deleted:\n{src}")
+		time.sleep(1)
+	try:
+#        if os.path.exists(dst) and os.path.samefile(src, dst):
+#            os.utime(dst, None)
+#            os.remove(src)
+#            return True
+
+		do_it(src, dst)
+
+	except (PermissionError, IOError, OSError) as er:
+		messa += f' Exception: '
+		print (messa, er)
+		time.sleep(3)
+#		input ("Delete?")
+#		os.remove(src)
+	return True
+	##==============-------------------   End   -------------------==============##
 
 def print_alighned(list_of_strings):
 	'''
@@ -159,18 +187,52 @@ def hm_sz( nbyte, type = "B" ):
 ##==============-------------------   End   -------------------==============##
 
 def prs_frm_to(strm, dictio, DeBug =False ):
-	messa = sys._getframe().f_code.co_name
-	str_t = datetime.datetime.now()
+#	messa = sys._getframe().f_code.co_name
+#	str_t = datetime.datetime.now()
+
+	resul = dictio
+	try:
+		for key in dictio.keys():
+			item = strm.get(key, 'Pu_la')
+			if item == 'Pu_la':
+				resul[key] = 'Pu_la'
+				if DeBug : print ("\nPu_la in:", key, '\n' )
+			else:
+				ty = type(item)
+				dy = type(dictio[key])
+
+#				if DeBug : print('Before Key:',key,'\n', ty, item ,'\n', dy , dictio[key])
+
+				if   ty == str and dy == int:
+					resul[key] = int(item)
+				elif ty == str and dy == float:
+					resul[key] = float(item)
+				elif dy == dict:
+					resul[key] = dict(item)
+				else:
+					resul[key] = item
+#				if DeBug : print('After  Key:',key,'\n', dy , dictio[key])
+
+	except Exception as e:
+		print( '\n', len(strm), strm, '\n', len(dictio), dictio )
+		messa += f'\n{len(strm)}\n{json.dumps(strm, indent=2)}\n{len(resul)}\n{json.dumps(dictio, indent=2)}'
+		print(messa)
+		Trace(messa, e)
+		input("All Fuked up")
+
+	if len(dictio) > 1:
+		return tuple(dictio.values())
+	else:
+		return dictio[key]
 	'''
 	rsult = dict ()
-	# XXX: Fast version only defined data is caopied if done reversed walk over js_info could see the extra unused information  :D
+	# XXX: Fast version only defined data is copied if done reversed walk over js_info could see the extra unused information  :D
 	for key in _mtdta.keys():
 		rsult[key] = js_info.get(key)
 		if not rsult[key]  :
 			pass
 		if DeBug:	print (key, ' = ', rsult[key] )
 	if DeBug:	print ( json.dumps( rsult, indent=2 ) )
-	'''
 
 	if DeBug :
 		print(f"  +{messa}=: Start: {str_t:%T}")
@@ -186,42 +248,8 @@ def prs_frm_to(strm, dictio, DeBug =False ):
 			raise Except
 
 		print( type (strm),  '\n', len(strm),  'Items:\n', json.dumps(strm,   indent=2), '\n',
-		       type(dictio), '\n', len(dictio),'Items:\n', json.dumps(dictio, indent=2) )
-
-	resul = dictio
-	try:
-		for key in dictio.keys():
-			item = strm.get(key, 'Pu_la')
-			if item == 'Pu_la':
-				resul[key] = 'Pu_la'
-				if DeBug :
-					print ("\nPu_la ", key, '\n' )
-			else:
-				ty = type(item)
-				dy = type(dictio[key])
-
-				if DeBug : print('Before Key:',key,'\n', ty, item ,'\n', dy , dictio[key])
-				if   ty == str and dy == int:
-					resul[key] = int(item)
-				elif ty == str and dy == float:
-					resul[key] = float(item)
-				elif dy == dict:
-					resul[key] = dict(item)
-				else:
-					resul[key] = item
-				if DeBug : print('After  Key:',key,'\n', dy , dictio[key])
-
-	except Exception as e:
-		print( '\n', len(strm), strm, '\n', len(dictio), dictio )
-		Trace (messa, e)
-		messa += f'\n{len(strm)}\n{json.dumps(strm, indent=2)}\n{len(resul)}\n{json.dumps(dictio, indent=2)}'
-		print(messa)
-		input("All Fuked up")
-
-	if len(dictio) > 1:
-		return tuple(dictio.values())
-	else:
-		return dictio[key]
+			   type(dictio), '\n', len(dictio),'Items:\n', json.dumps(dictio, indent=2) )
+	'''
 ##==============-------------------   End   -------------------==============##
 
 def Trace ( message, e, DeBug= False ) :
@@ -240,11 +268,11 @@ def Trace ( message, e, DeBug= False ) :
 		if  funcname != '<module>':
 			funcname = funcname + '()'
 		print(template.format(
-		        filename=os.path.basename(filename),
-		        lineno=lineno,
-		        source=source,
-		        funcname=funcname)
-			    )
+				filename=os.path.basename(filename),
+				lineno=lineno,
+				source=source,
+				funcname=funcname)
+				)
 	print("^"*80,)
 	print("-"*80)
 
@@ -347,28 +375,3 @@ def get_tree_size(path):
 
 	return total
 ##==============-------------------   End   -------------------==============##
-
-def copy_move(src, dst, keep_it=False):
-	# https://stackoverflow.com/questions/7419665/python-move-and-overwrite-files-and-folders
-	messa = sys._getframe().f_code.co_name + '-:'
-
-	do_it = shutil.move
-	if keep_it:
-		do_it = shutil.copy2
-		print(f" ! Placebo will NOT delete: {src}")
-		time.sleep(2)
-	try:
-#        if os.path.exists(dst) and os.path.samefile(src, dst):
-#            os.utime(dst, None)
-#            os.remove(src)
-#            return True
-		do_it(src, dst)
-
-	except (PermissionError, IOError, OSError) as er:
-		messa += f' Exception: '
-		Trace (messa, er)
-		time.sleep(3)
-#		input ("Delete?")
-#		os.remove(src)
-	return True
-	##==============-------------------   End   -------------------==============##
