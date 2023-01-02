@@ -8,7 +8,6 @@ import json
 import datetime
 import subprocess
 
-
 ffmpg_bin = 'C:\\Program Files\\ffmpeg\\bin'
 
 ffmpeg = os.path.join(ffmpg_bin, "ffmpeg.exe")
@@ -19,7 +18,6 @@ if not ( os.path.exists(ffmpeg) and os.path.exists(ffprob) ):
 	message += f"{ffmpeg}\nPath Does not Exist:"
 	input(message)
 	raise OSError
-
 ##==============-------------------   End   -------------------==============##
 
 def run_ffprob(in_file, execu=ffprob, DeBug=False ):
@@ -168,50 +166,6 @@ def run_ffm(args, *DeBug):
 	return True
 ##==============-------------------   End   -------------------==============##
 
-# XXX: New Code
-def pars_mtdta ( js_info , DeBug=False ) :
-	str_t = datetime.datetime.now()
-	message = sys._getframe().f_code.co_name + 'c:'
-	if DeBug :	print(f"   +{message}=: Start: {str_t:%T}\n {json.dumps(js_info, indent=2)}" )
-
-	global glb_vidolen  # make it global so we can reuse for fmpeg check ...
-	global glb_bitrate  # make it global so we can reuse for fmpeg check ...
-	global glb_totfrms
-
-	_mtdta = dict(	filename='',
-					nb_streams=int(0),
-					duration=float(0),
-					bit_rate=int(0),
-					size=float(0)
-					)
-	prs_frm_to(js_info, _mtdta, DeBug )
-
-	glb_vidolen = int(_mtdta['duration'])
-	glb_bitrate = int(_mtdta['bit_rate'])
-
-	minut,  secs = divmod(glb_vidolen, 60)
-	Leng =		f"{minut:02d}m:{secs:2d}s"
-	hours, minut = divmod(minut, 60)
-	if hours :
-		Leng =	f"{hours:02d}h:{minut:02d}m:{secs:2d}s"
-		days,  hours = divmod(hours, 24)
-		if days  :
-			Leng =	f"{days:02}d:{hours:02d}h:{minut:02d}m:{secs:2d}s"
-			weeks, days  = divmod(days, 7)
-			if weeks :
-				Leng =	f"{weeks:02}w:{days:02}d:{hours:02d}h:{minut:02d}m:{secs:2d}s"
-				months, weeks = divmod(weeks, 4)
-				if months :
-					Leng =	f"{months:02d}m:{weeks:02}w:{days:02}d:{hours:02d}h:{minut:02d}m:{secs:2d}s"
-					years , months = divmod(months, 12)
-					if years :
-						Leng =	f"{years:02d}y:{months:02d}m:{weeks:02}w:{days:02}d:{hours:02d}h:{minut:02d}m:{secs:2d}s"
-	# XXX: Print Banner
-	message = f"    |< MD >|Size: {hm_sz( _mtdta['size'])} |L: {Leng} |Strms: {_mtdta['nb_streams']} |BitRate: {hm_sz( glb_bitrate )} |"
-	print(message)
-
-##>>============-------------------<  End  >------------------==============<<##
-
 def pars_video ( js_info , DeBug=False ) :
 	str_t = datetime.datetime.now()
 	message = sys._getframe().f_code.co_name + ':'
@@ -237,49 +191,52 @@ def pars_video ( js_info , DeBug=False ) :
 
 		prs_frm_to(this_vid, _vdata, DeBug)
 
-		vid_width = _vdata['width']
-		vid_heigh = _vdata['height']
-		frm_rate = divd_strn(_vdata['r_frame_rate'])
-		if not frm_rate :
-			print(json.dumps(_vdata, indent=2))
-			frm_rate = 25
-		if 'avg_frame_rate' in _vdata :
-			av_frm_rate = divd_strn(_vdata['avg_frame_rate'])
-			if av_frm_rate != frm_rate :
-				print(f' Diff fmr rate avg_frame_rate = {av_frm_rate} != r_frame_rate = {frm_rate}')
-
-		glb_totfrms = round(frm_rate * glb_vidolen)
-
-		# NOTE: Expected Bitrate Kind of ... should be bigger 2 for low res and smaler for high 1.2 # XXX:
-		totl_pixl = vid_width * vid_heigh
-		if vid_heigh  < 720 :
-			expctd    = totl_pixl * 3
-		elif vid_heigh < 1080 :
-			expctd    = totl_pixl * 2.2
-		else :
-			expctd    = totl_pixl * 1.5
-
-		if re.search (r"yuv[a-z]?[0-9]{3}", _vdata['pix_fmt']) :
-			messa = f" {_vdata['pix_fmt']}"
-			if re.search (r"10le", _vdata['pix_fmt']) :
-				messa += " 10 Bit"
-				expctd *= 1.25 # 30/24
-
-		mins,  secs = divmod(glb_vidolen, 60)
-		hours, mins = divmod(mins, 60)
-
-# XXX: Print Banner
-		message = f"    |< CT >|{vid_width:>4}x{vid_heigh:<4}|Tfm: {hm_sz(glb_totfrms,'F'):7}|Tpx: {hm_sz(totl_pixl, 'P')}|Xbr: {hm_sz(round(expctd),'x')}|V: {len(js_info)}| {messa}"
-		print(message)
-
 		if 'codec_name' not in _vdata:
 			_vdata['codec_name'] = 'No Codec Name ?'
 			message = f"   No Video Codec |<V:{_vdata}\n"
 			raise Exception(message)
 		elif _vdata['codec_name'].lower() in ['mjpeg', 'png'] :
-			message = f"    |<V:{_vdata['index']:2}>|{_vdata['_vdata']:8} | > Skip this "
+			message = f"    |<V:{_vdata['index']:2}>|{_vdata['codec_name']:<8} | > Skip this"
 			print(message)
 			continue
+
+		vid_width = _vdata['width']
+		vid_heigh = _vdata['height']
+	# NOTE: Expected Bitrate Kind of ... should be bigger 2.5x for low res and smaler for high 1.5 # XXX:
+		totl_pixl = vid_width * vid_heigh
+		if vid_heigh   < 720 :
+			expctd = totl_pixl * 2.5
+		elif vid_heigh < 1080 :
+			expctd = totl_pixl * 1.8
+		else :
+			expctd = totl_pixl
+
+		if 'r_frame_rate' in _vdata :
+			frm_rate = divd_strn(_vdata['r_frame_rate'])
+		if not frm_rate :
+			print(json.dumps(_vdata, indent=2))
+			frm_rate = 25
+
+		if 'avg_frame_rate' in _vdata :
+			av_frm_rate = divd_strn(_vdata['avg_frame_rate'])
+
+		if av_frm_rate != frm_rate :
+			print(f' Diff fmr rate: avg_frame_rate = {av_frm_rate} != r_frame_rate = {frm_rate}')
+
+		glb_totfrms = round(frm_rate * glb_vidolen)
+
+		if re.search (r"yuv[a-z]?[0-9]{3}", _vdata['pix_fmt']) :
+			messa = f" {_vdata['pix_fmt']}"
+			if re.search (r"10le", _vdata['pix_fmt']) :
+				messa += " 10 Bit"
+				expctd *= 1.3 # 30/24 +15% extra
+
+		mins,  secs = divmod(glb_vidolen, 60)
+		hours, mins = divmod(mins, 60)
+
+# XXX: Print Banner
+		message = f"    |< CT >|{vid_width:>4}x{vid_heigh:<4}|Tfm: {hm_sz(glb_totfrms,'F'):>7}|Tpx: {hm_sz(totl_pixl, 'P'):>8}|XBr: {hm_sz(round(expctd),'B'):>7}|\t{messa}"
+		print(message)
 
 		if 'bit_rate' in _vdata:
 			if (_vdata['bit_rate']) == "Pu_la" :
@@ -334,7 +291,7 @@ def pars_video ( js_info , DeBug=False ) :
 				extra += '\tConvert to Hevc'
 				ff_vid.extend(['libx265'])
 			ff_vid.extend(['-preset', 'slow'])
-		message = f"    |<V:{_vdata['index']:2}>|{_vdata['codec_name']:8} |Br: {hm_sz(_vi_btrt,'R'):>9}|Xbr: {hm_sz(expctd,'R'):>8}|Fps: {frm_rate:>7}| {extra}"
+		message = f"    |<V:{_vdata['index']:2}>|{_vdata['codec_name']:<8} |Br: {hm_sz(_vi_btrt,'B'):>9}|XBr: {hm_sz(expctd,'B'):>8}|Fps: {frm_rate:>7}| {extra}"
 		print(message)
 		if (DeBug) :print (ff_vid)
 
@@ -343,6 +300,8 @@ def pars_video ( js_info , DeBug=False ) :
 
 	return ff_video
 ##>>============-------------------<  End  >------------------==============<<##
+
+# XXX: Audio
 def pars_audio ( js_info , DeBug=False ) :
 	str_t = datetime.datetime.now()
 	message = sys._getframe().f_code.co_name + ':'
@@ -362,7 +321,6 @@ def pars_audio ( js_info , DeBug=False ) :
 		'disposition': {},
 		'tags':{}
 		}
-	# XXX: Audio
 	ff_audio =[]
 	for count, this_aud in enumerate(js_info) :
 		prs_frm_to(this_aud, _adata, DeBug )
@@ -379,7 +337,7 @@ def pars_audio ( js_info , DeBug=False ) :
 				if (_adata['bit_rate']) == "Pu_la" :
 # XXX: Probably aac ?
 					_au_btrt = glb_bitrate * 0.2	# estimate 20% is video
-					extra = ' BitRate Estimate'
+					extra = 'BitRate Estimate '
 				else :
 					_au_btrt = int( _adata['bit_rate'])
 			else :
@@ -394,17 +352,25 @@ def pars_audio ( js_info , DeBug=False ) :
 				_disp = _adata['disposition']['forced']
 				_dflt = _adata['disposition']['default']
 
+			chnls = _adata['channels']
+			if chnls == 1:
+				extra += "Mono"
+			elif chnls == 2:
+				extra += "Stereo"
+			elif chnls > 2:
+				extra += f"{chnls -1}.1 Channels"
+
 			if _adata['codec_name'] in ('aac', 'vorbis'):
 				if _au_btrt <= Max_a_btr :
-					extra += '\tCopy'
+					extra += '  Copy'
 					ff_aud.extend(['copy'])
 				else:
-					extra += '\tReduce BitRate'
+					extra += ' Reduce BitRate'
 					ff_aud.extend(['libvorbis', '-q:a', '8'])
 			else:
-				extra += '\tConvert'
+				extra += ' Convert'
 				ff_aud.extend(['libvorbis', '-q:a', '8'])
-			message = f"    |<A:{_adata['index']:2}>|{_adata['codec_name']:8} |Br: {hm_sz(_au_btrt):>8}|Fq : {hm_sz(_adata['sample_rate']):>8}|Cha: {_adata['channels']}|Ln: {_lng}|Dispo: default={_dflt}, forced={_disp}| {extra}"
+			message = f"    |<A:{_adata['index']:2}>|{_adata['codec_name']:<8} |Br: {hm_sz(_au_btrt):>9}|Fq : {hm_sz(_adata['sample_rate']):>8}|Cha: {chnls}|Ln: {_lng}|Dispo: default={_dflt}, forced={_disp}| {extra}"
 			print( message )
 			if (DeBug) : print (ff_aud)
 
@@ -417,6 +383,8 @@ def pars_audio ( js_info , DeBug=False ) :
 
 	return ff_audio
 ##>>============-------------------<  End  >------------------==============<<##
+
+# XXX: Subtitle
 def pars_subtl ( js_info , DeBug=False ) :
 	str_t = datetime.datetime.now()
 	message = sys._getframe().f_code.co_name + ':'
@@ -433,7 +401,6 @@ def pars_subtl ( js_info , DeBug=False ) :
 		'disposition': {},
 		'tags':{}
 	}
-	# XXX: Subtitle
 	ff_subtl =[]
 	for count, this_sub in enumerate(js_info) :
 		extra = ''
@@ -462,7 +429,7 @@ def pars_subtl ( js_info , DeBug=False ) :
 					ff_sub.extend(['mov_text'])
 #						['mov_text', '-metadata:s:s:' + str(count), "title="+ _sdata['codec_name']] )
 
-			message = f"    |<S:{_sdata['index']:2}>|{_sdata['codec_name']:8}|{_sdata['codec_type']:^11} |{_lng:3}| {extra}"
+			message = f"    |<S:{_sdata['index']:2}>|{_sdata['codec_name']:<9}|{_sdata['codec_type']:<13}|{_lng:3}| {extra}"
 			print(message)
 			if (DeBug) : print (ff_sub)
 		except Exception as e:
@@ -476,6 +443,7 @@ def pars_subtl ( js_info , DeBug=False ) :
 	return( ff_subtl )
 ##>>============-------------------<  End  >------------------==============<<##
 
+# XXX: Extra Data
 def pars_extdta( js_info, DeBug ) :
 	str_t = datetime.datetime.now()
 	message = sys._getframe().f_code.co_name + ':'
@@ -494,7 +462,7 @@ def pars_extdta( js_info, DeBug ) :
 		if DeBug : print(f"    +{message}=: Start: {str_t:%T}\n {json.dumps(_ddata, indent=2)}" )
 		try :
 			ff_dat = ['-map', '0:' + str(_ddata['index']), '-dn']
-			message = f"    |<D:{_ddata['index']:2}>|{_ddata['codec']:8}|{_ddata['codec_name']:8}|{_ddata['codec_type']:^11} |"
+			message = f"    |<D:{_ddata['index']:2}>|{_ddata['codec']:<9}|{_ddata['codec_name']:<8}|{_ddata['codec_type']:^11} |"
 			print(message)
 			if (DeBug) : print (ff_dat)
 
@@ -512,8 +480,44 @@ def pars_metadta(mta_dta, DeBug=False):
 	message = sys._getframe().f_code.co_name + '/:'
 	if DeBug :		print(f"  +{message}=: Start: {str_t:%T}")
 
+	global glb_vidolen  # make it global so we can reuse for fmpeg check ...
+	global glb_bitrate  # make it global so we can reuse for fmpeg check ...
+	global glb_totfrms
+
+	# XXX: Meta Data
 	all_formt = mta_dta.get('format')
 
+	if not len(all_formt) :
+		message += f"\n{ json.dumps(mta_dta, indent=2) }\n No Format\n"
+		raise ValueError(message)
+	else :
+		if DeBug :
+			print( f"\nFormat:\n{ json.dumps(all_formt, indent=2) }")
+
+	_mtdta = dict(	filename='',
+					nb_streams=int(0),
+					duration=float(0),
+					bit_rate=int(0),
+					size=float(0)
+					)
+
+	prs_frm_to(all_formt, _mtdta, DeBug )
+
+	glb_vidolen = int(_mtdta['duration'])
+	glb_bitrate = int(_mtdta['bit_rate'])
+
+	minut,  secs = divmod(glb_vidolen, 60)
+	Leng =		f"{minut:02d}m:{secs:2d}s"
+	hours, minut = divmod(minut, 60)
+	if hours :
+		Leng =	f"{hours:02d}h:{minut:02d}m:{secs:2d}s"
+		days,  hours = divmod(hours, 24)
+
+	# XXX: Print Banner
+	message = f"    |< MD >|Sz:{hm_sz( _mtdta['size'])}|L: {Leng} |Strms: {_mtdta['nb_streams']} |BitRate: {hm_sz( glb_bitrate )} |"
+	print(message)
+
+	# XXX: Stream Data
 	all_strms = mta_dta.get('streams')
 	if len (all_strms) :
 		all_video = []
@@ -539,26 +543,20 @@ def pars_metadta(mta_dta, DeBug=False):
 		message += f"\n{ json.dumps(mta_dta, indent=2) }\n\n No Streams\n"
 		raise ValueError(message)# XXX: Check it :)
 
-	return all_formt, all_video, all_audio, all_subtl, all_datas
+
+	return all_video, all_audio, all_subtl, all_datas
 ##>>============-------------------<  End  >------------------==============<<##
 
 def thza_brain(in_file, mta_dta, DeBug=False):
 	str_t = datetime.datetime.now()
 	message = sys._getframe().f_code.co_name
-	print(f"  +{message}=: Start: {str_t:%T}")
+	if DeBug : print(f" +{message}=: Start: {str_t:%T}")
 
 	if not mta_dta:
 		message += ' No Metadata Nothing to do here'
 		raise Exception(message)
 	try:
-		frmt_inf, vdo_strm, aud_strm, sub_strm, ext_data = pars_metadta( mta_dta, DeBug )
-
-		# XXX: Meta Data
-		if len(frmt_inf) :
-			pars_mtdta ( frmt_inf, DeBug )
-		else :
-			message += f"\n{ json.dumps(mta_dta, indent=2) }\n No Format\n"
-			raise ValueError(message)
+		vdo_strm, aud_strm, sub_strm, ext_data = pars_metadta( mta_dta, DeBug )
 
 		# XXX: Video
 		if len ( vdo_strm) :
@@ -596,6 +594,7 @@ def thza_brain(in_file, mta_dta, DeBug=False):
 		raise Exception(message)
 
 # XXX: Do nothing if all is well needs to rework it a bit
+
 	_, extens = os.path.splitext(in_file)
 	if (extens.lower() == TmpF_Ex.lower()) and ('copy' in ff_video) and ('copy' or '-an' in ff_audio) and ('copy' or '-sn' in ff_subtl) :# and ('-dn' in ff_exdta) :
 		raise ValueError(f"| <¯\_(%)_/¯>  Skip |")
@@ -607,7 +606,7 @@ def thza_brain(in_file, mta_dta, DeBug=False):
 
 	end_t = datetime.datetime.now()
 	message =f'  -End: {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),2)} sec'
-	print (message)
+	if DeBug :print (message)
 
 	return ffmpeg_cmnd
 ##>>============-------------------<  End  >------------------==============<<##

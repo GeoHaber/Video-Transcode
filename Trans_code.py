@@ -1,17 +1,15 @@
 import os
 import re
 import sys
-import json
 import datetime
-import traceback
 import multiprocessing
 
 from Yaml		import *
 from FFMpeg		import *
 from My_Utils	import *
 
-WFolder = r"F:\Media\TV"
-#WFolder = r"F:\Media\Movie"
+#WFolder = r"F:\Media\TV"
+#WFolder = r"F:\BackUp\_Adlt"
 #WFolder = r"C:\Users\Geo\Desktop\Except"
 
 ## XXX:  https://docs.python.org/3.2/library/time.html
@@ -22,29 +20,26 @@ Log_File  = This_File + ancr_time + 'all.log'
 sys.stdout = Tee(sys.stdout, open(Log_File, 'w', encoding=console_encoding))
 
 ok_f_name = This_File + ancr_time + 'oky.txt'
-Success_File = open(ok_f_name, 'w', encoding=console_encoding)
+OKs_file = open(ok_f_name, 'w', encoding=console_encoding)
 err_f_nam = This_File + ancr_time + 'ERR.txt'
 ERR_file = open(err_f_nam, 'w', encoding=console_encoding)
 
 print(f" Time: {ancr_time}" )
-print(f" Number of CPUs: {multiprocessing.cpu_count()}  ¯\_(%)_/¯" )
+print(f" {multiprocessing.cpu_count()} CPU's  ¯\_(%)_/¯" )
 print(f" Pyton Version:  {sys.version}\n" )
 
-##>>============-------------------<  End  >------------------==============<<##
-
+'''
+Create the list of Files from "root with xtnsio" to Proces
+'''
 def scan_folder(root, xtnsio):
-	'''
-	Create the list of Files from "root with xtnsio" to Proces
-	'''
 	str_t = datetime.datetime.now()
 	messa = sys._getframe().f_code.co_name
 	print(f"+{messa}=:\t{root}\tStart: {str_t:%T}")
-
 	print(f'Dir: {root}\tSize: {hm_sz(get_tree_size(root))}')
 	_lst = []
 	# a Directory ?
 	if os.path.isdir(root):
-		for rot, dirs, files in os.walk( root ):
+		for rot, _, files in os.walk( root ):
 			for one_file in files:
 				_, ext = os.path.splitext(one_file.lower())
 				if ext in xtnsio:
@@ -61,6 +56,7 @@ def scan_folder(root, xtnsio):
 	print( messa )
 
 	# XXX: Sort Order reverse = True -> Biggest first
+
 	return sorted(_lst, key=lambda Item: (Item[1], Item[2]), reverse=True )
 ##>>============-------------------<  End  >------------------==============<<##
 
@@ -130,17 +126,14 @@ if __name__ == '__main__':
 		file_s	= each[1]
 		ext		= each[2]
 
-		if os.path.isfile(file_p) and len (file_p) < 256 :
+		if os.path.isfile(file_p)  :
 			print(f'\n{file_p}\n{ordinal(cnt)} of {nu_fi}, {ext}, {hm_sz(file_s)}')
-			disk_free_space = shutil.disk_usage( file_p )[2]
-			if disk_free_space < ( 3 * file_s ):
-				print ('\n!!! ', file_p[0:2], hm_sz(disk_free_space), " Free Space" )
-				input ("Not Enoug space on Drive")
-			tmp_free_space = shutil.disk_usage( Log_File )[2]
-			if tmp_free_space < ( 3 * file_s ):
-				print ('\n!!! ', file_p[0:2], hm_sz(tmp_free_space), " Free Space" )
-				input ("Not Enoug space on Drive")
-
+			if len (file_p) < 256 :
+				disk_free_space = shutil.disk_usage( file_p )[2]
+				temp_free_space = shutil.disk_usage( Log_File )[2]
+				if disk_free_space < ( 3 * file_s ) or temp_free_space < ( 3 * file_s ) :
+					print ('\n!!! ', file_p[0:2], hm_sz(disk_free_space), " Free Space" )
+					input ("Not Enoug space on Drive")
 			try:
 				all_good = run_ffprob( file_p )
 				all_good = thza_brain( file_p, all_good )
@@ -160,10 +153,10 @@ if __name__ == '__main__':
 				if '| <¯\_(%)_/¯>  Skip |' in messa:
 					print(' ',messa)
 					file_p = file_p.encode( console_encoding, errors='ignore')
-					Success_File.write(f'=: {file_p}\n')
+					OKs_file.write(f'=: {file_p}\n')
 				else:
 					print(messa)
-					sys.stdout.flush()
+					ERR_file.write(f'-: {file_p}\n')
 				continue
 
 			except Exception as e:
@@ -172,28 +165,25 @@ if __name__ == '__main__':
 				dirc_name = os.path.dirname(file_p)
 				mess = f'-: {dirc_name}\n\t\t{file_name}\t{hm_sz(file_s)}\n'
 				print(mess)
+				ERR_file.write(f'-: {file_p}\n')
 				copy_move(file_p, Excepto, True)
 				Trace (messa, e)
-				sys.stdout.flush()
 				continue
 
 			else:
-				Success_File.write(f'+: {file_p}\n')
-				sys.stdout.flush()
+				OKs_file.write(f'+: {file_p}\n')
 			print(f"  Saved {hm_sz(Save)}")
 
 		else:
-			file_name = os.path.basename(file_p)
-			dirc_name = os.path.dirname(file_p)
-			mess = f'\nNot Found-: {dirc_name}\n\t\t{file_name}\t{hm_sz(file_s)}\nNext??'
-			ERR_file.write(f'{file_p}\n')
+			mess = f'\nNot Found-: {file_p}\t\t{hm_sz(file_s)}\n'
 			print(mess)
-			sys.stdout.flush()
-			time.sleep(3)
+			ERR_file.write(f'-: {file_p}\n')
+			time.sleep(2)
 			continue
 # continue forces the loop to start the next iteration pass will continue through the remainder or the loop body
+	OKs_file.close()
+	ERR_file.close()
 	sys.stdout.flush()
-	Success_File.close()
 
 	end_t = datetime.datetime.now()
 	print(f' -End: {end_t:%T}\tTotal: {round((end_t-str_t).total_seconds(),2)} sec')

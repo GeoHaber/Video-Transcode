@@ -107,6 +107,7 @@ def divd_strn( val ):
 	'''
 	Returns floating point resul for string (a/b)
 	'''
+#	input ( val )
 	if '/' in val:
 		n, d = val.split('/')
 		n = float(n)
