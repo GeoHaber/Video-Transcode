@@ -169,62 +169,67 @@ def hm_sz( nbyte, type = "B" ):
 	Returns a human readable string from a number
 	+ or -
 	'''
+	sufix = ['', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y']
+	indx = 0
+
 	if not nbyte:
 		return '0 B'
-
-	sufix = ['', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y']
-
-	indx = 0
-	sign = ''
-	if int(nbyte) < 0 :
+	elif int(nbyte) < 0 :
 		sign = '-'
+	else:
+		sign = ''
 
 	valu = abs(float(nbyte))
-	while valu >= 1024 and indx < len(sufix) - 1:
+	while valu >= 1024 and indx <= len(sufix) :
 		valu /= 1024
 		indx += 1
 
-	return f'{sign}{round(valu + 0.05,1)} {sufix[indx]}{type}'
+	return f'{sign}{round(valu,1)} {sufix[indx]}{type}'
 ##==============-------------------   End   -------------------==============##
 
-def prs_frm_to(strm, dictio, DeBug =False ):
-#	messa = sys._getframe().f_code.co_name
-#	str_t = datetime.datetime.now()
+def safe_options(strm, opts ):
+    safe = {}
+    # Only copy options that are expected and of correct type
+    # (and do typecasting on them)
+    for k, v in opts.items():
+        if k in opts and v is not None:
+            typ = opts[k]
+            try:
+                safe[k] = typ(v)
+            except ValueError:
+                pass
+    return safe
 
+def prs_frm_to(strm, dictio, DeBug=False ):
 	resul = dictio
 	try:
-		for key in dictio.keys():
-			item = strm.get(key, 'Pu_la')
+		for k in dictio.keys():
+			item = strm.get(k, 'Pu_la')
 			if item == 'Pu_la':
-				resul[key] = 'Pu_la'
-				if DeBug : print ("\nPu_la in:", key, '\n' )
+				resul[k] = 'Pu_la'
+				if DeBug : print ("\nPu_la in:", k, '\n' )
 			else:
 				ty = type(item)
-				dy = type(dictio[key])
-
-#				if DeBug : print('Before Key:',key,'\n', ty, item ,'\n', dy , dictio[key])
-
+				dy = type(dictio[k])
 				if   ty == str and dy == int:
-					resul[key] = int(item)
+					resul[k] = int(item)
 				elif ty == str and dy == float:
-					resul[key] = float(item)
+					resul[k] = float(item)
 				elif dy == dict:
-					resul[key] = dict(item)
+					resul[k] = dict(item)
 				else:
-					resul[key] = item
-#				if DeBug : print('After  Key:',key,'\n', dy , dictio[key])
-
+					resul[k] = item
 	except Exception as e:
-		print( '\n', len(strm), strm, '\n', len(dictio), dictio )
 		messa += f'\n{len(strm)}\n{json.dumps(strm, indent=2)}\n{len(resul)}\n{json.dumps(dictio, indent=2)}'
 		print(messa)
 		Trace(messa, e)
 		input("All Fuked up")
 
 	if len(dictio) > 1:
-		return tuple(dictio.values())
+		return tuple(resul.values())
 	else:
-		return dictio[key]
+		return resul[k]
+
 	'''
 	rsult = dict ()
 	# XXX: Fast version only defined data is copied if done reversed walk over js_info could see the extra unused information  :D
@@ -257,7 +262,7 @@ def Trace ( message, e, DeBug= False ) :
 	messa = sys._getframe().f_code.co_name
 	str_t = datetime.datetime.now()
 	print("+-"*40)
-	print(f'{message}\nError: {e}' )
+	print(f'{message}\nError: {e}\nRepr: {repr(e)}' )
 	if DeBug : print( {repr(e)} )
 	print("-+"*40)
 

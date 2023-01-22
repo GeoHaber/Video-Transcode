@@ -8,10 +8,6 @@ from Yaml		import *
 from FFMpeg		import *
 from My_Utils	import *
 
-#WFolder = r"F:\Media\TV"
-#WFolder = r"F:\BackUp\_Adlt"
-#WFolder = r"C:\Users\Geo\Desktop\Except"
-
 ## XXX:  https://docs.python.org/3.2/library/time.html
 ancr_time = f"{datetime.datetime.now(): %Y %j %H-%M-%S }"
 This_File = sys.argv[0].strip('.py')
@@ -19,13 +15,15 @@ This_File = sys.argv[0].strip('.py')
 Log_File  = This_File + ancr_time + 'all.log'
 sys.stdout = Tee(sys.stdout, open(Log_File, 'w', encoding=console_encoding))
 
-ok_f_name = This_File + ancr_time + 'oky.txt'
-OKs_file = open(ok_f_name, 'w', encoding=console_encoding)
-err_f_nam = This_File + ancr_time + 'ERR.txt'
-ERR_file = open(err_f_nam, 'w', encoding=console_encoding)
+ok_f_nam = This_File + ancr_time + 'oky.txt'
+OKs_file = open(ok_f_nam, 'w', encoding=console_encoding)
+
+err_f_nm = This_File + ancr_time + 'ERR.txt'
+ERR_file = open(err_f_nm, 'w', encoding=console_encoding)
+subprocess.run( [ffmpeg, '-version'] )
 
 print(f" Time: {ancr_time}" )
-print(f" {multiprocessing.cpu_count()} CPU's  ¯\_(%)_/¯" )
+print(f" {multiprocessing.cpu_count()} CPU's  ¯\\_(%)_/¯" )
 print(f" Pyton Version:  {sys.version}\n" )
 
 '''
@@ -60,7 +58,7 @@ def scan_folder(root, xtnsio):
 	return sorted(_lst, key=lambda Item: (Item[1], Item[2]), reverse=True )
 ##>>============-------------------<  End  >------------------==============<<##
 
-def post_clean(input_file, outpt_file):
+def post_clean(input_file, outpt_file, DeBug):
 	str_t = datetime.datetime.now()
 	messa = sys._getframe().f_code.co_name
 	#print(f"  +{messa}=: Start: {str_t:%T}")
@@ -70,16 +68,21 @@ def post_clean(input_file, outpt_file):
 	inpf_sz = os.path.getsize(input_file)
 
 	rati = abs(100 * ((outf_sz - inpf_sz) / inpf_sz))
-	if rati > 9:
+	if rati > 10:
 		ratio = round(rati)
 	else :
-		ratio = round(rati, 1)
+		ratio = round(rati, 2)
 
 	if abs( ratio ) > 96 :
 		seems_to_small = get_new_fname(input_file, "_Seems_Small.mp4", TmpF_Ex)
 		copy_move( outpt_file, seems_to_small )
 		messa = f"\n\t! Huge Difference was {hm_sz(inpf_sz)} is {hm_sz(outf_sz)}\n Out File: {seems_to_small}"
 		print(messa)
+		return 0
+
+	if DeBug :
+		messa += "\t NO File Changed running in DeBug mode"
+		print (messa)
 		return 0
 
 	_, xt = os.path.splitext(input_file)
@@ -90,9 +93,9 @@ def post_clean(input_file, outpt_file):
 
 	messa = f"  File: {os.path.basename(input_file)}\n\t Was: {hm_sz(inpf_sz)}\t Is: {hm_sz(outf_sz)}\t"
 	if   inpf_sz > outf_sz :
-		messa += f"Saved : {ratio}%"
+		messa += f"Saved: {ratio}%"
 	elif inpf_sz < outf_sz :
-		messa += f"Lost  : {ratio}%"
+		messa += f"Lost : {ratio}%"
 	else :
 		messa += "Same Size"
 	print( messa )
@@ -118,8 +121,8 @@ if __name__ == '__main__':
 	print("-" * 70)
 
 	fl_lst = scan_folder( WFolder, File_extn )
-	nu_fi = len(fl_lst)
-	Save = 0
+	fl_nmb = len(fl_lst)
+	saved = 0
 	for cnt, each in enumerate(fl_lst) :
 		cnt += 1
 		file_p	= each[0]
@@ -127,7 +130,7 @@ if __name__ == '__main__':
 		ext		= each[2]
 
 		if os.path.isfile(file_p)  :
-			print(f'\n{file_p}\n{ordinal(cnt)} of {nu_fi}, {ext}, {hm_sz(file_s)}')
+			print(f'\n{file_p}\n{ordinal(cnt)} of {fl_nmb}, {ext}, {hm_sz(file_s)}')
 			if len (file_p) < 256 :
 				disk_free_space = shutil.disk_usage( file_p )[2]
 				temp_free_space = shutil.disk_usage( Log_File )[2]
@@ -135,22 +138,23 @@ if __name__ == '__main__':
 					print ('\n!!! ', file_p[0:2], hm_sz(disk_free_space), " Free Space" )
 					input ("Not Enoug space on Drive")
 			try:
-				all_good = run_ffprob( file_p )
-				all_good = thza_brain( file_p, all_good )
+				all_good = run_ffprob( file_p, ffprob,   DeBug )
+				all_good = thza_brain( file_p, all_good, DeBug )
 #				make_matrx( file_p )
 # XXX: all_good is the encoded file Name
-				all_good = ffmpeg_run( file_p, all_good )
+#				DeBug = True
+				all_good = ffmpeg_run( file_p, all_good, ffmpeg, DeBug )
 #				all_good = short_ver( file_p )
 #				video_diff( file_p, all_good )
 				if not all_good:
 					input('WTF')
-				Save += post_clean( file_p, all_good )
+				saved += post_clean( file_p, all_good, DeBug )
 
 				file_p = file_p.encode( console_encoding, errors='ignore')
 
 			except ValueError as err:
 				messa = str( err )
-				if '| <¯\_(%)_/¯>  Skip |' in messa:
+				if '| <¯\\_(%)_/¯>  Skip |' in messa:
 					print(' ',messa)
 					file_p = file_p.encode( console_encoding, errors='ignore')
 					OKs_file.write(f'=: {file_p}\n')
@@ -172,7 +176,7 @@ if __name__ == '__main__':
 
 			else:
 				OKs_file.write(f'+: {file_p}\n')
-			print(f"  Saved {hm_sz(Save)}")
+			print(f"  Saved Total: {hm_sz(saved)}")
 
 		else:
 			mess = f'\nNot Found-: {file_p}\t\t{hm_sz(file_s)}\n'
