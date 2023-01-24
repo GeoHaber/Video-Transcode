@@ -15,9 +15,10 @@ ffprob = os.path.join(ffmpg_bin, "ffprobe.exe")
 # ffplay = os.path.join(ffmpg_bin, "ffplay.exe")
 
 if not ( os.path.exists(ffmpeg) and os.path.exists(ffprob) ):
-	messa += f"{ffmpeg}\nPath Does not Exist:"
-	input(messa)
+	input(f"{ffmpeg}\nPath Does not Exist:")
 	raise OSError
+else :
+	subprocess.run( [ffmpeg, '-version'] )
 
 ##==============-------------------   End   -------------------==============##
 
@@ -306,9 +307,6 @@ def pars_video ( strm_in , DeBug ) :
 			_vdata['codec_name'] = 'No Codec Name ?'
 			messa = f"   No Video Codec |<V:{_vdata}\n"
 			raise Exception(messa)
-		elif _vdata['codec_name'].lower() in ['mjpeg', 'png'] :
-			print (f"    |<V:{_strm:2}>|{_vdata['codec_name']:<8} | > Skip this")
-			continue
 
 		vid_width = _vdata['width']
 		vid_heigh = _vdata['height']
@@ -361,19 +359,25 @@ def pars_video ( strm_in , DeBug ) :
 
 		ff_vid.extend( ['-map', '0:v:' + _cnt, '-c:v:' + _cnt])
 
-		if vid_width > 2592 or vid_heigh > 1280 :
+		if vid_width > 2592 or vid_heigh > 1920 :
 			output = "2K"
 			if   vid_width >= 7600 or vid_heigh >= 4300:
 				output = "8K"
 			elif vid_width >= 3800 or vid_heigh >= 2100:
 				output = "4K"
 # XXX: Compute Scale
-			div_w = round((vid_width / 1920), 2)
-			div_h = round((vid_heigh / 1080), 2)
-			if div_h != div_w :
+			div_w = round((vid_width / 1920))
+			div_h = round((vid_heigh / 1080))
+			if div_h < div_w :
 				output +=f"  W != H, {div_w}, {div_h}"
-			nw = round( vid_width/div_w )
-			nh = round( vid_heigh/div_h )
+				nw = round( vid_width/div_w )
+				nh = round( vid_heigh/div_w )
+			elif div_h > div_w :
+				nw = round( vid_width/div_h )
+				nh = round( vid_heigh/div_h )
+			else :
+				nw = round( vid_width/div_w )
+				nh = round( vid_heigh/div_h )
 			extra += f'\t{output} Scale {vid_width}x{vid_heigh} to {nw}x{nh}'
 
 			ff_vid.extend(['libx265', '-crf', '25', '-preset', 'slow', '-vf', 'scale=' +str(nw) +':' +str(nh) ])
@@ -399,12 +403,17 @@ def pars_video ( strm_in , DeBug ) :
 				extra += '\tConvert to Hevc'
 				ff_vid.extend(['libx265', '-crf', '25'])
 			ff_vid.extend(['-preset', 'slow'])
-		try:
-			if 'tags' in _vdata and "handler_name" in _vdata[tags] :
+
+		try :
+			if 'tags' in _vdata :
 				extra += f"  {_vdata['tags']['handler_name']}"
-		except Exception as e:
-			print (e)
-			continue
+		except Exception as x:
+			if DeBug : print ('  =>', repr(x))
+			pass
+
+		if _vdata['codec_name'].lower() in ['mjpeg', 'png'] :
+			extra = f"| > Remove {_vdata['codec_name']}< |"
+#			ff_vid = (['-map', '-0:v:' +str(_strm), '-c:v:' +str(_strm), 'copy'])
 
 		messa = f"    |<V:{_strm:2}>|{_vdata['codec_name']:<8} |Br: {hm_sz(_vi_btrt):>9}|XBr: {hm_sz(expctd):>8}|Fps: {frm_rate:>7}|{extra}"
 		print(messa)
@@ -522,15 +531,15 @@ def pars_audio ( strm_in , DeBug ) :
 				ff_aud.extend(['-metadata:s:a:'  + _cnt, 'language=' + Default_lng])
 				ff_aud.extend(['-disposition:s:a:' + _cnt, 'default'])
 			else :
-				extra += f" Drop {_lng}"
+				extra = f"| > Remove {_lng} < |"
 				ff_aud = (['-map', '-0:a:' + _cnt, '-c:a:' + _cnt, 'copy'])
 
-			try:
-				if 'tags' in _adata and "handler_name" in _adata[tags] :
+			try :
+				if 'tags' in _adata :
 					extra += f"  {_adata['tags']['handler_name']}"
-			except Exception as e:
-				print (e)
-				continue
+			except Exception as x:
+				if DeBug : print ('  =>', repr(x))
+				pass
 
 			messa = f"    |<A:{_strm:2}>|{_adata['codec_name']:<8} |Br: {hm_sz(_au_btrt):>9}|{_lng}|Frq: {hm_sz(_adata['sample_rate'],'Hz'):>8}|Ch: {chnls}| {extra}"
 			print( messa )
@@ -607,16 +616,15 @@ def pars_subtl ( strm_in , DeBug ) :
 				ff_sub.extend(['-disposition:s:s:' + _cnt, 'none'])
 
 			else :
-				extra += f" Drop {_lng}"
+				extra += f" Remove {_lng}"
 				ff_sub = (['-map', '-0:s:' + _cnt, '-c:s:' + _cnt, 'mov_text'])
 
-
-			try:
-				if 'tags' in _sdata and "handler_name" in _sdata[tags] :
+			try :
+				if 'tags' in _sdata :
 					extra += f"  {_sdata['tags']['handler_name']}"
-			except Exception as e:
-				print (e)
-				continue
+			except Exception as x:
+				if DeBug : print ('  =>', repr(x))
+				pass
 
 			messa = f"    |<S:{_strm:2}>|{_sdata['codec_name']:<9}|{_sdata['codec_type']:<13}|{_lng:3}|Siz: {hm_sz(s_siz):>8}|Dispo: default={dsp_d}, forced={dsp_f}|{extra}"
 			print(messa)
@@ -654,7 +662,6 @@ def pars_extdta( strm_in, DeBug ) :
 		if DeBug : print(f"    +{messa}=: Start: {str_t:%T}\n {json.dumps(_ddata, indent=2)}" )
 
 		try :
-
 			if 'tags' in _ddata :
 				extra = f"  {_ddata['tags']['handler_name']}"
 
@@ -667,25 +674,41 @@ def pars_extdta( strm_in, DeBug ) :
 
 	return ff_dext
 ##>>============-------------------<  End  >------------------==============<<##
-def	find_subtl ( top_dir, file_lst, DeBug ) :
+def	find_subtl ( in_file, DeBug ) :
 	str_t = datetime.datetime.now()
 	messa = sys._getframe().f_code.co_name + ':'
 	if DeBug :
 		print(f"    +{messa}=: Start: {str_t:%T}\nDir:{top_dir}\nFiles:{file_lst}" )
-	ff_subtl =[]
-	count = 0
-	_cnt =str(count)
+
+	'''
+	Let's setup the local directory to see what's in it
+	os.path.sep (in_file)
+
+	'''
+	top_dir, Filo = in_file.rsplit(os.path.sep, 1)
+	Finam, ext = os.path.splitext(Filo)
+	file_lst = os.listdir(top_dir)
+	file_lst.sort(key=lambda f: os.path.isfile(os.path.join(top_dir, f)))
+	if DeBug :
+		print(f"Dir:{top_dir}\nFile:{Filo}\nFn:{Finam}\t E:{ext}\n")
+		print("\nFile:".join(file_lst))
+#		input ("WTF")
+	ff_subtl = []
 	for count, fname in enumerate(file_lst) :
-		ff_sub =[]
+		_cnt =str(count)
 		if  os.path.splitext(fname)[1] == '.srt' :
 			print(f"    |<S: Extternal file|:{fname}")
 			sub_file_pt = os.path.join(top_dir, fname)
-			ff_sub = (['-i', fname, '-c:s', 'srt'])
-			ff_sub.extend([ '-metadata:s:s' + _cnt, 'language=' + 'eng'])
+			ff_sub = (['-i', fname, '-c:s', 'srt', '-metadata:s:s' + _cnt, 'language=' + 'eng'])
 		else :
-			ff_subtl = []
-			if DeBug : print ('\tNo Subtile File found')
+			ff_sub = []
+			if DeBug : print (f'{count} No Sub File')
+
 		ff_subtl += ff_sub
+
+	if '-sn' not in ff_subtl and not len(ff_subtl) :
+		ff_subtl = ['-sn']
+
 	if DeBug : print ("  ", ff_subtl )
 	return( ff_subtl )
 
@@ -699,20 +722,6 @@ def thza_brain(in_file, mta_dta, DeBug ):
 		messa += ' No Metadata Nothing to do here'
 		raise Exception(messa)
 
-	'''
-	Let's setup the local directory to see what's in it
-	os.path.sep (in_file)
-
-	'''
-	top_dir, Filo = in_file.rsplit(os.path.sep, 1)
-	Finam, ext = os.path.splitext(Filo)
-	file_lst = os.listdir(top_dir)
-	file_lst.sort(key=lambda f: os.path.isfile(os.path.join(top_dir, f)))
-
-	if DeBug :
-		print(f"Dir:{top_dir}\nFile:{Filo}\nFn:{Finam}\t E:{ext}\n")
-		print("\nFile:".join(file_lst))
-#		input ("WTF")
 	try:
 		vdo_strm, aud_strm, sub_strm, ext_data = pars_format( mta_dta, DeBug )
 		# XXX: Video
@@ -722,7 +731,7 @@ def thza_brain(in_file, mta_dta, DeBug ):
 			ff_video = pars_video( vdo_strm, DeBug )
 		else :
 			ff_video = ['-vn']
-			print("    |<no:V>|")
+			print("    |<V:no>|")
 		if show_cmd :print (f"      {ff_video}")
 
 		# XXX: Audio
@@ -738,8 +747,8 @@ def thza_brain(in_file, mta_dta, DeBug ):
 			ff_subtl = pars_subtl( sub_strm, DeBug )
 		else :
 			print("    |<S:no>|")
-			ff_subtl = find_subtl( top_dir, file_lst, DeBug )
-			ff_subtl = []
+			ff_subtl = ['-sn']
+			ff_subtl = find_subtl( in_file, DeBug )
 		if show_cmd :print (f"      {ff_subtl}")
 
 		# XXX Data

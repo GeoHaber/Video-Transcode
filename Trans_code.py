@@ -20,7 +20,6 @@ OKs_file = open(ok_f_nam, 'w', encoding=console_encoding)
 
 err_f_nm = This_File + ancr_time + 'ERR.txt'
 ERR_file = open(err_f_nm, 'w', encoding=console_encoding)
-subprocess.run( [ffmpeg, '-version'] )
 
 print(f" Time: {ancr_time}" )
 print(f" {multiprocessing.cpu_count()} CPU's  ¯\\_(%)_/¯" )
