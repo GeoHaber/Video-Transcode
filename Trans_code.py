@@ -9,16 +9,6 @@ from Yaml		import *
 from FFMpeg		import *
 from My_Utils	import *
 
-#WFolder = r"F:\Media\TV"
-#WFolder = r"F:\Media\Movie"
-#WFolder = r"F:\Media\MasterClass Collection"
-#WFolder = r"F:\BackUp\_Adlt"
-WFolder = r"C:\Users\Geo\Desktop\Except"
-#WFolder += r"\The Hitman's Bodyguard (2017) [Action, Comedy 6.9 & R][1080p 6.0 Mbps]"
-
-#WFolder += r"\_Fix_It_"
-
-#WFolder =r"C:\Users\Geo\Desktop\downloads\Accused.2023.S01E01.1080p.WEB.H264-CAKES[TGx]"
 #DeBug = True
 
 ## XXX:  https://docs.python.org/3.2/library/time.html
