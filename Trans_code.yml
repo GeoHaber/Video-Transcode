@@ -1,4 +1,7 @@
-#
+
+Glob:
+  junk_nm:    "notvalid"
+
 Path:
   host:             localhost
   user:             root
@@ -9,8 +12,8 @@ Path:
   Tmp_exte:         '.mp4' #.png or .jpg
 
 Action:
-  Skip_typ:        '.lock'  # .png or .lock
-  Skip_key:       '¯\_(%)_/¯ Skip'
+  Skip_typ:       '.lock'  # .png or .lock
+  Skip_key:       "| <¯\_(%)_/¯> | .mp4|"
 
 Video:
   codec_name:   'libx265'

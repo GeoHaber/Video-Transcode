@@ -3,40 +3,94 @@
 
 # XXX KISS
 
-import os
-import sys
-import time
-import json
-import shutil
-import ctypes
-import random
-import string
-import datetime
-import platform
-import traceback
+import	os
+import	sys
+import	time
+import	json
+import	shutil
+import	ctypes
+import	random
+import	string
+import	datetime as TM
+import	platform
+import	traceback
+import	tracemalloc
+import	logging
+from	functools	import wraps
 
 # XXX: C:\Users\Geo\Documents\GitHub\yolov5\utils\general.py
 
-def file_age(path=__file__):
-	# Return days since last file update
-	dt = (datetime.now() - datetime.fromtimestamp(Path(path).stat().st_mtime))  # delta
-	return dt.days  # + dt.seconds / 86400  # fractional days
-def file_update_date(path=__file__):
-	# Return human-readable file modification date, i.e. '2021-3-26'
-	t = datetime.fromtimestamp(Path(path).stat().st_mtime)
-	return f'{t.year}-{t.month}-{t.day}'
-def file_size(path):
-	# Return file/dir size (MB)
-	mb = 1 << 20  # bytes to MiB (1024 ** 2)
-	path = Path(path)
-	if path.is_file():
-		return path.stat().st_size / mb
-	elif path.is_dir():
-		return sum(f.stat().st_size for f in path.glob('**/*') if f.is_file()) / mb
-	else:
-		return 0.0
+#  DECORATORS
+def trycatch(func):
+	""" Wraps the decorated function in a try-catch. If function fails print out the exception. """
+	@wraps(func)
+	def wrapper(*args, **kwargs):
+		try:
+			res = func(*args, **kwargs)
+			return res
+		except Exception as e:
+			print(f"Exception in {func.__name__}: {e}")
+		finally :
+			pass
+	return wrapper
+
+def handle_exception(func):
+	"""Decorator to handle exceptions."""
+	@wraps(func)
+	def wrapper(*args, **kwargs):
+		try:
+			res = func(*args, **kwargs)
+			return res
+#			return func(*args, **kwargs)
+		except Exception as e:
+			print(f"Exception in {func.__name__}: {e}")
+			logging.error("Error: %s", e, exc_info=True)
+#			sys.exit(1)
+		except TypeError :
+			print(f"{func.__name__} wrong data types")
+			logging.error("Error: %s", e, exc_info=True)
+		except IOError:
+			print("Could not write to file.")
+			logging.error("Error: %s", e, exc_info=True)
+			logging.error("uncaught exception: %s", traceback.format_exc())
+		except :
+			print("someting Else")
+			logging.error("uncaught exception: %s", traceback.format_exc())
+		else:
+			print("No Exceptions")
+		finally:
+			pass
+	return wrapper
+
+def performance_check(func):
+	"""Measure performance of a function"""
+	@wraps(func)
+	def wrapper(*args, **kwargs):
+		tracemalloc.start()
+		start_time =	time.perf_counter()
+		try:
+			res = func(*args, **kwargs)
+		except Exception as e:
+			print(f"Exception in {func.__name__}: {e}")
+			logging.error("Error: %s", e, exc_info=True)
+			handle_exception( func(*args, **kwargs))
+			return wrapper
+		finally:
+			duration =		time.perf_counter() - start_time
+			current, peak = tracemalloc.get_traced_memory()
+			tracemalloc.stop()
+			print(	f"{'.'*60}"
+					f"\n{func.__name__} ({func.__doc__})\n"
+					f" Mem awrg: {current / 10**6:.6f} MB"
+					f" Mem peak: {peak    / 10**6:.6f} MB"
+					f" Time: {duration:.5f} sec"
+					f"\n{'.'*60}" )
+		return res
+	return wrapper
+
 ##>>============-------------------<  End  >------------------==============<<##
 
+#  CLASES
 # XXX: https://shallowsky.com/blog/programming/python-tee.html
 class Tee (list):
 	def __init__(self, *targets):
@@ -58,9 +112,63 @@ class Tee (list):
 				continue
 	def flush(self):
 		return
-
 ##>>============-------------------<  End  >------------------==============<<##
 
+#FUNCTIONS
+def file_age(path=__file__):
+	# Return days since last file update
+	dt = (datetime.now() - TM.fromtimestamp(Path(path).stat().st_mtime))  # delta
+	return dt.days  # + dt.seconds / 86400  # fractional days
+def file_update_date(path=__file__):
+	# Return human-readable file modification date, i.e. '2021-3-26'
+	t = TM.fromtimestamp(Path(path).stat().st_mtime)
+	return f'{t.year}-{t.month}-{t.day}'
+def file_size(path):
+	# Return file/dir size (MB)
+	mb = 1 << 20  # bytes to MiB (1024 ** 2)
+	path = Path(path)
+	if path.is_file():
+		return path.stat().st_size / mb
+	elif path.is_dir():
+		return sum(f.stat().st_size for f in path.glob('**/*') if f.is_file()) / mb
+	else:
+		return 0.0
+##>>============-------------------<  End  >------------------==============<<##
+def Trace ( message, e, DeBug= False ) :
+	messa = sys._getframe().f_code.co_name
+	str_t = TM.datetime.now()
+	mx = 42
+	print("+-"*mx)
+	print(f'{message}\nError: {e}\nRepr: {repr(e)}' )
+	print("-+"*mx)
+	mx *= 2
+
+	print ("Stack")
+	print("="*mx,)
+	stack = traceback.extract_stack()
+	template = ' {filename:<26} | {lineno:5} | {funcname:<20} | {source:>12}'
+	for filename, lineno, funcname, source in stack:
+		if  funcname != '<module>':
+			funcname = funcname + '()'
+		print(template.format(
+				filename=os.path.basename(filename),
+				lineno=lineno,
+				source=source,
+				funcname=funcname)
+				)
+	print("="*mx,)
+
+	print ("Sys Exec_Info")
+	exc_type, exc_value, exc_traceback = sys.exc_info()
+	print("-"*mx)
+	for frm_ in traceback.extract_tb(exc_traceback):
+#        print( (frm_comp) )
+		print(f" {os.path.basename(frm_.filename):<26} | {frm_.lineno:5} | {frm_.name:20} | {frm_.line:12} " )
+		print("-"*mx)
+	print("="*mx)
+
+	time.sleep(3)
+##==============-------------------   End   -------------------==============##
 
 def copy_move(src, dst, keep_it=False):
 	# https://stackoverflow.com/questions/7419665/python-move-and-overwrite-files-and-folders
@@ -83,8 +191,8 @@ def copy_move(src, dst, keep_it=False):
 		messa += f' Exception: '
 		print (messa, er)
 		time.sleep(3)
-#		input ("Delete?")
-#		os.remove(src)
+#        input ("Delete?")
+#        os.remove(src)
 	return True
 	##==============-------------------   End   -------------------==============##
 
@@ -105,35 +213,28 @@ def print_alighned(list_of_strings):
 def divd_strn( val ):
 	messa = sys._getframe().f_code.co_name
 	'''
-	Returns floating point resul for string (a/b)
+	Returns floating point resul for string (n/d) or val it's fp '.'
 	'''
-#	input ( val )
+#    input ( val )
+	r = 1
 	if '/' in val:
 		n, d = val.split('/')
 		n = float(n)
 		d = float(d)
-		if n > 0.0 and d > 0.0:
+		if n != 0 and d != 0 :
 			r = n / d
-		elif n == 0 :
-			messa += f" ! Zero Divided by     ! {n} / {d}"
-			print (messa)
-			return 0
-		else :
-			messa += f" NAN Division by Zero   ! {n} / {d}"
-			print (messa)
-			return 0
 	elif '.' in val:
 		r = float(val)
-	return round( r, 2)
+	return round( r, 3)
 ##==============-------------------   End   -------------------==============##
 
 
-def stmpd_rad_str(length=13):
-	_time = datetime.datetime.now()
-	rand_string = f"{_time:%Y %j %H-%M-%S }"
-	for char in random.sample( string.ascii_letters + string.hexdigits, length):
-		rand_string += char
-	return rand_string
+def stmpd_rad_str(leng=13, head=''):
+	_time = TM.datetime.now()
+	rand_ = f"{_time:%y%j%H%M%S}"
+	for char in random.sample( string.ascii_letters + string.hexdigits, leng):
+		rand_ += char
+	return head +rand_
 ##==============-------------------   End   -------------------==============##
 
 
@@ -150,21 +251,21 @@ def ordinal(num):
 ##==============-------------------   End   -------------------==============##
 
 
-def get_new_fname(file_name, new_extension='', strip=''):
+def get_new_fname(file_name, new_ext='', strip=''):
 	'''
 	Returns a new filename derived from the Old File by adding and or removing
 	'''
-	filename, ext = os.path.splitext(file_name)
+	fnm, ext = os.path.splitext(file_name)
 	if len(strip):
-		filename = filename.strip(strip)
-	if new_extension == strip :
-		return filename + new_extension
+		fnm = fnm.strip(strip)
+	if new_ext == strip :
+		return fnm +new_ext
 	else:
-		return filename + ext + new_extension
+		return fnm +ext +new_ext
 ##==============-------------------   End   -------------------==============##
 
 
-def hm_sz( nbyte, type = "B" ):
+def hm_sz( nbyte, type="B" ):
 	'''
 	Returns a human readable string from a number
 	+ or -
@@ -173,7 +274,8 @@ def hm_sz( nbyte, type = "B" ):
 	indx = 0
 
 	if not nbyte:
-		return '0 B'
+		return '0 ' +type
+
 	elif int(nbyte) < 0 :
 		sign = '-'
 	else:
@@ -188,26 +290,26 @@ def hm_sz( nbyte, type = "B" ):
 ##==============-------------------   End   -------------------==============##
 
 def safe_options(strm, opts ):
-    safe = {}
-    # Only copy options that are expected and of correct type
-    # (and do typecasting on them)
-    for k, v in opts.items():
-        if k in opts and v is not None:
-            typ = opts[k]
-            try:
-                safe[k] = typ(v)
-            except ValueError:
-                pass
-    return safe
+	safe = {}
+	# Only copy options that are expected and of correct type
+	# (and do typecasting on them)
+	for k, v in opts.items():
+		if k in opts and v is not None:
+			typ = opts[k]
+			try:
+				safe[k] = typ(v)
+			except ValueError:
+				pass
+	return safe
 
 def prs_frm_to(strm, dictio, DeBug=False ):
 	resul = dictio
 	try:
 		for k in dictio.keys():
-			item = strm.get(k, 'Pu_la')
-			if item == 'Pu_la':
-				resul[k] = 'Pu_la'
-				if DeBug : print ("\nPu_la in:", k, '\n' )
+			item = strm.get(k, '_nvald_')
+			if item == '_nvald_':
+				resul[k] = '_nvald_'
+				if DeBug : print ('_nvald_', k, '\n' )
 			else:
 				ty = type(item)
 				dy = type(dictio[k])
@@ -220,7 +322,7 @@ def prs_frm_to(strm, dictio, DeBug=False ):
 				else:
 					resul[k] = item
 	except Exception as e:
-		messa += f'\n{len(strm)}\n{json.dumps(strm, indent=2)}\n{len(resul)}\n{json.dumps(dictio, indent=2)}'
+		messa = f'\n{len(strm)}\n{strm}\n{len(resul)}\n{resul}'
 		print(messa)
 		Trace(messa, e)
 		input("All Fuked up")
@@ -229,66 +331,6 @@ def prs_frm_to(strm, dictio, DeBug=False ):
 		return tuple(resul.values())
 	else:
 		return resul[k]
-
-	'''
-	rsult = dict ()
-	# XXX: Fast version only defined data is copied if done reversed walk over js_info could see the extra unused information  :D
-	for key in _mtdta.keys():
-		rsult[key] = js_info.get(key)
-		if not rsult[key]  :
-			pass
-		if DeBug:	print (key, ' = ', rsult[key] )
-	if DeBug:	print ( json.dumps( rsult, indent=2 ) )
-
-	if DeBug :
-		print(f"  +{messa}=: Start: {str_t:%T}")
-
-		if not strm  :
-			print ("WTF:? No Stream for Dictio" ,'\n', dictio )
-			for key in ( dictio.keys() ) :
-				dictio[key] = 'Pu_la'
-			raise Except
-
-		if not dictio :
-			print ("WTF:? No Dictio for Strm ",'\n', repr(dictio) )
-			raise Except
-
-		print( type (strm),  '\n', len(strm),  'Items:\n', json.dumps(strm,   indent=2), '\n',
-			   type(dictio), '\n', len(dictio),'Items:\n', json.dumps(dictio, indent=2) )
-	'''
-##==============-------------------   End   -------------------==============##
-
-def Trace ( message, e, DeBug= False ) :
-	messa = sys._getframe().f_code.co_name
-	str_t = datetime.datetime.now()
-	print("+-"*40)
-	print(f'{message}\nError: {e}\nRepr: {repr(e)}' )
-	if DeBug : print( {repr(e)} )
-	print("-+"*40)
-
-#	print("%20s | %10s | %5s | %10s" %("File Name", "Method Name", "Line Number", "Line"))
-	print("^"*80,)
-	stack = traceback.extract_stack()
-	template = ' {filename:<26} | {lineno:5} | {funcname:20} | {source:9}'
-	for filename, lineno, funcname, source in stack:
-		if  funcname != '<module>':
-			funcname = funcname + '()'
-		print(template.format(
-				filename=os.path.basename(filename),
-				lineno=lineno,
-				source=source,
-				funcname=funcname)
-				)
-	print("^"*80,)
-	print("-"*80)
-
-	exc_type, exc_value, exc_traceback = sys.exc_info()
-	for frm_comp in traceback.extract_tb(exc_traceback):
-#		print( (frm_comp) )
-		print(f" {os.path.basename(frm_comp.filename):<26} | {frm_comp.lineno:5} | {frm_comp.name:20} | {frm_comp.line:9}" )
-		print("-"*80)
-
-	time.sleep(2)
 ##==============-------------------   End   -------------------==============##
 
 
@@ -367,8 +409,8 @@ def get_tree_size(path):
 		except (IOError, OSError) as err:
 			print('Error calling is_dir():', err, file=sys.stderr)
 			Trace ( messa, err )
-#			summary = traceback.StackSummary.extract( traceback.walk_stack(None) )
-#			print("\n Err:",{err},"\n",''.join(summary.format()))
+#            summary = traceback.StackSummary.extract( traceback.walk_stack(None) )
+#            print("\n Err:",{err},"\n",''.join(summary.format()))
 			continue
 		if is_dir:
 			total += get_tree_size(entry.path)
