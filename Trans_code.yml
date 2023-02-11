@@ -1,4 +1,4 @@
-
+#
 Glob:
   junk_nm:    "notvalid"
 
@@ -48,10 +48,11 @@ Skip:
     condtion 2.1:
 
 Metadata:
-  title     : ("title=" + file_name + " x256 " )
+  title     : ("title=" '+' file_name '+' " x256 ")
   copyright : ("copyright=" + "2023 Me " )
-  comment   : ("comment=" + "An exercise in metadata creation" )
-  autor     : ("author=" + "Encoded by the one and only GeoHab" )
+  comment   : ("comment="   + "An exercise in metadata creation" )
+  author    : ("author="    + "Encoded by the one and only GeoHab" )
+  Skip_key  : "| <¯\_(%)_/¯> | .mp4|"
   use_anonymous:    yes
 
 FfMpegCom:

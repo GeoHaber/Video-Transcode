@@ -1,9 +1,7 @@
 #!/usr/bin/python
-# -*- coding: utf-8 -*-
-
-# XXX KISS
 
 import	os
+import	re
 import	sys
 import	time
 import	json
@@ -30,8 +28,6 @@ def trycatch(func):
 			return res
 		except Exception as e:
 			print(f"Exception in {func.__name__}: {e}")
-		finally :
-			pass
 	return wrapper
 
 def handle_exception(func):
@@ -39,28 +35,34 @@ def handle_exception(func):
 	@wraps(func)
 	def wrapper(*args, **kwargs):
 		try:
-			res = func(*args, **kwargs)
-			return res
-#			return func(*args, **kwargs)
+			return func(*args, **kwargs)
 		except Exception as e:
 			print(f"Exception in {func.__name__}: {e}")
 			logging.error("Error: %s", e, exc_info=True)
 #			sys.exit(1)
 		except TypeError :
 			print(f"{func.__name__} wrong data types")
-			logging.error("Error: %s", e, exc_info=True)
 		except IOError:
 			print("Could not write to file.")
-			logging.error("Error: %s", e, exc_info=True)
-			logging.error("uncaught exception: %s", traceback.format_exc())
 		except :
-			print("someting Else")
-			logging.error("uncaught exception: %s", traceback.format_exc())
+			print("Someting Else?")
 		else:
 			print("No Exceptions")
 		finally:
-			pass
+			logging.error("Error: ", exc_info=True)
+			logging.error("uncaught exception: %s", traceback.format_exc())
 	return wrapper
+'''
+def performance_check(func):
+	def wrapper(*args, **kwargs):
+		start = time.perf_counter()
+		result = func(*args, **kwargs)
+		end = time.perf_counter()
+		elapsed_time = end - start
+		print(f"{func.__name__} took {elapsed_time:.6f} seconds")
+		return result
+	return wrapper
+'''
 
 def performance_check(func):
 	"""Measure performance of a function"""
@@ -69,60 +71,52 @@ def performance_check(func):
 		tracemalloc.start()
 		start_time =	time.perf_counter()
 		try:
-			res = func(*args, **kwargs)
+			return func(*args, **kwargs)
 		except Exception as e:
 			print(f"Exception in {func.__name__}: {e}")
-			logging.error("Error: %s", e, exc_info=True)
-			handle_exception( func(*args, **kwargs))
+			handle_exception( func(*args, **kwargs) )
+#			logging.error("Error: %s", e, exc_info=True)
 			return wrapper
 		finally:
 			duration =		time.perf_counter() - start_time
 			current, peak = tracemalloc.get_traced_memory()
 			tracemalloc.stop()
-			print(	f"{'.'*60}"
-					f"\n{func.__name__} ({func.__doc__})\n"
-					f" Mem awrg: {current / 10**6:.6f} MB"
-					f" Mem peak: {peak    / 10**6:.6f} MB"
-					f" Time: {duration:.5f} sec"
-					f"\n{'.'*60}" )
-		return res
+#			print(	f"{'.'*60}"
+#					f"\n {func.__name__} ({func.__doc__})\n"
+#					f" Mem awrg: {current / 10**6:.6f} MB"
+#					f" Mem peak: {peak    / 10**6:.6f} MB"
+#					f" Time: {duration:.5f} sec"
+#					f"\n{'.'*60}" )
 	return wrapper
 
 ##>>============-------------------<  End  >------------------==============<<##
 
 #  CLASES
 # XXX: https://shallowsky.com/blog/programming/python-tee.html
+
 class Tee (list):
 	def __init__(self, *targets):
 		self.targets = targets
-
 	def __del__(self):
 		for ftarg in self.targets:
 			if ftarg != sys.stdout and ftarg != sys.stderr:
 				ftarg.close()
-
 	def write(self, obj):
-		DeBug = False
+		de_bug = False
 		for ftarg in self.targets:
 			try:
 				ftarg.write(obj)
 				ftarg.flush()
 			except Exception as x:
-				if DeBug : print (repr(x))
+				if de_bug : print (repr(x))
 				continue
 	def flush(self):
 		return
+
 ##>>============-------------------<  End  >------------------==============<<##
 
-#FUNCTIONS
-def file_age(path=__file__):
-	# Return days since last file update
-	dt = (datetime.now() - TM.fromtimestamp(Path(path).stat().st_mtime))  # delta
-	return dt.days  # + dt.seconds / 86400  # fractional days
-def file_update_date(path=__file__):
-	# Return human-readable file modification date, i.e. '2021-3-26'
-	t = TM.fromtimestamp(Path(path).stat().st_mtime)
-	return f'{t.year}-{t.month}-{t.day}'
+
+
 def file_size(path):
 	# Return file/dir size (MB)
 	mb = 1 << 20  # bytes to MiB (1024 ** 2)
@@ -134,10 +128,11 @@ def file_size(path):
 	else:
 		return 0.0
 ##>>============-------------------<  End  >------------------==============<<##
-def Trace ( message, e, DeBug= False ) :
+
+def Trace ( message, e, de_bug= False ) -> None :
 	messa = sys._getframe().f_code.co_name
-	str_t = TM.datetime.now()
-	mx = 42
+	str_t = time.perf_counter()
+	mx  = 42
 	print("+-"*mx)
 	print(f'{message}\nError: {e}\nRepr: {repr(e)}' )
 	print("-+"*mx)
@@ -170,7 +165,7 @@ def Trace ( message, e, DeBug= False ) :
 	time.sleep(3)
 ##==============-------------------   End   -------------------==============##
 
-def copy_move(src, dst, keep_it=False):
+def copy_move(src: str, dst: str, keep_it=False) -> int :
 	# https://stackoverflow.com/questions/7419665/python-move-and-overwrite-files-and-folders
 	messa = sys._getframe().f_code.co_name + '-:'
 
@@ -194,23 +189,22 @@ def copy_move(src, dst, keep_it=False):
 #        input ("Delete?")
 #        os.remove(src)
 	return True
-	##==============-------------------   End   -------------------==============##
+##==============-------------------   End   -------------------==============##
 
-def print_alighned(list_of_strings):
+def print_alighned(list: str) -> None :
 	'''
-	print formated table with the values provided
+	print a formated table with the {list} values provided
 	'''
-
 	lens = []
-	for col in zip(*list_of_strings):
+	for col in zip(*list):
 		lens.append(max([len(v) for v in col]))
 	format = "  ".join(["{:<" + str(l) + "}" for l in lens])
-	for row in list_of_strings:
+	for row in list:
 		print(format.format(*row))
 ##==============-------------------   End   -------------------==============##
 
 
-def divd_strn( val ):
+def divd_strn(val: str ) -> float:
 	messa = sys._getframe().f_code.co_name
 	'''
 	Returns floating point resul for string (n/d) or val it's fp '.'
@@ -228,6 +222,18 @@ def divd_strn( val ):
 	return round( r, 3)
 ##==============-------------------   End   -------------------==============##
 
+def test_filename(filename: str) -> None:
+	legal_chars = '[A-Za-z0-9._-]+'
+	if re.fullmatch(legal_chars, filename):
+		print(f'{filename} is a legal filename.')
+	else:
+		print(f'{filename} is NOT a legal filename.')
+		out_file =  re.sub(r'[^\w\s_-]+', '', filename).strip().replace(' ', '_')
+		print ( f'{out_file} is rename it')
+
+#test_filename("myfile.txt")
+#test_filename("my file.txt")
+##==============-------------------   End   -------------------==============##
 
 def stmpd_rad_str(leng=13, head=''):
 	_time = TM.datetime.now()
@@ -238,7 +244,7 @@ def stmpd_rad_str(leng=13, head=''):
 ##==============-------------------   End   -------------------==============##
 
 
-def ordinal(num):
+def ordinal(num: str) -> str:
 	'''
 	Returns the ordinal number of a given integer, as a string.
 	eg. 1 -> 1st, 2 -> 2nd, 3 -> 3rd, etc.
@@ -264,30 +270,22 @@ def get_new_fname(file_name, new_ext='', strip=''):
 		return fnm +ext +new_ext
 ##==============-------------------   End   -------------------==============##
 
-
-def hm_sz( nbyte, type="B" ):
-	'''
-	Returns a human readable string from a number
-	+ or -
-	'''
-	sufix = ['', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y']
-	indx = 0
-
-	if not nbyte:
-		return '0 ' +type
-
-	elif int(nbyte) < 0 :
-		sign = '-'
-	else:
-		sign = ''
-
-	valu = abs(float(nbyte))
-	while valu >= 1024 and indx <= len(sufix) :
-		valu /= 1024
-		indx += 1
-
-	return f'{sign}{round(valu,1)} {sufix[indx]}{type}'
-##==============-------------------   End   -------------------==============##
+def hm_sz(numb, type="B") -> str:
+	'''convert file size to human readable format'''
+	numb = float(numb)
+	try:
+		if numb < 1024.0:
+			return f"{numb} {type}"
+		for unit in ['B','KB','MB','GB','TB','PB','EB']:
+			if numb < 1024.0:
+				return f"{numb:.2f}{unit}"
+			numb /= 1024.0
+		return f"{numb:.2f}PB"
+	except Exception as e:
+		message = f'{e}'
+		print(message)
+		Traceback.print_exc()
+#==============-------------------   End   -------------------==============##
 
 def safe_options(strm, opts ):
 	safe = {}
@@ -302,35 +300,28 @@ def safe_options(strm, opts ):
 				pass
 	return safe
 
-def prs_frm_to(strm, dictio, DeBug=False ):
-	resul = dictio
+def parse_from_to(strm, dictio, de_bug=True):
+	message = sys._getframe().f_code.co_name
+	resul = {}
 	try:
-		for k in dictio.keys():
-			item = strm.get(k, '_nvald_')
-			if item == '_nvald_':
-				resul[k] = '_nvald_'
-				if DeBug : print ('_nvald_', k, '\n' )
-			else:
-				ty = type(item)
-				dy = type(dictio[k])
-				if   ty == str and dy == int:
-					resul[k] = int(item)
-				elif ty == str and dy == float:
-					resul[k] = float(item)
-				elif dy == dict:
-					resul[k] = dict(item)
-				else:
-					resul[k] = item
+		resul = {k: (int(strm[k]) if type(dictio[k]) == int else
+					 float(strm[k]) if type(dictio[k]) == float else
+					 dict(strm[k]) if type(dictio[k]) == dict else
+					 strm[k])
+				 for k in dictio.keys() if k in strm}
 	except Exception as e:
-		messa = f'\n{len(strm)}\n{strm}\n{len(resul)}\n{resul}'
-		print(messa)
-		Trace(messa, e)
-		input("All Fuked up")
+		message = f'\n{len(strm)}\n{strm}\n{len(resul)}\n{resul}'
+		print(message)
+		Traceback.print_exc()
+		input("An error occurred.")
 
-	if len(dictio) > 1:
+	if len(resul) > 1:
 		return tuple(resul.values())
+	elif len(resul) == 1:
+		return next(iter(resul.values()))
 	else:
-		return resul[k]
+		return None
+
 ##==============-------------------   End   -------------------==============##
 
 
@@ -394,6 +385,16 @@ def res_chk(folder='.'):
 		return True
 ##==============-------------------   End   -------------------==============##
 
+def get_tree_size(path: str) -> int:
+	'''calculate the size of the tree rooted at path'''
+	total = 0
+	with os.scandir(path) as it:
+		for entry in it:
+			if entry.is_file():
+				total += entry.stat().st_size
+			elif entry.is_dir():
+				total += get_tree_size(entry.path)
+	return total
 
 def get_tree_size(path):
 	"""Return total size of files in path and subdirs. If

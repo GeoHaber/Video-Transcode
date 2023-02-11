@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 from My_Utils import *
 from Yaml import *
 
@@ -14,7 +16,7 @@ ffmpeg = os.path.join(ffmpg_bin, "ffmpeg.exe")
 ffprob = os.path.join(ffmpg_bin, "ffprobe.exe")
 # ffplay = os.path.join(ffmpg_bin, "ffplay.exe")
 
-if not ( os.path.exists(ffmpeg) and os.path.exists(ffprob) ):
+if not os.path.exists(ffmpeg) or not os.path.exists(ffprob) :
 	input(f"{ffmpeg}\nPath Does not Exist:")
 	raise OSError
 
@@ -24,17 +26,21 @@ if not ( os.path.exists(ffmpeg) and os.path.exists(ffprob) ):
 # Runns ffprobe on input file then if all good
 # Returns a Json list
 @performance_check
-def ffprobe_run(in_file, execu=ffprob, DeBug=False ):
+def ffprobe_run(input_file, execu=ffprob, de_bug=False ) -> str :
 	''' Run ffprobe '''
 	mesaj = sys._getframe().f_code.co_name
 	print(f"  +{mesaj}=: Start: {TM.datetime.now():%T}")
 	str_t = time.perf_counter()
 
+	if not input_file :
+		print (f" {mesaj} no input_file Exit:")
+		return False
+
 	ff_args = [execu,
 				'-hide_banner',
 				'-analyzeduration', '100000000',
 				'-probesize',		 '50000000',
-				'-v', 'warning',	# XXX quiet, panic, fatal, error, warning, info, verbose, debug, trace
+				'-v', 'warning',	# XXX quiet, panic, fatal, error, warning, info, verbose, de_bug, trace
 				'-of', 'json',		# XXX default, csv, xml, flat, ini
 				'-show_format',
 				'-show_streams',
@@ -42,7 +48,7 @@ def ffprobe_run(in_file, execu=ffprob, DeBug=False ):
 #				'-show_data',
 				'-show_entries', 'format:stream',
 #				'-show_private_data',
-				'-i', in_file]
+				'-i', input_file]
 
 # XXX: TBD good stuff
 	out = SP.run(	ff_args,
@@ -61,85 +67,68 @@ def ffprobe_run(in_file, execu=ffprob, DeBug=False ):
 
 # XXX:  Returns encoded filename file_name
 @performance_check
-def ffmpeg_run(input_file, ff_com, execu=ffmpeg, DeBug=False):
-	str_t = TM.datetime.now()
-	mesaj= sys._getframe().f_code.co_name
-	print(f"  +{mesaj}=: Start: {str_t:%T}")
-#	DeBug=True
+def ffmpeg_run(input_file, ff_com, skip_it, execu=ffmpeg, de_bug=False):
+	str_t = time.perf_counter()
+	mesaj = sys._getframe().f_code.co_name
+	print(f"  +{mesaj}=: Start: {TM.datetime.now():%T}")
+
+	if not input_file or skip_it :
+		if de_bug: print (f" {mesaj}\n {input_file}\tCom: {ff_com}\n")
+		return False
 
 	file_name, _ = os.path.splitext( os.path.basename(input_file) )
-	out_file = '_' +stmpd_rad_str(7, file_name[0:21]) +TmpF_Ex
+	out_fi   = '_' +stmpd_rad_str(7, file_name[0:21])
+	out_file =  re.sub(r'[^\w\s_-]+', '', out_fi ).strip().replace(' ', '_') +TmpF_Ex
+
 
 	ff_head = [execu, "-i", input_file, "-hide_banner" ]
 
-	ff_tail = [ "-metadata", "title="    + file_name + " x256 ",
+	ff_tail = [ "-metadata", "title="    + file_name + " x256",
 				"-metadata", "comment="  + Skip_key,
-				"-metadata", "copyright="+"2023 Me",
-				"-metadata", "author="   +"Encoded by the one and only GeoHab",
-				"-metadata", "encoder="  +"FFmpeg 5.12",
+				"-metadata", "copyright="+" 2023 Me",
+				"-metadata", "author="   +" Encoded by the one and only GeoHab",
+				"-metadata", "encoder="  +" ffmpeg 5.12",
 				"-movflags", "+faststart",
 				"-fflags",   "+fastseek",
-#				"-fflags", "+genpts,+igndts",
 				"-y", out_file,
+#				"-fflags", "+genpts,+igndts",
 				"-f", "matroska" ]
-	DeBug = True
-	if DeBug :
-		# -to specifis end time, -t specifies duration
-		str_at = '00:00:33'
-		end_at = '00:05:55'
-
-		print (f"DeBug Make short Start:{str_at} End:{end_at}" )
-
-		if len(file_name) > 40 :
-			out_file = '_Short_ '+file_name[0:40] +stmpd_rad_str(3) +TmpF_Ex
-		else :
-			out_file = '_Short_ '+file_name +stmpd_rad_str(3) +TmpF_Ex
-
-		ff_head = [ execu, '-ss', str_at, '-t', end_at, '-i', input_file, '-max_muxing_queue_size', '2048']
-		ff_com  = ['-map', '0:v?', '-map', '0:a?', '-map', '0:s?', '-c:s', 'mov_text' ]
-		ff_tail = [ '-y', out_file ]
-
 	todo = ff_head +ff_com +ff_tail
 
-#	if DeBug :
+#	if de_bug :
 #		print( todo )
 #		time.sleep( 4 )
 
-# XXX:
-	'''
-	Needs Work it's just a hack to rerun in debug mode if not succesful
-	'''
-
-	if run_ffm( todo ):
-		if not os.path.exists(out_file) or os.path.getsize(out_file) < 1000 :
-			mesaj+= f'\n{todo}\nNo Output Error'
-			print(mesaj)
-			time.sleep(3)
-			make_matrx(input_file, execu, ext = '.png')
-#			run_ffm(todo, mesaj)
-			raise Exception(mesaj)
-		else:
-			end_t = TM.datetime.now()
-			convert = time.strftime("%H:%M:%S", time.gmtime((end_t-str_t).total_seconds()))
-			mesaj=f'  -End: {end_t:%T}\tTotal: {convert} sec'
-			print(mesaj)
-			return out_file
+	if run_ffm(todo, de_bug ):
+		return out_file
 	else:
-		mesaj+= f" -> FFMpeg failed :("
+		mesaj+= f"   = ffmpeg Failed \n"
 		raise Exception(mesaj)
+
+	end_t = time.perf_counter()
+	print(f"  Done {TM.datetime.now():%T}\tTotal: {round((end_t - str_t), 2)} sec")
 
 	return out_file
 ##>>============-------------------<  End  >------------------==============<<##
 
+@performance_check
+def run_ffm(args, de_bug =False ):
+	mesaj = sys._getframe().f_code.co_name
 
-def run_ffm(args, *DeBug):
-#	DeBug=True
-	mesaj= sys._getframe().f_code.co_name + ':'
+	if not args :
+		print (f" {mesaj} Exit no args = {args} ")
+		return False
 
-	if DeBug :
-		print(f'{mesaj} Debug Mode\n{args}\n')
-		runit    = SP.run( args)
-		mesaj+= f' Done \n'
+	if de_bug :
+		print(f'{mesaj} de_bug Mode\n{args}\n')
+		runit    = SP.run( args,
+						encoding=console_encoding,
+						stderr=SP.STDOUT,
+#						stdout=SP.PIPE,
+						universal_newlines=True )
+		print ("Std:", runit.stdout )
+		print ("Err:", runit.stdout )
+		mesaj+= f' Done\n'
 		print(mesaj)
 		time.sleep(3)
 	else:
@@ -167,10 +156,10 @@ def run_ffm(args, *DeBug):
 							time.sleep(3)
 						break
 				except Exception as x:
-					if DeBug : print (repr(x))
+					if de_bug : print (repr(x))
 					continue
 		except :
-			mesaj+= f" Exception => So lets try DEBUG mode"
+			mesaj+= f" Exception => So lets try de_bug mode"
 			print(mesaj)
 			try :
 				runit.kill()
@@ -183,20 +172,20 @@ def run_ffm(args, *DeBug):
 			except :
 				print (':( Looking Bad :D')
 				return False
+	return True
 
 	mesaj+= f"\n is Done"
-	if DeBug : print (mesaj)
+	if de_bug : print (mesaj)
 
 	return True
 ##==============-------------------   End   -------------------==============##
 
 @performance_check
-def pars_format(mta_dta, in_file, DeBug):
+def pars_format(mta_dta, input_file, de_bug):
 	''' Parse and extract data from file format '''
-	str_t = TM.datetime.now()
-	mesaj= sys._getframe().f_code.co_name + 'p:'
-
-	if DeBug :		print(f"  +{mesaj}=: Start: {str_t:%T}")
+	str_t = time.perf_counter()
+	mesaj = sys._getframe().f_code.co_name
+	if de_bug :		print(f"  +{mesaj}=: Start: {TM.datetime.now():%T}")
 
 	global glb_vidolen  # make it global so we can reuse for fmpeg check ...
 	global glb_bitrate
@@ -215,13 +204,13 @@ def pars_format(mta_dta, in_file, DeBug):
 		'tags'		 		: {}
 		}
 
-	frmt_ = mta_dta['format']
-
-	if not len(frmt_) :
-		mesaj+= f"\n{ json.dumps(mta_dta, indent=2) }\n No Format\n"
+	if 'format' not in mta_dta :
+		mesaj+= f" 'format' keyword not in\n{ json.dumps(mta_dta, indent=2) }\n"
+		print ( mesaj )
 		raise ValueError(mesaj)
 	else :
-		if DeBug :
+		frmt_ = mta_dta['format']
+		if de_bug :
 			print( f"\nFormat:\n{ json.dumps(mta_dta, indent=2) }\n")
 
 	glb_vidolen = int(float(frmt_['duration']))
@@ -230,9 +219,11 @@ def pars_format(mta_dta, in_file, DeBug):
 	nb_streams	= int(		frmt_['nb_streams'])
 	nb_programs	= int(		frmt_['nb_programs'])
 
-	strms_ = [strg for strg in mta_dta['streams']]
+#	strms = next( (line.strip() for line))
+#	strms_ = next(strg for strg in mta_dta['streams'] if strg and True )
+	strms_ = [strg for strg in mta_dta['streams'] ]
 
-	if DeBug : print(f" We have {len(strms_)} Streams: {strms_}" )
+	if de_bug : print(f" We have {len(strms_)} Streams: {strms_}" )
 
 	if nb_streams != len( strms_) :
 		print(f" Someting is wrong different numer of streams {nb_streams} != {len( strms_) }")
@@ -240,18 +231,16 @@ def pars_format(mta_dta, in_file, DeBug):
 	skip_this = False
 	if 'tags' in frmt_ :
 		if 'comment' in frmt_['tags'] and frmt_['tags']['comment'] == Skip_key :
-			mesaj+= ' = Skip it all is well'
 			skip_this = True
-		if DeBug : print( json.dumps(frmt_['tags'], indent=2) )
+		if de_bug : print( json.dumps(frmt_['tags'], indent=2) )
 	else :
 		print("No Tags in Format ?", frmt_['tags']['comment'], Skip_key)
 
-	show_cmd = DeBug
+	show_cmd = de_bug
 
 	all_videos = [stre for stre in strms_ if stre['codec_type'] == 'video']
-
 	if len( all_videos) :
-		ff_video = pars_video( all_videos, DeBug )
+		ff_video = pars_video( all_videos, de_bug )
 	else :
 		ff_video = ['-vn']
 		print("    |<V:no>|")
@@ -260,7 +249,7 @@ def pars_format(mta_dta, in_file, DeBug):
 
 	all_audios = [stre for stre in strms_ if stre['codec_type'] == 'audio']
 	if len( all_audios) :
-		ff_audio = pars_audio ( all_audios, DeBug )
+		ff_audio = pars_audio ( all_audios, de_bug )
 	else :
 		ff_audio = ['-an']
 		print("    |<A:no>|")
@@ -268,16 +257,16 @@ def pars_format(mta_dta, in_file, DeBug):
 
 	all_substrs = [stre for stre in strms_ if stre['codec_type'] == 'subtitle']
 	if len( all_substrs) :
-		ff_subtl= pars_subtl ( all_substrs, DeBug )
+		ff_subtl= pars_subtl ( all_substrs, de_bug )
 	else :
 		ff_subtl = ['-sn']
-		ff_subtl = find_subtl( in_file, DeBug )
+		ff_subtl = find_subtl( input_file, de_bug )
 		print("    |<S:no>|")
 	if show_cmd :print (f"      {ff_subtl}")
 
 	all_datass = [stre for stre in strms_ if stre['codec_type'] == 'data']
 	if len( all_datass) :
-		ff_data = pars_extdta( all_datass, DeBug )
+		ff_data = pars_extdta( all_datass, de_bug )
 	else :
 		ff_data = ['-dn']
 		print("    |<D:no>|")
@@ -294,7 +283,7 @@ def pars_format(mta_dta, in_file, DeBug):
 		Leng =	f"{days}D{hours:02d}h:{minut:02d}m:{secs:02d}s"
 
 	# XXX: Print Banner
-	mesaj= f"    |< FR >|Sz:{hm_sz( frmt_['size'])}|BRate: {hm_sz( glb_bitrate )} |L: {Leng} |Strms = {nb_streams}|Prog = {nb_programs}"
+	mesaj = f"    |< FR >|Sz:{hm_sz( frmt_['size'])}|BRate: {hm_sz( glb_bitrate )} |L: {Leng} |Strms = {nb_streams}|Prog = {nb_programs}"
 	if len( all_videos) :
 		mesaj+= f'|V = {len(all_videos)}|'
 	if len( all_audios) :
@@ -311,14 +300,14 @@ def pars_format(mta_dta, in_file, DeBug):
 ##>>============-------------------<  End  >------------------==============<<##
 
 @performance_check
-def pars_video ( strm_in , DeBug ) :
+def pars_video ( strm_in , de_bug ) :
 	''' Parse and extract data from video streams '''
 
 	mesaj = sys._getframe().f_code.co_name
-	print(f"    +{mesaj}=: Start: {TM.datetime.now():%T}")
 	str_t = time.perf_counter()
-
-	if DeBug:	print(f" {json.dumps( strm_in, indent=2)}" )
+	if de_bug:
+		print(f"    +{mesaj}=: Start: {TM.datetime.now():%T}")
+		print(f" {json.dumps( strm_in, indent=2)}" )
 
 	_vdata = {
 		'index'			:int,
@@ -338,10 +327,11 @@ def pars_video ( strm_in , DeBug ) :
 	ff_video = []
 	for count, this_vid in enumerate(strm_in) :
 		extra = ''
-		ff_vid =[]
 		_strm = str(this_vid['index'])
 		_cnt  = str(count)
-		global vid_width
+
+		global vid_width	#NOTE used by matrix_it
+
 		vid_width, vid_heigh = this_vid['width'], this_vid['height']
 
 		totl_pixl = vid_width * vid_heigh
@@ -355,12 +345,12 @@ def pars_video ( strm_in , DeBug ) :
 # If it's mjpeg or other unsuported just ignore and deleate
 		if this_vid['codec_name'].lower() in ['mjpeg', 'png'] :
 			extra = f" Rm: {this_vid['codec_name']} < |"
-			ff_video += (['-map', '-0:' +_strm , '-c:', 'copy'])
+#			ff_video += (['-map', '-0:V?' +_strm , '-c:v', 'copy'])
 			mesaj = f"    |<V:{_strm:2}>|{this_vid['codec_name']:<8} | {extra}"
 			print(mesaj)
 			continue
 
-# Calc _vi_btrt
+		# NOTE Calc _vi_btrt
 		if 'bit_rate' in this_vid :
 			_vi_btrt = int(this_vid ['bit_rate'])
 		else:
@@ -370,59 +360,56 @@ def pars_video ( strm_in , DeBug ) :
 		'''
 			If size larger than 1080p reduce to 1080p
 		'''
-	# NOTE: Expected Bitrate Kind of ... should be bigger 2.5x for low res and smaler for high 1.5 # XXX:
-		ff_vid.extend( ['-map', '0:v:' + _strm , '-c:v:' + _cnt ])
+		# NOTE: Expected Bitrate Kind of ... should be bigger 2.5x for low res and smaler for high 1.5 # XXX:
 	#	if size > 1080p : reduce to 1080p
 	#		: vid_width, vid_heigh to cals reduction factor
 
-		if  vid_width >= 7600 or vid_heigh >= 4300:
+		ff_vid = ['-map', '0:V:' + _strm , '-c:v:' + _cnt ]
+
+		output = "SD"
+		if vid_width   >= 7600 or vid_heigh >= 4300:
 			output = "8K"
 		elif vid_width >= 3800 or vid_heigh >= 2100:
 			output = "4K"
-		elif vid_width > 2592 or vid_heigh > 1920 :
+		if vid_width   >  2100 or vid_heigh >  1240 :
 			output = "2K"
 		# XXX: Compute Scale
-			div_w = round((vid_width / 1920))
-			div_h = round((vid_heigh / 1080))
+			div_w = round((vid_width / 1920),3)
+			div_h = round((vid_heigh / 1080),3)
 			if div_h == div_w :
-				nw = round( vid_width/div_w )
-				nh = round( vid_heigh/div_h )
+				nw = round(vid_width / div_w )
+				nh = round(vid_heigh / div_h )
 			else :
 				output +=f" W != H, {div_w}, {div_h}"
 				fac= min( div_w, div_h )
 				nw = round( vid_width/fac )
 				nh = round( vid_heigh/fac )
-
-			extra += f'  {output} Scale {vid_width}x{vid_heigh} to {nw}x{nh}'
+			extra += f' {output} Scale {vid_width}x{vid_heigh} to {nw}x{nh}'
 			ff_vid.extend(['libx265', '-crf', '25', '-preset', 'slow', '-vf', 'scale=' +str(nw) +':' +str(nh) ])
-		elif _vi_btrt < (expctd) :
+		elif  vid_width >= 1280 or vid_heigh >= 720:
+			output = "FHD"
+		elif vid_width >= 720 or vid_heigh >= 500:
+			output = "HD"
+		if _vi_btrt < (expctd) :
 			if this_vid['codec_name'] == 'hevc':
 				extra += ' Copy'
 				ff_vid.extend(['copy'])
 			else:
+				extra += ' => Convert to Hevc'
 				ff_vid.extend(['libx265', '-crf', '25', '-preset', 'slow'])
-				if   vid_width >= 1280 or vid_heigh >= 720:
-					output = "FHD"
-				elif vid_width >= 720 or vid_heigh >= 500:
-					output = "HD"
-				else:
-					output = "SD"
-				extra += f' {output} Convert to x265'
 		else:
+			ff_vid.extend(['libx265', '-crf', '25', '-preset', 'slow'])
 			if this_vid['codec_name'] == 'hevc':
 				extra += '\tReduce < ' +hm_sz(expctd)
-				ff_vid.extend(['libx265', '-crf', '25'])
 			else:
+			#	extra += f' {output} Convert to x265'
 				extra += ' => Convert to Hevc'
-				ff_vid.extend(['libx265', '-crf', '25'])
-			ff_vid.extend(['-preset', 'slow'])
 		try :
 			frm_rate = 25
 			if 'r_frame_rate' in this_vid :
 				frm_ra    = divd_strn(this_vid['r_frame_rate'])
 				if frm_ra in [ '0', 'NAN'] :
 					r_frame_rate = 25
-					pass
 				else :
 					frm_rate = frm_ra
 			else :
@@ -448,7 +435,7 @@ def pars_video ( strm_in , DeBug ) :
 		glb_totfrms = round(frm_rate * glb_vidolen)
 
 		if re.search (r"yuv[a-z]?[0-9]{3}", this_vid['pix_fmt']) :
-			mesaj= f"{this_vid['pix_fmt']}"
+			mesaj = f"{this_vid['pix_fmt']}"
 			if re.search (r"10le", this_vid['pix_fmt']) :
 				mesaj += " 10 Bit"
 				totl_pixl *= 1.2 # 30/24 +15% extra
@@ -457,50 +444,47 @@ def pars_video ( strm_in , DeBug ) :
 		hours, mins = divmod(mins, 60)
 
 	# XXX: Print Banner
-		mesaj= f"    |< CT >|{vid_width:>4}x{vid_heigh:<4}|Tfm: {hm_sz(glb_totfrms,'F'):>8}|Tpx: {hm_sz(totl_pixl, 'P'):>8}|XBr: {hm_sz(round(totl_pixl)):>7}| {mesaj}"
+		mesaj = f"    |< CT >|{vid_width:>4}x{vid_heigh:<4}|Tfm: {hm_sz(glb_totfrms,'F'):>8}|Tpx: {hm_sz(totl_pixl, 'P'):>8}|XBr: {hm_sz(round(totl_pixl)):>7}| {mesaj}"
 		print(mesaj)
 
 		if 'bit_rate' in this_vid and this_vid['bit_rate'] :
 			_vi_btrt = int(this_vid ['bit_rate'])
 		else :
-			print ( json.dumps(this_vid , indent=3 ) )
+		#	print (f" No bit_rate \n{json.dumps(this_vid , indent=3 )}" )
 			_vi_btrt = glb_bitrate * 0.8	# estimate 80% is video
-			extra = ' BitRate Estimate '
+			extra += ' BitRate Estimate '
 
 			try :
 				if 'tags' in this_vid and 'handler_name' in this_vid ['tags'] :
-					extra = f"  {this_vid ['tags']['handler_name']}"
-				else :
-					extra = ' hndl_nm?'
+					extra += f"  {this_vid ['tags']['handler_name']}"
 			except Exception as x:
-				if DeBug : print ('  =>', repr(x))
+				if de_bug : print ('  =>', repr(x))
 				pass
 
-		mesaj= f"    |<V:{_strm:2}>|{this_vid ['codec_name']:<8} |Br: {hm_sz(_vi_btrt):>9}|XBr: {hm_sz(totl_pixl):>8}|Fps: {frm_rate:>7}|{extra}"
+		mesaj = f"    |<V:{_strm:2}>|{this_vid ['codec_name']:<8} |Br: {hm_sz(_vi_btrt):>9}|XBr: {hm_sz(totl_pixl):>8}|Fps: {frm_rate:>7}|{extra}"
 		print(mesaj)
 
-		if (DeBug): print( f"S:{_strm} C:{_strm }\n {ff_vid}" )
+		if (de_bug): print( f"S:{_strm} C:{_strm }\n {ff_vid}" )
 
 		ff_video += ff_vid
 
-	if DeBug :
+	if de_bug :
 		print (" ", ff_video)
 
 	end_t = time.perf_counter()
-	print(f'   -End: {TM.datetime.now():%T}\tTotal: {round((end_t - str_t), 2)} sec')
+#	print(f'   -End: {TM.datetime.now():%T}\tTotal: {round((end_t - str_t), 2)} sec')
 
 	return ff_video
 ##>>============-------------------<  End  >------------------==============<<##
 
 # XXX: Audio
 @performance_check
-def pars_audio ( strm_in, DeBug ) :
+def pars_audio ( strm_in, de_bug ) :
 	''' Parse and extract data from audio streams '''
 	mesaj = sys._getframe().f_code.co_name
-	print(f"    +{mesaj}=: Start: {TM.datetime.now():%T}")
+	if de_bug :	print(f"    +{mesaj}=: Start: {TM.datetime.now():%T}")
 	str_t = time.perf_counter()
-
-	if DeBug :	print(f"{json.dumps( strm_in, indent=2)}" )
+	if de_bug :	print(f"{json.dumps( strm_in, indent=2)}" )
 
 	_adata = {
 		'index'			: int,
@@ -519,6 +503,7 @@ def pars_audio ( strm_in, DeBug ) :
 		'tags'			: {}
 		}
 
+
 	ff_audio = []
 	is_deflt = False
 	for count, this_aud in enumerate(strm_in) :
@@ -526,9 +511,9 @@ def pars_audio ( strm_in, DeBug ) :
 		extra  = ''
 		_strm = str(this_aud['index'])
 		_cnt =  str(count)
-		if DeBug :
+		if de_bug :
 			print ( json.dumps(this_aud, indent=3 ) )
-			print (f"    +{mesaj}=: Start: {str_t:%T}\n {json.dumps(this_aud, indent=2)}" )
+			print (f"    +{mesaj}=: Start: {TM.datetime.now():%T}\n {json.dumps(this_aud, indent=2)}" )
 
 #		try :
 		if 'bit_rate' in this_aud:
@@ -558,8 +543,8 @@ def pars_audio ( strm_in, DeBug ) :
 		if this_aud['codec_name'] in ('aac', 'vorbis', 'mp2', 'mp3'):
 			if _au_btrt < Max_a_btr :
 				extra += ' Copy'
-				# XXX: DeBug # XXX:
-				if DeBug: print(json.dumps(this_aud, indent=2))
+				# XXX: de_bug # XXX:
+				if de_bug: print(json.dumps(this_aud, indent=2))
 				ff_aud.extend(['copy'])
 			else:
 				extra += ' Reduce BitRate'
@@ -601,29 +586,32 @@ def pars_audio ( strm_in, DeBug ) :
 			if 'tags' in this_aud :
 				extra += f"  {this_aud['tags']['handler_name']}"
 		except Exception as x:
-			if DeBug : print ('  =>', repr(x))
+			if de_bug : print ('  =>', repr(x))
 			pass
-
-		mesaj = f"    |<A:{_strm:2}>|{this_aud['codec_name']:<8} |Br: {hm_sz(_au_btrt):>9}|{_lng}|Frq: {hm_sz(this_aud['sample_rate'],'Hz'):>8}|Ch: {chnls}| {extra}"
+		global aud_smplrt
+		aud_smplrt = this_aud['sample_rate']
+#		print ( f" {aud_smplrt}, {this_aud['sample_rate']} & {hm_sz(aud_smplrt)} )")
+#		input ( 'WTFko')
+		mesaj = f"    |<A:{_strm:2}>|{this_aud['codec_name']:<8} |Br: {hm_sz(_au_btrt):>9}|{_lng}|Frq: {hm_sz(aud_smplrt):>8},'Hz'|Ch: {chnls}| {extra}"
 		print( mesaj )
-		if (DeBug) : print (ff_aud)
+		if (de_bug) : print (ff_aud)
 
 		ff_audio += ff_aud
-	if DeBug :
+	if de_bug :
 		print("Audio", ff_audio )
 
 	end_t = time.perf_counter()
-	print(f'   -End: {TM.datetime.now():%T}\tTotal: {round((end_t - str_t), 2)} sec')
+#	print(f'   -End: {TM.datetime.now():%T}\tTotal: {round((end_t - str_t), 2)} sec')
 
 	return ff_audio
 ##>>============-------------------<  End  >------------------==============<<##
 
 # XXX: Subtitle
 @performance_check
-def pars_subtl ( strm_in , DeBug ) :
+def pars_subtl ( strm_in , de_bug ) :
 	''' Parse and extract data from subtitle streams '''
 	mesaj = sys._getframe().f_code.co_name
-	print(f"    +{mesaj}=: Start: {TM.datetime.now():%T}")
+	if de_bug :	print(f"    +{mesaj}=: Start: {TM.datetime.now():%T}")
 	str_t = time.perf_counter()
 
 	_sdata = {
@@ -639,25 +627,28 @@ def pars_subtl ( strm_in , DeBug ) :
 		'disposition': {},
 		'tags':{}
 	}
+
 	numbr = len (strm_in)
 	ff_subtl =[]
 	for count, this_sub in enumerate(strm_in) :
+
+	#	prs_frm_to ( this_sub, _sdata , de_bug)
+
 		ff_sub = []
 		extra  = ''
 		_strm = str(this_sub['index'])
 		_cnt  = str(count)
-		if DeBug :
-			print(f"    +{mesaj}=: Start: {str_t:%T}\n {json.dumps(this_sub, indent=2)}" )
+		if de_bug :
+			print(f"    +{mesaj}=: Start: {TM.datetime.now():%T}\n {json.dumps(this_sub, indent=2)}" )
+		if 'codec_name' not in this_sub :
+			this_sub['codec_name'] = "undefined"
+		#	print(f"    +{mesaj}= NO codec_name in {json.dumps(this_sub, indent=2)}" )
+
 		try :
 			if ('language') in this_sub['tags'] :
 				_lng = this_sub['tags']['language']
 			else :
 				_lng = 'und'
-
-			if 'NUMBER_OF_BYTES' in this_sub['tags'] :
-				s_siz = this_sub['tags']['NUMBER_OF_BYTES']
-			else :
-				s_siz = 1
 
 			if 'disposition' in this_sub:
 				dsp_f = this_sub['disposition']['forced']
@@ -687,36 +678,36 @@ def pars_subtl ( strm_in , DeBug ) :
 				if 'tags' in this_sub :
 					extra += f"  {this_sub['tags']['handler_name']}"
 			except Exception as x:
-				if DeBug : print ('  =>', repr(x))
+				if de_bug : print ('  =>', repr(x))
 				pass
 
-			mesaj = f"    |<S:{_strm:2}>|{this_sub['codec_name']:<9}|{this_sub['codec_type']:<13}|{_lng:3}|Siz: {hm_sz(s_siz):>8}|Dispo: default={dsp_d}, forced={dsp_f}|{extra}"
+			mesaj = f"    |<S:{_strm:2}>|{this_sub['codec_name']:<9}|{this_sub['codec_type']:<13}|{_lng:3}|Disp: default={dsp_d}, forced={dsp_f}|{extra}"
 			print(mesaj)
-			if (DeBug) : print (ff_sub)
+			if (de_bug) : print (ff_sub)
 
 		except Exception as e:
 			mesaj += f" Exception"
 			Trace (mesaj, e)
-		if DeBug :
+		if de_bug :
 			print(f"\n {json.dumps(this_sub, indent=2)}\n{ff_sub}\n" )
 		ff_subtl += ff_sub
-	if DeBug : print ("  ", ff_subtl )
+	if de_bug : print ("  ", ff_subtl )
 
 	end_t = time.perf_counter()
-	print(f'   -End: {TM.datetime.now():%T}\tTotal: {round((end_t - str_t), 2)} sec')
+#	print(f'   -End: {TM.datetime.now():%T}\tTotal: {round((end_t - str_t), 2)} sec')
 
 	return( ff_subtl )
 ##>>============-------------------<  End  >------------------==============<<##
 
 # XXX: Extra Data
-def pars_extdta( strm_in, DeBug ) :
+@performance_check
+def pars_extdta( strm_in, de_bug ) :
 	''' Parse and extract data from data streams '''
 
 	mesaj = sys._getframe().f_code.co_name
-	print(f"  +{mesaj}=: Start: {TM.datetime.now():%T}")
 	str_t = time.perf_counter()
-
-	if DeBug :	print(f"    +{mesaj}=: Start: {str_t:%T}\n {json.dumps( strm_in, indent=2)}" )
+	if de_bug :
+		print(f"    +{mesaj}=: Start: {TM.datetime.now():%T}\n {json.dumps( strm_in, indent=2)}" )
 
 	_ddata = {
 		'index'		: int,
@@ -729,12 +720,18 @@ def pars_extdta( strm_in, DeBug ) :
 	# XXX: Data
 	ff_data =[]
 	for count, this_dat in enumerate(strm_in) :
-		if DeBug : print(f"    +{mesaj}=: Start: {str_t:%T}\n {json.dumps(this_dat, indent=2)}" )
+		if de_bug : print(f"    +{mesaj}=: Start: {TM.datetime.now():%T}\n {json.dumps(this_dat, indent=2)}" )
 		ff_dd = []
 		try :
 			if 'tags' in this_dat :
 				extra = f"  {this_dat['tags']['handler_name']}"
-			mesaj = f"    |<D:{this_dat['index']:2}>| {this_dat['codec_name']:<8}| {this_dat['codec_long_name']:<9}| {this_dat['codec_type']:^11} |  {extra}"
+
+			if 'codec_name' in this_dat and 'codec_type' in this_dat :
+				mesaj = f"    |<D:{this_dat['index']:2}>| {this_dat['codec_name']:<8}| {this_dat['codec_long_name']:<9}| {this_dat['codec_type']:^11} |  {extra}"
+			elif 'codec_long_name' in this_dat :
+				mesaj = f"    |<D:{this_dat['index']:2}>| {this_dat['codec_long_name']:<9}| {this_dat['codec_type']:^11} |  {extra}"
+			else :
+				mesaj = f"    |<D:{this_dat['index']:2}>| {this_dat['codec_type']:^11} |  {extra}"
 			print(mesaj)
 
 		except Exception as e:
@@ -745,25 +742,25 @@ def pars_extdta( strm_in, DeBug ) :
 		ff_data += ff_dd
 
 	end_t = time.perf_counter()
-	print(f'   -End: {TM.datetime.now():%T}\tTotal: {round((end_t - str_t), 2)} sec')
+#	print(f'   -End: {TM.datetime.now():%T}\tTotal: {round((end_t - str_t), 2)} sec')
 
 	return ff_data
 
 ##>>============-------------------<  End  >------------------==============<<##
 @performance_check
-def	find_subtl ( in_file, DeBug ) :
+def	find_subtl ( input_file, de_bug ) :
 	''' find subtitle files and select the best '''
-	str_t = TM.datetime.now()
-	mesaj= sys._getframe().f_code.co_name + ':'
-	if DeBug :
-		print(f"    +{mesaj}=: Start: {str_t:%T}Files:{in_file}" )
+	str_t = time.perf_counter()
+	mesaj = sys._getframe().f_code.co_name
+	if de_bug :
+		print(f"    +{mesaj}=: Start: {TM.datetime.now():%T}\nFiles:{input_file}" )
 
 	'''
 	Let's setup the local directory to see what's in it
-	os.path.sep (in_file)
+	os.path.sep (input_file)
 	files = [file for file in files if '.png' in file or '.jpg' in file]
 	'''
-	top_dir, Filo = in_file.rsplit(os.path.sep, 1)
+	top_dir, Filo = input_file.rsplit(os.path.sep, 1)
 	Finam, ext = os.path.splitext(Filo)
 	file_lst = os.listdir(top_dir)
 
@@ -775,7 +772,7 @@ def	find_subtl ( in_file, DeBug ) :
 #		print(f"    |<S: NO Extternal file|:{srt_files}")
 
 	file_lst.sort(key=lambda f: os.path.isfile(os.path.join(top_dir, f)))
-#	if DeBug :
+#	if de_bug :
 #		print(f"Dir:{top_dir}\nFile:{Filo}\nFn:{Finam}\t E:{ext}\n")
 #		print("\nFile:".join(file_lst))
 #		input ("WTF")
@@ -785,35 +782,35 @@ def	find_subtl ( in_file, DeBug ) :
 		fnm, fex =  os.path.splitext(fname)
 		if  fex == '.srt' :
 			lng = 'und'
-			symb, trnsf = Trnsformr_ ( Finam, fnm, DeBug )
+			symb, trnsf = Trnsformr_ ( Finam, fnm, de_bug )
 			# XXX: simple way to see similarity 4 chars = .srt
 			if len(trnsf)/3 <= 4 : # dived by 3 cause it sas 3 components location cr1 cr2 to transform from one to the other
 				#print( len( trnsf), symb )
 				print(f"    |<S: Ext file|:{fname}")
-				if DeBug :
+				if de_bug :
 					print(f"1: {Finam}\nD: {symb}\n2: {fnm}\nLng={lng}\nLen:{len(trnsf)} ")
 	#		ff_sub = (['-i', fname, '-c:s', 'copy', '-metadata:s', 'language=' + 'eng'])
 	#		ff_sub = (['-i', fname, '-c:s', 'copy', '-metadata:s:s' + _cnt, 'language=' + 'eng'])
 			ff_sub = (['-i', fname, '-c:s', 'mov_text'])
 		else :
 			ff_sub = []
-#			if DeBug : print (f'{count} {fnm}{fex} Not a Sub File')
+#			if de_bug : print (f'{count} {fnm}{fex} Not a Sub File')
 
 		ff_subtl += ff_sub
 
 	if '-sn' not in ff_subtl and not len(ff_subtl) :
 		ff_subtl = ['-sn']
 
-	if DeBug : print ("  ", ff_subtl ) , input("Next")
+	if de_bug : print ("  ", ff_subtl ) , input("Next")
 
 	# XXX:
 	#ff_subtl = ['-sn']
 	return( ff_subtl )
 
-def Trnsformr_(str1, str2, DeBug, no_match_c='|', match_c='='):
-	str_t = TM.datetime.now()
-	message = sys._getframe().f_code.co_name + ':'
-	if DeBug : print(f"     +{message}=: Start: {str_t:%T}")
+def Trnsformr_(str1, str2, de_bug, no_match_c='|', match_c='='):
+	str_t = time.perf_counter()
+	message = sys._getframe().f_code.co_name
+	if de_bug : print(f"     +{message}=: Start: {str_t:%T}")
 
 	#	print (f"\n1: {string1}\n2: {string2}\n ??")
 	# XXX: # TODO: location of differences , chunking
@@ -821,10 +818,10 @@ def Trnsformr_(str1, str2, DeBug, no_match_c='|', match_c='='):
 	# XXX: Extend with space cause zip stops at the shortest
 	delt = len(str2) - len(str1)
 	if delt < 0:
-		if DeBug : print ("lst1 longer")
+		if de_bug : print ("lst1 longer")
 		str2 += ' '*abs(delt)
 	elif delt > 0:
-		if DeBug : print ("lst2 longer")
+		if de_bug : print ("lst2 longer")
 		str1 += ' '*delt
 
 	symb = ""
@@ -836,46 +833,44 @@ def Trnsformr_(str1, str2, DeBug, no_match_c='|', match_c='='):
 			symb += no_match_c
 			trns.extend( [loc, c1, c2] )
 
-	if DeBug : print (f"1: {str1}\nD: {symb}\n2: {str2}\n{trns} ")
+	if de_bug : print (f"1: {str1}\nD: {symb}\n2: {str2}\n{trns} ")
 
 	return symb, trns
 #>=-------------------------------------------------------------------------=<#
 
 @performance_check
-def zabrain_run(in_file, mta_dta, DeBug ):
+def zabrain_run(input_file, mta_dta, de_bug ):
 	''' Decide what based on streams info '''
 
 	mesaj = sys._getframe().f_code.co_name
 	print(f"  +{mesaj}=: Start: {TM.datetime.now():%T}")
 	str_t = time.perf_counter()
 
-	if not mta_dta:
-		mesaj+= ' No Metadata Nothing to do here'
-		raise Exception(mesaj)
+	if not input_file or not mta_dta :
+		print (f" {mesaj} F:{input_file} M:{mta_dta} Exit:")
+		return False
 
-	ff_video, ff_audio, ff_subtl, ff_data, skip_this = pars_format( mta_dta, in_file, DeBug )
+	ff_video, ff_audio, ff_subtl, ff_data, skip_this = pars_format( mta_dta, input_file, de_bug )
 
-	ffmpeg_cmnd = ff_video+ ff_audio + ff_subtl +ff_data
+	ff_run_cmnd = (ff_video+ ff_audio + ff_subtl +ff_data), skip_this
 
 # XXX: Do nothing if all is well needs rework to look in every line of comands
 # Check if filenam and enbeded tag are the same.
-	_, extens = os.path.splitext(in_file)
+	_, extens = os.path.splitext(input_file)
 	if (extens.lower() == TmpF_Ex.lower()) and ('copy' in ff_video) and ('copy' or '-an' in ff_audio) : #and ('mov_text' or '-sn' in ff_subtl) and ('-dn' in ff_exdta) :
 		pass
 #		raise ValueError(Skip_key)
-	if  skip_this  == True :
-		raise ValueError(Skip_key)
 
-	if DeBug :print (mesaj, ffmpeg_cmnd)
+	if de_bug :print (mesaj, ff_run_cmnd)
 
 	end_t = time.perf_counter()
-	print(f"   -End: {TM.datetime.now():%T}\tTotal: {round((end_t - str_t), 2)} sec")
+	print(f"  -End: {TM.datetime.now():%T}\tTotal: {round((end_t - str_t), 2)} sec")
 
-	return ffmpeg_cmnd
+	return ff_run_cmnd
 ##>>============-------------------<  End  >------------------==============<<##
 
 def show_progrs(line_to, sy=False):
-	mesaj= sys._getframe().f_code.co_name + '-:'
+	mesaj = sys._getframe().f_code.co_name
 
 	_P = ''
 	if 'N/A' in line_to:
@@ -901,7 +896,7 @@ def show_progrs(line_to, sy=False):
 				hours, mints = divmod(mints, 60)
 				_eta = f'{hours:02d}:{mints:02d}:{secs:02d}'
 				_P = f'\r    | {sy} |Size: {hm_sz(sz):>5}|Frames: {int(fr):>5}|Fps: {fp:>3}|BitRate: {br:>6}|Speed: {sp:>5}|ETA: {_eta:>8}|    '
-				if DeBug :
+				if de_bug :
 					print (f'\n {line_to} | {sy} |Size: {hm_sz(sz):>5}|Frames: {int(fr):>5}|Fps: {fp:>3}|BitRate: {br:>6}|Speed: {sp:>5}|ETA: {_eta:>8}|' )
 
 		except Exception as e:
@@ -913,25 +908,28 @@ def show_progrs(line_to, sy=False):
 	sys.stderr.flush
 	return True
 ##>>============-------------------<  End  >------------------==============<<##
+
 @performance_check
-def make_matrx(input_file, execu=ffmpeg, ext = '.png'):
+def matrix_it(input_file, execu=ffmpeg, ext ='.png'):
 	''' Create a 3x3 matrix colage '''
-	str_t = TM.datetime.now()
-	mesaj= sys._getframe().f_code.co_name
-	print(f"  +{mesaj}=: Start: {str_t:%T}")
+	str_t = time.perf_counter()
+	mesaj = sys._getframe().f_code.co_name
+	print(f"  +{mesaj}=: Start: {TM.datetime.now():%T}")
+
 	global glb_totfrms , vid_width
 # XXX Create Matrix Colage:
 	file_name, _ = os.path.splitext(input_file)
 #	print(f' file  {input_file}')
 	'''
-	hack to eliminate doublee
+	hack to eliminate dubles
 	'''
-	_name, _ = os.path.splitext(file_name)
+	_name, _ = os.path.splitext(input_file)
 	if _ in File_extn:
-		file_name, _ = os.path.splitext(file_name)
+		file_name, _ = os.path.splitext(input_file)
 	if os.path.isfile(file_name + ext):
-		mesaj= f"    |PNG Exists ¯\_(%)_/¯ Skip"
-		print(mesaj)
+		print( f"   | PNG Exists ¯\_(%)_/¯ Skip")
+		end_t = time.perf_counter()
+		print(f"  -End: {TM.datetime.now():%T}\tTotal: {round((end_t - str_t), 2)} sec")
 		return False
 	else:
 		file_name += ext
@@ -950,50 +948,105 @@ def make_matrx(input_file, execu=ffmpeg, ext = '.png'):
 					input_file, '-frames', '1', '-vf', zzzle, '-y', file_name)
 		# XXX:
 		if run_ffm(todo):
-			mesaj= f"\r    |3x3| Matrix Created {ext}"
+			mesaj = f"\r    |3x3| Matrix Created {ext}"
 			print(mesaj)
-			end_t = TM.datetime.now()
-			convert = time.strftime("%H:%M:%S", time.gmtime((end_t-str_t).total_seconds()))
-			mesaj=f'  -End: {end_t:%T}\tTotal: {convert} sec'
+			end_t = time.perf_counter()
+			print(f'  -End: {TM.datetime.now():%T}\tTotal: {round((end_t - str_t), 2)} sec')
 			return os.path.getsize(file_name)
 		else:
-			mesaj= f"   = Failed to Created .PNG >"
+			mesaj = f"   = Failed to Created .PNG >"
 			raise Exception(mesaj)
+
+	end_t = time.perf_counter()
+	print(f'  -End: {TM.datetime.now():%T}\tTotal: {round((end_t - str_t), 2)} sec')
+
 ##>>============-------------------<  End  >------------------==============<<##
-
-def short_ver ( fname, *other ) :
-	str_t = TM.datetime.now()
-	mesaj= sys._getframe().f_code.co_name
-	print(f"  +{mesaj}=: Start: {str_t:%T}")
-
-# https://trac.ffmpeg.org/wiki/Map#Chooseallstreams
-	ff_head = [execu, '-ss', "00:00:00", '-t', '00:03:30', '-i', fname, '-map', '0', '-c', 'copy' -y ]
-	return todo
-##>>============-------------------<  End  >------------------==============<<##
-
-def speed_up ( fname, *other) :
+@performance_check
+def speed_up ( input_file, *other) :
+	''' Create a 4x sped up version '''
+	str_t = time.perf_counter()
+	mesaj = sys._getframe().f_code.co_name
+	print(f"  +{mesaj}=: Start: {TM.datetime.now():%T}")
+	spdup = 3
 # https://trac.ffmpeg.org/wiki/How%20to%20speed%20up%20/%20slow%20down%20a%20video
-#	ffmpeg -i input.mkv -filter:v "setpts=0.5*PTS" output.mkv #Frame Rate Chage
-	print(f"  +{mesaj}=: Start: {str_t:%T}")
-	todo = [ '-filter_complex "[0:v]setpts=0.25*PTS[v];[0:a]atempo=2.0,atempo=2.0[a]" -map "[v]" -map "[a]" ']
+	file_name, _ = os.path.splitext( os.path.basename(input_file) )
+	out_f = '_Speed_ '+file_name +stmpd_rad_str(3) +TmpF_Ex
+
+
+
+	todo = (ffmpeg, '-i', input_file,'-filter:v', "setpts=PTS/ 3 , '-af', asetrate={aud_smplrt} 3  , aresample={aud_smplrt}", '-y', out_f )
+
+#	todo = (ffmpeg, '-i', input_file, '-filter_complex', "[0:v]setpts=PTS/3[v];[0:a]atempo=3[a]", '-map', "[v]", '-map', "[a]", '-y', out_f )
+
+	todo = (ffmpeg, '-i', input_file, '-bsf:v', "setts=TS/3", '-af', "atempo=3", '-y', out_f )
+	todo = (ffmpeg, '-i', input_file, '-filter_complex', "[0:v]setpts=PTS/ 3 [v];[0:a]atempo= 3 [a]",'-map', "[v]", '-map', "[a]", '-y', out_f)
+
+	print ( todo  )
+	if run_ffm( todo, de_bug = True ):
+		return out_f
+	else:
+		mesaj+= f"   = Failed to \n"
+		raise Exception(mesaj)
+
+	end_t = time.perf_counter()
+	print(f'  -End: {TM.datetime.now():%T}\tTotal: {round((end_t - str_t), 2)} sec')
 	return todo
 ##>>============-------------------<  End  >------------------==============<<##
 
+@performance_check
 def video_diff(file1, file2) :
 	# XXX:  Visualy Compare in and out files
 	# https://stackoverflow.com/questions/25774996/how-to-compare-show-the-difference-between-2-videos-in-ffmpeg
+	str_t = time.perf_counter()
+	mesaj = sys._getframe().f_code.co_name
+	print(f"  +{mesaj}=: Start: {TM.datetime.now():%T}")
 
-	str_t = TM.datetime.now()
-	mesaj= sys._getframe().f_code.co_name
-	print(f"  +{mesaj}=: Start: {str_t:%T}")
+	file_name, _ = os.path.splitext( os.path.basename(file1) )
+	out_f = '_Diff_'+file_name +stmpd_rad_str(3) +TmpF_Ex
 
-	cmprd_file = get_new_fname(file1, "_Video_comp.mp4", TmpF_Ex)
-
-	todo = (ffmpeg, '-i', file1, '-i', file2, '-filter_complex', "blend=all_mode=difference", '-c:v', 'libx265', '-preset', 'faster', '-c:a', 'copy', '-y', cmprd_file)
+	todo = (ffmpeg, '-i', file1, '-i', file2, '-filter_complex', "blend=all_mode=difference", '-c:v', 'libx265', '-preset', 'faster', '-c:a', 'copy', '-y', out_f)
 
 	if run_ffm(todo):
-		return cmprd_file
+		return out_file
 	else:
 		mesaj+= f"   = Failed to Compare Files >\n"
 		raise Exception(mesaj)
+
+	end_t = time.perf_counter()
+	print(f'  -End: {TM.datetime.now():%T}\tTotal: {round((end_t - str_t), 2)} sec')
+
+	return out_file
+	##>>============-------------------<  End  >------------------==============<<##
+
+@performance_check
+def short_ver ( input_file, execu, *other ) :
+	str_t = time.perf_counter()
+	mesaj = sys._getframe().f_code.co_name
+	print(f"  +{mesaj}=: Start: {TM.datetime.now():%T}")
+
+	print (f" F: {input_file} E: {execu} O: {other}")
+
+	str_at = '00:00:33'
+	end_at = '00:05:55'
+	print (f"Make short ver Start:{str_at} End:{end_at}" )
+
+	file_name, _ = os.path.splitext( os.path.basename(input_file) )
+	out_file = '_Short_' +file_name +stmpd_rad_str(3) +TmpF_Ex
+
+	ff_head = [ execu, '-ss', str_at, '-t', end_at, '-i', input_file, '-max_muxing_queue_size', '2048']
+	ff_com  = ['-map', '0:V?', '-map', '0:a?', '-map', '0:s?', '-c:s', 'mov_text' ]
+	ff_tail = [ '-y', out_file ]
+
+	todo = ff_head +ff_com +ff_tail
+	if run_ffm( todo ) and os.path.exists(out_file) :
+		mesaj+= f'\n{todo}\nNo Output Error'
+		print(mesaj)
+		time.sleep(3)
+		return out_file
+	else :
+		print (" Failed")
+
+	end_t = time.perf_counter()
+	print(f'  -End: {TM.datetime.now():%T}\tTotal: {round((end_t - str_t), 2)} sec')
+	return out_file
 ##>>============-------------------<  End  >------------------==============<<##

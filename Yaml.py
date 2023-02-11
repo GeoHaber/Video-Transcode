@@ -1,25 +1,19 @@
 # -*- coding: utf-8 -*-
-#!/usr/bin/python3
-__author__ = 'GeHab'
-'''
-@author: 	  GeHab
-# XXX KISS
-# XXX:ToDo: multiple languages
-'''
-import sys
-import yaml 
 
-DeBug = False
-Config = 'Trans_code.yml'
+import sys
+import yaml
+
+de_bug = False
+yaml_f_loc = 'Trans_code.yml'
 
 console_encoding = sys.getfilesystemencoding() # or 'utf-8'
-print (console_encoding)
+print ("Console encoding = ",console_encoding)
 
-# XXX read the Config file
+# XXX read the yaml_f_loc file
 try:
-	with open(Config, 'r') as Yml_file :
+	with open(yaml_f_loc, 'r') as Yml_file :
 		Yml_Data = yaml.safe_load(Yml_file)
-		if DeBug :
+		if de_bug :
 			#	print('\n'.join(Yml_Data))
 			for key, value in Yml_Data.items():
 				#print ( len(value))
@@ -46,14 +40,19 @@ try:
 	Bl_and_Wh = Yml_Data['Video']['Bl_and_Wh']
 	Video_crf = Yml_Data['Video']['crf-25']
 
+#	Met_titil = Yml_Data['Metadata']['title']
+#	Met_copyr = Yml_Data['Metadata']['copyright']
+#	Met_comnt = Yml_Data['Metadata']['comment']
+#	Met_authr = Yml_Data['Metadata']['author']
+
 	Max_a_btr = Yml_Data['Audio']['Max_a_btr']
 
 	Keep_langua = Yml_Data['Language']['Keep']
 	Default_lng = Yml_Data['Language']['Default']
 
 except Exception as ex:
-	message = f'{Config} Ecception {ex} '
+	message = f'{yaml_f_loc} Ecception {ex} '
 	input(message)
 	raise Exception
 
-print (f'File: {Config} Parsed')
+print (f'File: {yaml_f_loc} Parsed')
