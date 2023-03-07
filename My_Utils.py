@@ -1,4 +1,7 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+# XXX KISS
 
 import	os
 import	re
@@ -7,6 +10,7 @@ import	time
 import	json
 import	shutil
 import	ctypes
+import psutil
 import	random
 import	string
 import	datetime as TM
@@ -14,21 +18,96 @@ import	platform
 import	traceback
 import	tracemalloc
 import	logging
+from	typing		import Union
 from	functools	import wraps
 
 # XXX: C:\Users\Geo\Documents\GitHub\yolov5\utils\general.py
 
 #  DECORATORS
-def trycatch(func):
-	""" Wraps the decorated function in a try-catch. If function fails print out the exception. """
+def color_print(fg: int = 37, bg: int = 40):
+	def decorator(func):
+		def wrapper(text):
+			print(f"\033[{fg}m\033[{bg}m{func(text)}\033[0m")
+		return wrapper
+	return decorator
+def measure_cpu_utilization(func):
+	"""Measure CPU utilization, number of cores used, and their capacity."""
+	@wraps(func)
+	def wrapper(*args, **kwargs):
+		cpu_count = psutil.cpu_count(logical=True)
+		start_time = time.monotonic()
+		process_cpu_percent = psutil.cpu_percent(interval=0.1, percpu=True)
+		result = func(*args, **kwargs)
+		end_time = time.monotonic()
+		total_cpu_percent = sum(process_cpu_percent) / cpu_count
+		return result, total_cpu_percent, process_cpu_percent
+	return wrapper
+def measure_execution_time(func):
+	"""Measure the execution time of a function."""
+	@wraps(func)
+	def wrapper(*args, **kwargs):
+		start_time = time.perf_counter()
+		result = func(*args, **kwargs)
+		end_time = time.perf_counter()
+		duration = end_time - start_time
+		print(f"{func.__name__}: Execution time: {duration:.5f} sec")
+		return result
+	return wrapper
+def measure_memory_usage(func):
+	"""Measure the memory usage of a function."""
+	@wraps(func)
+	def wrapper(*args, **kwargs):
+		tracemalloc.start()
+		result = func(*args, **kwargs)
+		current, peak = tracemalloc.get_traced_memory()
+		print(f"{func.__name__}: Memory usage: {current / 10**6:.6f} MB (avg), {peak / 10**6:.6f} MB (peak)")
+		tracemalloc.stop()
+		return result
+	return wrapper
+def log_exceptions(func):
+	"""Log exceptions that occur within a function."""
 	@wraps(func)
 	def wrapper(*args, **kwargs):
 		try:
-			res = func(*args, **kwargs)
-			return res
+			return func(*args, **kwargs)
 		except Exception as e:
 			print(f"Exception in {func.__name__}: {e}")
+			logging.exception(f"Exception in {func.__name__}: {e}")
 	return wrapper
+def performance_check(func):
+	"""Measure performance of a function"""
+	@log_exceptions
+	@measure_execution_time
+	@measure_memory_usage
+	@measure_cpu_utilization
+	@wraps(func)
+	def wrapper(*args, **kwargs):
+		return func(*args, **kwargs)
+	return wrapper
+def logit(logfile='out.log', print_to_console=False):
+	def logging_decorator(func):
+		@wraps(func)
+		def wrapper(*args, **kwargs):
+			result = func(*args, **kwargs)
+			with open(logfile, 'a') as f:
+				if len(kwargs) > 0:
+					f.write(f"\n{func.__name__}{args} {kwargs} = {result}\n")
+				else:
+					f.write(f"\n{func.__name__}{args} = {result}\n")
+			if print_to_console:
+				if len(kwargs) > 0:
+					print(f"{func.__name__}{args} {kwargs} = {result}")
+				else:
+					print(f"{func.__name__}{args} = {result}")
+			return result
+		return wrapper
+	return logging_decorator
+'''
+@logit(logfile='mylog.log', print_to_console=True)
+def my_function(x, y):
+	return x + y
+'''
+
 
 def handle_exception(func):
 	"""Decorator to handle exceptions."""
@@ -52,19 +131,9 @@ def handle_exception(func):
 			logging.error("Error: ", exc_info=True)
 			logging.error("uncaught exception: %s", traceback.format_exc())
 	return wrapper
-'''
-def performance_check(func):
-	def wrapper(*args, **kwargs):
-		start = time.perf_counter()
-		result = func(*args, **kwargs)
-		end = time.perf_counter()
-		elapsed_time = end - start
-		print(f"{func.__name__} took {elapsed_time:.6f} seconds")
-		return result
-	return wrapper
-'''
 
-def performance_check(func):
+
+def performance_check(func, de_bug= False):
 	"""Measure performance of a function"""
 	@wraps(func)
 	def wrapper(*args, **kwargs):
@@ -73,50 +142,99 @@ def performance_check(func):
 		try:
 			return func(*args, **kwargs)
 		except Exception as e:
-			print(f"Exception in {func.__name__}: {e}")
-			handle_exception( func(*args, **kwargs) )
-#			logging.error("Error: %s", e, exc_info=True)
-			return wrapper
+			if de_bug:
+				print(f"Exception in {func.__name__}: {e}")
+				logging.error("Error: ", exc_info=True)
+				logging.error("uncaught exception: %s", traceback.format_exc())
+			else:
+				logging.exception(f"Exception in {func.__name__}: {e}")
+		except TypeError:
+			if de_bug:
+				print(f"{func.__name__} wrong data types")
+				logging.error(f"{func.__name__} wrong data types", exc_info=True)
+			else:
+				print(f"{func.__name__} wrong data types")
+		except IOError:
+			if de_bug:
+				print("Could not write to file.")
+				logging.error("Could not write to file.", exc_info=True)
+			else:
+				print("Could not write to file.")
 		finally:
-			duration =		time.perf_counter() - start_time
-			current, peak = tracemalloc.get_traced_memory()
 			tracemalloc.stop()
-#			print(	f"{'.'*60}"
-#					f"\n {func.__name__} ({func.__doc__})\n"
-#					f" Mem awrg: {current / 10**6:.6f} MB"
-#					f" Mem peak: {peak    / 10**6:.6f} MB"
-#					f" Time: {duration:.5f} sec"
-#					f"\n{'.'*60}" )
+			logging.info(f"{func.__name__}: Mem usage: {tracemalloc.get_traced_memory()[0] / 10**6} MB")
+		end_time = time.perf_counter()
+		duration = end_time - start_time
+		msj = f"{func.__name__} ({func.__doc__}): Total: {duration:.5f} sec"
+		logging.info(msj)
+		if de_bug:
+			print(msj)
+			print(f"{'.'*60}\n"
+				  f"{func.__name__} ({func.__doc__})\n"
+				  f"Mem avg: {tracemalloc.get_traced_memory()[1] / 10**6:.6f} MB\n"
+				  f"Mem peak: {tracemalloc.get_traced_memory()[2] / 10**6:.6f} MB\n"
+				  f"Total: {duration:.5f} sec\n"
+				  f"{'.'*60}\n")
 	return wrapper
 
 ##>>============-------------------<  End  >------------------==============<<##
 
 #  CLASES
 # XXX: https://shallowsky.com/blog/programming/python-tee.html
-
-class Tee (list):
+class Tee:
 	def __init__(self, *targets):
 		self.targets = targets
 	def __del__(self):
-		for ftarg in self.targets:
-			if ftarg != sys.stdout and ftarg != sys.stderr:
-				ftarg.close()
+		for target in self.targets:
+			if target not in (sys.stdout, sys.stderr):
+				target.close()
 	def write(self, obj):
-		de_bug = False
-		for ftarg in self.targets:
+		for target in self.targets:
 			try:
-				ftarg.write(obj)
-				ftarg.flush()
-			except Exception as x:
-				if de_bug : print (repr(x))
-				continue
+				target.write(obj)
+				target.flush()
+			except Exception:
+				pass
 	def flush(self):
-		return
+		pass
 
 ##>>============-------------------<  End  >------------------==============<<##
 
+def Trace(message: str, exception: Exception, debug: bool = False) -> None:
+	"""Prints a traceback and debug info for a given exception"""
+	logging.error(f"Msg: {message}   Err: {exception}", exc_info=True)
+	max_chars = 42
+	print("+-" * max_chars)
+	print(f"Msg: {message}\nErr: {exception}\nRep: {repr(exception)}")
+	print("-+" * max_chars)
+	max_chars *= 2
 
-
+	print("Stack")
+	print("=" * max_chars)
+	stack = traceback.extract_stack()
+	template = " {filename:<26} | {lineno:5} | {funcname:<20} | {source:>12}"
+	for filename, lineno, funcname, source in stack:
+		if funcname != "<module>":
+			funcname = funcname + "()"
+		print(
+			template.format(
+				filename=os.path.basename(filename),
+				lineno=lineno,
+				source=source,
+				funcname=funcname,
+			)
+		)
+	print("=" * max_chars)
+	print("Sys Exec_Info")
+	exc_type, exc_value, exc_traceback = sys.exc_info()
+	print("-" * max_chars)
+	for frame in traceback.extract_tb(exc_traceback):
+		print(
+			f" {os.path.basename(frame.filename):<26} | {frame.lineno:5} | {frame.name:20} | {frame.line:12} "
+		)
+		print("-" * max_chars)
+	print("=" * max_chars)
+	time.sleep(3)
 def file_size(path):
 	# Return file/dir size (MB)
 	mb = 1 << 20  # bytes to MiB (1024 ** 2)
@@ -129,66 +247,32 @@ def file_size(path):
 		return 0.0
 ##>>============-------------------<  End  >------------------==============<<##
 
-def Trace ( message, e, de_bug= False ) -> None :
-	messa = sys._getframe().f_code.co_name
-	str_t = time.perf_counter()
-	mx  = 42
-	print("+-"*mx)
-	print(f'{message}\nError: {e}\nRepr: {repr(e)}' )
-	print("-+"*mx)
-	mx *= 2
 
-	print ("Stack")
-	print("="*mx,)
-	stack = traceback.extract_stack()
-	template = ' {filename:<26} | {lineno:5} | {funcname:<20} | {source:>12}'
-	for filename, lineno, funcname, source in stack:
-		if  funcname != '<module>':
-			funcname = funcname + '()'
-		print(template.format(
-				filename=os.path.basename(filename),
-				lineno=lineno,
-				source=source,
-				funcname=funcname)
-				)
-	print("="*mx,)
+def copy_move(src: str, dst: str, keep_it: bool = False) -> bool:
+	"""Move or copy a file from src to dst, optionally keeping the original file.
 
-	print ("Sys Exec_Info")
-	exc_type, exc_value, exc_traceback = sys.exc_info()
-	print("-"*mx)
-	for frm_ in traceback.extract_tb(exc_traceback):
-#        print( (frm_comp) )
-		print(f" {os.path.basename(frm_.filename):<26} | {frm_.lineno:5} | {frm_.name:20} | {frm_.line:12} " )
-		print("-"*mx)
-	print("="*mx)
-
-	time.sleep(3)
-##==============-------------------   End   -------------------==============##
-
-def copy_move(src: str, dst: str, keep_it=False) -> int :
-	# https://stackoverflow.com/questions/7419665/python-move-and-overwrite-files-and-folders
-	messa = sys._getframe().f_code.co_name + '-:'
-
-	do_it = shutil.move
-	if keep_it:
-		do_it = shutil.copy2
-		print(f"Placebo Copied to {dst} Not Deleted:\n{src}")
-		time.sleep(1)
-	try:
-#        if os.path.exists(dst) and os.path.samefile(src, dst):
-#            os.utime(dst, None)
-#            os.remove(src)
-#            return True
-
-		do_it(src, dst)
-
-	except (PermissionError, IOError, OSError) as er:
-		messa += f' Exception: '
-		print (messa, er)
+	Returns True if the file was moved/copied successfully, False otherwise.
+	"""
+	if os.path.exists(dst) and os.path.samefile(src, dst):
+	#	print(f"{src} and {dst} are the same file, doing nothing.")
 		time.sleep(3)
-#        input ("Delete?")
-#        os.remove(src)
-	return True
+		return True
+
+	if keep_it:
+		try:
+			shutil.copy2(src, dst)
+	#		print(f"{src} copied to {dst}, not deleted.")
+			return True
+		except (PermissionError, IOError, OSError) as err:
+			print(f"Error copying {src} to {dst}: {err}")
+			return False
+	try:
+		shutil.move(src, dst)
+	#	print(f"{src} moved to {dst}")
+		return True
+	except (PermissionError, IOError, OSError) as err:
+		print(f"Error moving {src} to {dst}: {err}")
+		return False
 ##==============-------------------   End   -------------------==============##
 
 def print_alighned(list: str) -> None :
@@ -220,8 +304,6 @@ def divd_strn(val: str ) -> float:
 	elif '.' in val:
 		r = float(val)
 	return round( r, 3)
-##==============-------------------   End   -------------------==============##
-
 def test_filename(filename: str) -> None:
 	legal_chars = '[A-Za-z0-9._-]+'
 	if re.fullmatch(legal_chars, filename):
@@ -230,14 +312,12 @@ def test_filename(filename: str) -> None:
 		print(f'{filename} is NOT a legal filename.')
 		out_file =  re.sub(r'[^\w\s_-]+', '', filename).strip().replace(' ', '_')
 		print ( f'{out_file} is rename it')
-
-#test_filename("myfile.txt")
-#test_filename("my file.txt")
 ##==============-------------------   End   -------------------==============##
+
 
 def stmpd_rad_str(leng=13, head=''):
 	_time = TM.datetime.now()
-	rand_ = f"{_time:%y%j%H%M%S}"
+	rand_ = f"{_time:%M%S}"
 	for char in random.sample( string.ascii_letters + string.hexdigits, leng):
 		rand_ += char
 	return head +rand_
@@ -270,7 +350,8 @@ def get_new_fname(file_name, new_ext='', strip=''):
 		return fnm +ext +new_ext
 ##==============-------------------   End   -------------------==============##
 
-def hm_sz(numb, type="B") -> str:
+
+def hm_sz(numb: Union[str, int, float], type: str = "B") -> str:
 	'''convert file size to human readable format'''
 	numb = float(numb)
 	try:
@@ -278,14 +359,29 @@ def hm_sz(numb, type="B") -> str:
 			return f"{numb} {type}"
 		for unit in ['B','KB','MB','GB','TB','PB','EB']:
 			if numb < 1024.0:
-				return f"{numb:.2f}{unit}"
+				return f"{numb:.2f} {unit}"
 			numb /= 1024.0
-		return f"{numb:.2f}PB"
+		return f"{numb:.2f} {unit}"
 	except Exception as e:
-		message = f'{e}'
-		print(message)
-		Traceback.print_exc()
-#==============-------------------   End   -------------------==============##
+		logging.error(f" {e}", exc_info=True)
+		print (e)
+#		traceback.print_exc()
+def get_tree_size(path: str) -> int:
+	"""Return total size of files in path and subdirs. If is_dir() or stat() fails, print an error message to stderr
+	and assume zero size (for example, file has been deleted).
+	"""
+	total_size = 0
+	for entry in os.scandir(path):
+		try:
+			if entry.is_file(follow_symlinks=False):
+				total_size += entry.stat(follow_symlinks=False).st_size
+			elif entry.is_dir(follow_symlinks=False):
+				total_size += get_tree_size(entry.path)
+		except (OSError, ValueError) as e:
+			logging.error(f" {e}", exc_info=True)
+			print(f"Error in {get_tree_size.__name__} when processing {entry.name}: {e}", file=sys.stderr)
+	return total_size
+##==============-------------------   End   -------------------==============##
 
 def safe_options(strm, opts ):
 	safe = {}
@@ -300,28 +396,58 @@ def safe_options(strm, opts ):
 				pass
 	return safe
 
-def parse_from_to(strm, dictio, de_bug=True):
-	message = sys._getframe().f_code.co_name
-	resul = {}
+def prs_frm_to(strm, dictio, de_bug=True ):
+	messa = sys._getframe().f_code.co_name
+#	resul = dictio
+#	print ( f"\n{messa}\n\nST:{strm}\n\nEx:{dictio} ")
+
+	for loc, (k,v) in enumerate(dictio.items()) :
+#	for k, v in dictio.items():
+		print (f"L:{loc} IN K:{k} V:{v}")
+		if k in strm :
+			vv = strm.get( k, '_nvald_')
+			if vv == '_nvald_':
+				print (f"Nop: L:{loc} = K:{k} V:{v} S: {strm[k]} ")
+			print (f"Yes: L:{loc} = K:{k} V:{vv} S: {strm[k]} ")
+			typ = type(dictio[k])
+			try:
+				dictio[k] = typ(v)
+			except ValueError:
+				pass
+		else :
+			print (f"Nop: K:{k} V:{v} S: {strm[k]} ")
+	input ( "HERE" )
+
+	return safe
+
+
 	try:
-		resul = {k: (int(strm[k]) if type(dictio[k]) == int else
-					 float(strm[k]) if type(dictio[k]) == float else
-					 dict(strm[k]) if type(dictio[k]) == dict else
-					 strm[k])
-				 for k in dictio.keys() if k in strm}
+		for k in dictio.keys():
+			item = strm.get(k, '_nvald_')
+			if item == '_nvald_':
+				resul[k] = '_nvald_'
+				if de_bug : print ('_nvald_', k, '\n' )
+			else:
+				ty = type(item)
+				dy = (dictio[k])
+				if   ty == str and dy == int:
+					resul[k] = int(item)
+				elif ty == str and dy == float:
+					resul[k] = float(item)
+				elif dy == dict:
+					resul[k] = dict(item)
+				else:
+					resul[k] = item
 	except Exception as e:
-		message = f'\n{len(strm)}\n{strm}\n{len(resul)}\n{resul}'
-		print(message)
-		Traceback.print_exc()
-		input("An error occurred.")
+		messa = f'\n{len(strm)}\n{strm}\n{len(resul)}\n{resul}'
+		print(messa)
+		Trace(messa, e)
+		input("All Fuked up")
 
-	if len(resul) > 1:
+	if len(dictio) > 1:
 		return tuple(resul.values())
-	elif len(resul) == 1:
-		return next(iter(resul.values()))
 	else:
-		return None
-
+		return resul[k]
 ##==============-------------------   End   -------------------==============##
 
 
@@ -385,42 +511,9 @@ def res_chk(folder='.'):
 		return True
 ##==============-------------------   End   -------------------==============##
 
-def get_tree_size(path: str) -> int:
-	'''calculate the size of the tree rooted at path'''
-	total = 0
-	with os.scandir(path) as it:
-		for entry in it:
-			if entry.is_file():
-				total += entry.stat().st_size
-			elif entry.is_dir():
-				total += get_tree_size(entry.path)
-	return total
 
-def get_tree_size(path):
-	"""Return total size of files in path and subdirs. If
-	is_dir() or stat() fails, print an error messa to stderr
-	and assume zero size (for example, file has been deleted).
-	"""
-	messa = sys._getframe().f_code.co_name + '-:'
 
-	total = 0
-	for entry in os.scandir(path):
-		try:
-			is_dir = entry.is_dir(follow_symlinks=False)
-		except (IOError, OSError) as err:
-			print('Error calling is_dir():', err, file=sys.stderr)
-			Trace ( messa, err )
 #            summary = traceback.StackSummary.extract( traceback.walk_stack(None) )
 #            print("\n Err:",{err},"\n",''.join(summary.format()))
-			continue
-		if is_dir:
-			total += get_tree_size(entry.path)
-		else:
-			try:
-				total += entry.stat(follow_symlinks=False).st_size
-			except (IOError, OSError) as err:
-				print('Error calling stat():', err, file=sys.stderr)
-				Trace ( messa, err )
 
-	return total
 ##==============-------------------   End   -------------------==============##

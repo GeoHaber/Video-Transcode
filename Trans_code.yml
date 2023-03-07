@@ -40,7 +40,7 @@ Subtitle:
 
 Language:
   Default: 'eng'
-  Keep:   ('eng', 'fre', 'heb', 'hun', 'ita', 'rou', 'rus', 'spa')
+  Keep:   ('eng', 'fre', 'heb', 'hun', 'ita', 'rum', 'rus', 'spa', 'ger')
 
 Skip:
   condition 1:

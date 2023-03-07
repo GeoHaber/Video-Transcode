@@ -3,13 +3,13 @@
 
 The processing is done in a few steps:
 
-1) Scan a directory pointed to by "Folder" to build a list of files, while extracting some basic Info like size extension, date, etc ....
+  1) Scan the directory pointed to by "WFolder" to build a list of files, while extracting some basic Info like size extension, date, etc ....
 
-While there are unprocessed files do :
+While there are unprocessed files do:
 
-  2) Check if there is a lock file on that file or folder
+  2) Use Ffparse to parse the file, extract all Info about Video, Audio, Subtitle, etc.
 
-  3) Use Ffparse to parse the file, extract all Info about Video, Audio, Subtitle, etc.
+  3) Check if hte file needs no conversion
 
   4) Use the parsed results to figure out what needs to be done by FFZa_Brain to generate the proper Ffmpeg commands
 
