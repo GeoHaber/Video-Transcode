@@ -17,37 +17,37 @@ console_encoding = 'utf-8'
 
 ## XXX:  https://docs.python.org/3.2/library/time.html
 ancr_time = f"{TM.datetime.now(): %Y %j %H-%M-%S }"
-This_File = sys.argv[0].strip('.py')
+This_File = sys.argv[0].strip('.py') +ancr_time
 
-Log_File  = This_File + ancr_time + 'all.log'
+Log_File  = This_File + 'all.log'
 sys.stdout = Tee(sys.stdout, open(Log_File, 'w', encoding=console_encoding))
 
-ok_f_nam = This_File + ancr_time + 'oky.txt'
+ok_f_nam = This_File + 'oky.txt'
 OKs_file = open(ok_f_nam, 'w', encoding=console_encoding)
 OKs_file.write(f" Time: = {ancr_time}\n" )
 
-err_f_nm = This_File + ancr_time + 'ERR.txt'
+err_f_nm = This_File + 'ERR.txt'
 ERR_file = open(err_f_nm, 'w', encoding=console_encoding)
 ERR_file.write(f" Time: = {ancr_time}\n" )
 
-print(f" {psutil.cpu_count()} CPU's  ¯\_(%)_/¯" )
-print(f" Pyton Version:  {sys.version}\n" )
-print(f" Time:           {ancr_time}" )
+print(f"{psutil.cpu_count()} CPU's  ¯\_(%)_/¯" )
+print(f"Pyton Version:  {sys.version}\n" )
+print(f"Time:           {ancr_time}" )
 
 ''' Global Variables '''
 glb_totfrms = 0
 vid_width   = 0
 aud_smplrt  = 0
 
-@performance_check
+@perf_monitor
 def scan_folder (root: str, xtnsio: list) -> dict :
 	'''Create the list of Files from "root with xtnsio" to Process '''
-	mesaj = sys._getframe().f_code.co_name
 	str_t = time.perf_counter()
-	logging.info(f"{mesaj} ")
 
-	print(f"  +{mesaj}= : Start: {TM.datetime.now():%T}")
-	print(f'Dir: {root}\tSize: {hm_sz(get_tree_size(root))}')
+	msj = sys._getframe().f_code.co_name
+	msj += f" Start: {TM.datetime.now():%T}\tRoot: {root}\tSize: {hm_sz(get_tree_size(root))}"
+	logging.info(msj)
+	print (msj)
 
 	# a Directory ?
 	if os.path.isdir(root):
@@ -79,38 +79,41 @@ def scan_folder (root: str, xtnsio: list) -> dict :
 		return False
 
 	end_t = time.perf_counter()
-	print(f'  -End: {TM.datetime.now():%T}\tTotal: {(end_t - str_t):.2f} sec')
+	print(f'  -End: {TM.datetime.now():%T}\tTotal: {hm_time(end_t - str_t)}')
 	logging.info(f" Sort: {True}")
 	# XXX: Sort Order reverse = True -> Biggest first
 
-	return sorted(_lst, key=lambda Item: (Item[1], Item[2]), reverse=True )
+	return sorted(_lst, key=lambda Item: Item[1], reverse=True)
 ##>>============-------------------<  End  >------------------==============<<##
 
-@performance_check
-def clean_up(input_file: str, outpt_file: str, debug: bool) -> int:
+@perf_monitor
+def clean_up(input_file: str, outpt_file: str, skip_it: str, debug: bool) -> int:
 	''' Take care of renaming temp files etc.. '''
+	msj = sys._getframe().f_code.co_name
+	if skip_it :
+		logging.info (f"{msj} skip_it={skip_it}")
+		return 0
+	logging.info(f"{msj} ")
 	str_t = time.perf_counter()
-	mesaj = sys._getframe().f_code.co_name
-	logging.info(f"{mesaj} ")
-	print(f"  +{mesaj}=: Start: {TM.datetime.now():%T}")
+	print(f"  +{msj} Start: {TM.datetime.now():%T}")
 
 	if not input_file or not outpt_file :
-		print (f" {mesaj} Inf: {input_file} Out: {outpt_file} Exit:")
-		logging.info(f"Inf_: {input_file}\nOut_: {outpt_file}")
+		print (f" {msj} Inf: {input_file} Out: {outpt_file} Exit:")
+		logging.info(f"Inf: {input_file}\nOutf: {outpt_file}")
 		return False
 
 # XXX: Check that in and out Files are okay
 	try :
 		inpf_sz = os.path.getsize(input_file)
 		if not inpf_sz :
-			mesaj += " Input size Error"
+			msj += " Input size Error"
 
 		outf_sz = os.path.getsize(outpt_file)
 		if not outf_sz :
-			mesaj += " Output size Error"
+			msj += " Output size Error"
 	except Exception as e:
-		logging.error(f" {e}", exc_info=True)
-		raise Exception(mesaj)
+		logging.exception(f"Exception in {func.__name__}: {e}",exc_info=True, stack_info=True)
+		raise Exception(msj)
 
 	ratio = round ( 100*(( outf_sz - inpf_sz ) / inpf_sz), 2)
 	extra = '+Gain:'
@@ -120,7 +123,7 @@ def clean_up(input_file: str, outpt_file: str, debug: bool) -> int:
 	if ratio < 0 :
 		extra = "-Lost:"
 		ratio = abs(ratio)
-	if ratio > 97 :
+	if ratio > 98 :
 		extra += " ! Huge diff !"
 		print(f"Size Was: {hm_sz(inpf_sz)} Is: {hm_sz(outf_sz)} {extra} {hm_sz( inpf_sz - outf_sz )} {ratio:>8} %" )
 		seems_to_small = get_new_fname(input_file, "_seems_small.mp4", TmpF_Ex)
@@ -128,8 +131,8 @@ def clean_up(input_file: str, outpt_file: str, debug: bool) -> int:
 		return 0
 
 	if de_bug :
-		mesaj += "\t de_bug mode input file not Changed "
-		print (mesaj)
+		msj += "\t de_bug mode input file not Changed "
+		print (msj)
 		return 0
 
 	_, xt = os.path.splitext(input_file)
@@ -138,17 +141,17 @@ def clean_up(input_file: str, outpt_file: str, debug: bool) -> int:
 	new_done_fnam = get_new_fname(input_file, TmpF_Ex, xt)
 	copy_move( outpt_file, new_done_fnam )
 
-	mesaj = f"    File: {os.path.basename(input_file)[:66]}.. Was: {hm_sz(inpf_sz)} Is: {hm_sz(outf_sz)} {extra} {hm_sz( inpf_sz - outf_sz )} {ratio:>8} %"
+	msj = f"    File: {os.path.basename(input_file)[:66]}.. Was: {hm_sz(inpf_sz)} Is: {hm_sz(outf_sz)} Diff: {hm_sz( inpf_sz - outf_sz )} "
 	if   inpf_sz > outf_sz :
-		mesaj += f"Save: {ratio} %"
+		msj += f"-Lost: {ratio} %"
 	elif inpf_sz < outf_sz :
-		mesaj += f"Lost: {ratio} %"
+		msj += f"+Gain: {ratio} %"
 	else :
-		mesaj += "Same Size"
-	print( mesaj )
+		msj += "Same Size"
+	print( msj )
 
 	end_t = time.perf_counter()
-	print(f'   -End: {TM.datetime.now():%T}\tTotal: {(end_t - str_t):.2f} sec')
+	print(f'  -End: {TM.datetime.now():%T}\tTotal: {hm_time(end_t - str_t)}')
 
 	return (inpf_sz - outf_sz)
 ##>>============-------------------<  End  >------------------==============<<##
@@ -156,19 +159,20 @@ def clean_up(input_file: str, outpt_file: str, debug: bool) -> int:
 if __name__ == '__main__':
 
 	logging.basicConfig( level=logging.DEBUG,
-			filename=('_1og.log'), filemode='w',
+			filename=(f'{This_File}__.log'), filemode='w',
 			format='%(asctime)s %(levelname)s %(message)s',
 			datefmt='%d-%H:%M:%S')
 
 	str_t = time.perf_counter()
+	logging.info(f'Main Start: {TM.datetime.now()}')
 	print(f'Main Start: {TM.datetime.now()}')
 
 	if not os.path.exists(Excepto):
 		print (f"Creating dir: {Excepto}")
 		os.mkdir(Excepto)
 
-	mesaj = __file__ + '-:'
-	print(mesaj)
+	msj = __file__ + '-:'
+	print(msj)
 	time.sleep(1)
 
 	print("-" * 70)
@@ -201,18 +205,16 @@ if __name__ == '__main__':
 			else :
 				input (" File name too long > 259 ")
 			try:
-				logging.info(f"Proc: {file_p}")
+				logging.info(f"\nProc: {file_p}")
 				all_good = ffprobe_run( file_p, ffprob,   de_bug )
 				all_good, skip_it = zabrain_run( file_p, all_good, de_bug )
 				if  skip_it  == True :
 					print(f"\033[91m    | Skip ffmpeg_run |\033[0m")
-					end_t = time.perf_counter()
-					print(f'   -End: {TM.datetime.now():%T}\tTotal: {(end_t - str_t):.2f} sec')
 				all_good = ffmpeg_run( file_p, all_good, skip_it, ffmpeg, de_bug )
-				logging.info(f"Fm_out_fl: {all_good}")
-				if not all_good and skip_it != True:
+				logging.info(f"FFMPEG out = {all_good}")
+				if not all_good and not skip_it :
 					print ( " FFMPEG did not create anything good")
-					time.sleep(1)
+					time.sleep(5)
 			#	print(f"\033[91m   Create 3x3 matrix\033[0m")
 			#	if matrix_it (file_p, ext='.png') and not all_good :
 #				print (" Create 4x Speedup\n")
@@ -220,33 +222,33 @@ if __name__ == '__main__':
 #				print ("\n Create a Short version\n")
 #				short_ver (file_p, execu, de_bug )
 #				video_diff( file_p, all_good )
-				saved += clean_up( file_p, all_good, de_bug ) or 0 
+				saved += clean_up( file_p, all_good, skip_it, de_bug ) or 0
 				procs +=1
 
 
 			except ValueError as e:
 				logging.error(f" {e}", exc_info=True)
-				mesaj = str( e )
-				if Skip_key in mesaj:
+				msj = str( e )
+				if Skip_key in msj:
 					skipt +=1
 					print(f"\033[33m   | Skip it |\033[0m")
 #					print('   | Skip it |')
 #					file_p = file_p.encode( console_encoding, errors='ignore')
 					OKs_file.write(f'=: {file_p}\n')
 				else:
-					print('Not Taken', mesaj)
+					print('Not Taken', msj)
 					errod +=1
 					ERR_file.write(f'-: {file_p}\n')
 				continue
 
 			except Exception as e:
-				logging.error(f" {e}", exc_info=True)
+				errod +=1
+				ERR_file.write(f'-: {file_p}\t{e}\n')
+				logging.exception(f"Exception {e}",exc_info=True, stack_info=True)
 				print(' Exception', repr( e ), '\nCopy file to: Except' )
 				file_name = os.path.basename(file_p)
 				dirc_name = os.path.dirname(file_p)
 				print(f'-: {dirc_name}\n\t\t{file_name}\t{hm_sz(file_s)}\n')
-				errod +=1
-				ERR_file.write(f'-: {file_p}\t{e}\n')
 				copy_move(file_p, Excepto, True)
 				Trace (Exception, e)
 				continue
@@ -269,7 +271,7 @@ if __name__ == '__main__':
 	sys.stdout.flush()
 
 	end_t = time.perf_counter()
-	print(f'  Done: {TM.datetime.now():%T}\tTotal: {(end_t - str_t):.2f} sec')
+	print(f'  Done: {TM.datetime.now():%T}\tTotal: {hm_time(end_t - str_t)}')
 	print (f"\n  Total: {fl_nmb}\tProces: {procs}\tSkip: {skipt}\tErr: {errod}" )
 	print(f"  {hm_sz(saved)} Saved in Total")
 
