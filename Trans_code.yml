@@ -18,7 +18,7 @@ Action:
 Video:
   codec_name:   'libx265'
   Max_frm_r :   60
-  crf-25    :   '-crf 25'
+  crf-25    :   '-crf 23'
   Max_v_btr :   3500000
   Bl_and_Wh :   No
 # File extensions to procces

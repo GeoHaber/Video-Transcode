@@ -7,7 +7,7 @@ import	time
 import	json
 import	shutil
 import	ctypes
-import psutil
+import  psutil
 import	random
 import	string
 import	datetime as TM
@@ -27,6 +27,64 @@ def color_print(fg: int = 37, bg: int = 40):
 			print(f"\033[{fg}m\033[{bg}m{func(text)}\033[0m")
 		return wrapper
 	return decorator
+
+def perf_monitor(func):
+	""" Measure performance of a function """
+	@wraps(func)
+	def wrapper(*args, **kwargs):
+		strt_time			= time.perf_counter()
+		cpu_percent_prev	= psutil.cpu_percent(interval=0.05, percpu=False)
+		tracemalloc.start()
+		try:
+			return func(*args, **kwargs)
+		except Exception as e:
+			logging.exception(f"Exception in {func.__name__}: {e}",exc_info=True, stack_info=True)
+		finally:
+			current, peak	= tracemalloc.get_traced_memory()
+			tracemalloc.stop()
+			cpu_percent		= psutil.cpu_percent(interval=None, percpu=False)
+			cpu_percnt		= cpu_percent - cpu_percent_prev
+			end_time 		= time.perf_counter()
+			duration		= end_time - strt_time
+			msj = f"{func.__name__}\t\tUsed {abs(cpu_percnt):>5.1f} % CPU: {hm_time(duration)}\t Mem: [avr:{hm_sz(current):>8}, max:{hm_sz(peak):>8}]\t({func.__doc__})"
+			logging.info(msj)
+	return wrapper
+
+def perf_monitor_temp(func):
+	""" Measure performance of a function """
+	@wraps(func)
+	def wrapper(*args, **kwargs):
+		strt_time           = time.perf_counter()
+		cpu_percent_prev    = psutil.cpu_percent(interval=0.05, percpu=False)
+		tracemalloc.start()
+		try:
+			return func(*args, **kwargs)
+		except Exception as e:
+			logging.exception(f"Exception in {func.__name__}: {e}",exc_info=True, stack_info=True)
+		finally:
+			current, peak   = tracemalloc.get_traced_memory()
+			tracemalloc.stop()
+			cpu_percent     = psutil.cpu_percent(interval=None, percpu=False)
+			cpu_percnt      = cpu_percent - cpu_percent_prev
+			# New code to measure CPU temperature
+			cpu_temp = psutil.sensors_temperatures().get('coretemp')[0].current
+			print(f"CPU temperature: {cpu_temp}°C")
+			end_time        = time.perf_counter()
+			duration        = end_time - strt_time
+			msj = f"{func.__name__}\t\tUsed {abs(cpu_percnt):>5.1f} % CPU: {hm_time(duration)}\t Mem: [avr:{hm_sz(current):>8}, max:{hm_sz(peak):>8}]\t({func.__doc__})"
+			logging.info(msj)
+	return wrapper
+
+def measure_cpu_time(func):
+	def wrapper(*args, **kwargs):
+		start_time = time.time()
+		cpu_percent = psutil.cpu_percent(interval=None, percpu=True)
+		result = func(*args, **kwargs)
+		elapsed_time = time.time() - start_time
+		cpu_percent = [p - c for p, c in zip(psutil.cpu_percent(interval=None, percpu=True), cpu_percent)]
+		print(f"Function {func.__name__} used {sum(cpu_percent)/len(cpu_percent)}% CPU over {elapsed_time:.2f} seconds")
+		return result
+	return wrapper
 
 def logit(logfile='out.log', de_bug=False):
 	def logging_decorator(func):
@@ -134,67 +192,51 @@ def performance_check(func):
 		return func(*args, **kwargs)
 	return wrapper
 
-def perf_monitor(func):
-	""" Measure performance of a function """
-	@wraps(func)
-	def wrapper(*args, **kwargs):
-		strt_time			= time.perf_counter()
-		cpu_percent_prev	= psutil.cpu_percent(interval=0.05, percpu=False)
-		tracemalloc.start()
-		try:
-			return func(*args, **kwargs)
-		except Exception as e:
-			logging.exception(f"Exception in {func.__name__}: {e}",exc_info=True, stack_info=True)
-		finally:
-			current, peak = tracemalloc.get_traced_memory()
-			tracemalloc.stop()
-			cpu_percent = psutil.cpu_percent(interval=None, percpu=False)
-			cpu_percnt = cpu_percent - cpu_percent_prev
-			end_time = time.perf_counter()
-			duration = end_time - strt_time
-			msj = f"{func.__name__} \t Used {abs(cpu_percnt):>5.1f} % CPU for {hm_time(duration)} \t Mem: [avrg:{hm_sz(current):>8}, max:{hm_sz(peak):>8}]\t({func.__doc__})"
-			logging.info(msj)
-			# update previous CPU usage for the next function call
-	return wrapper
-
-
-def measure_cpu_time(func):
-	def wrapper(*args, **kwargs):
-		start_time = time.time()
-		cpu_percent = psutil.cpu_percent(interval=None, percpu=True)
-		result = func(*args, **kwargs)
-		elapsed_time = time.time() - start_time
-		cpu_percent = [p - c for p, c in zip(psutil.cpu_percent(interval=None, percpu=True), cpu_percent)]
-		print(f"Function {func.__name__} used {sum(cpu_percent)/len(cpu_percent)}% CPU over {elapsed_time:.2f} seconds")
-		return result
-	return wrapper
+def temperature ():
+	sensors = psutil.sensors_temperatures()
+	for name, entries in sensors.items():
+		print(f"{name}:")
+		for entry in entries:
+			print(f"  {entry.label}: {entry.current}°C")
 
 ##>>============-------------------<  End  >------------------==============<<##
 
 #  CLASES
 # XXX: https://shallowsky.com/blog/programming/python-tee.html
+import sys
 
 class Tee:
-	''' implement the Linux Tee funftion '''
+	''' implement the Linux Tee function '''
 
 	def __init__(self, *targets):
 		self.targets = targets
-
-	def __del__(self):
-		for target in self.targets:
-			if target not in (sys.stdout, sys.stderr):
-				target.close()
 
 	def write(self, obj):
 		for target in self.targets:
 			try:
 				target.write(obj)
 				target.flush()
-			except Exception:
-				pass
+			except (IOError, AttributeError) as e:
+				print(f'Error while writing to target: {e}', file=sys.stderr)
 
 	def flush(self):
-		pass
+		for target in self.targets:
+			try:
+				target.flush()
+			except (IOError, AttributeError) as e:
+				print(f'Error while flushing target: {e}', file=sys.stderr)
+
+	def close(self):
+		for target in self.targets:
+			if target not in (sys.stdout, sys.stderr):
+				target.close()
+
+	def __enter__(self):
+		return self
+
+	def __exit__(self, exc_type, exc_val, exc_tb):
+		self.close()
+
 
 class RunningAverage:
 	''' Compute the running averaga of a value '''
@@ -215,6 +257,24 @@ class RunningAverage:
 		self.avg = 0
 ##>>============-------------------<  End  >------------------==============<<##
 ## Functions
+
+def hm_sz(numb: Union[str, int, float], type: str = "B") -> str:
+	'''convert file size to human readable format'''
+	numb = float(numb)
+	try:
+		if numb < 1024.0:
+			return f"{numb} {type}"
+		for unit in ['','K','M','G','T','P','E']:
+			if numb < 1024.0:
+				return f"{numb:.2f} {unit}{type}"
+			numb /= 1024.0
+		return f"{numb:.2f} {unit}{type}"
+	except Exception as e:
+		logging.exception(f"Error {e}", exc_info=True, stack_info=True)
+		print (e)
+#		traceback.print_exc()
+##==============-------------------   End   -------------------==============##
+
 def hm_time(timez: float) -> str:
 	'''Print time as years, months, weeks, days, hours, min, sec'''
 	units = {'year': 31536000,
@@ -241,46 +301,6 @@ def hm_time(timez: float) -> str:
 				frmt.append(f"{int(value)} {unit}{'s' if value > 1 else ''}")
 			timez %= seconds_per_unit
 		return ", ".join(frmt[:-1]) + " and " + frmt[-1] if len(frmt) > 1 else frmt[0] if len(frmt) == 1 else "0 sec"
-
-def Trace(message: str, exception: Exception, debug: bool = False) -> None:
-	"""Prints a traceback and debug info for a given exception"""
-	max_chars = 42
-	print("+-" * max_chars)
-	print(f"Msg: {message}\nErr: {exception}\nRep: {repr(exception)}")
-	print("-+" * max_chars)
-	max_chars *= 2
-
-	print("Stack")
-	print("=" * max_chars)
-	stack = traceback.extract_stack()
-	template = " {filename:<26} | {lineno:5} | {funcname:<20} | {source:>12}"
-	for filename, lineno, funcname, source in stack:
-		if funcname != "<module>":
-			funcname = funcname + "()"
-		print(
-			template.format(
-				filename=os.path.basename(filename),
-				lineno=lineno,
-				source=source,
-				funcname=funcname,
-			)
-		)
-
-	print("=" * max_chars)
-	print("Sys Exec_Info")
-	exc_type, exc_value, exc_traceback = sys.exc_info()
-	print("-" * max_chars)
-	for frame in traceback.extract_tb(exc_traceback):
-		print(
-			f" {os.path.basename(frame.filename):<26} | {frame.lineno:5} | {frame.name:20} | {frame.line:12} "
-		)
-		print("-" * max_chars)
-	print("=" * max_chars)
-	logging.exception(f"Msg: {message}   Err: {exception}", exc_info=True, stack_info=True)
-#	logging.error    (f"Msg: {message}   Err: {exception}", exc_info=True, stack_info=True))
-
-	time.sleep(3)
-
 ##>>============-------------------<  End  >------------------==============<<##
 
 def file_size(path):
@@ -410,23 +430,6 @@ def get_new_fname(file_name, new_ext='', strip=''):
 ##==============-------------------   End   -------------------==============##
 
 
-def hm_sz(numb: Union[str, int, float], type: str = "B") -> str:
-	'''convert file size to human readable format'''
-	numb = float(numb)
-	try:
-		if numb < 1024.0:
-			return f"{numb} {type}"
-		for unit in ['','K','M','G','T','P','E']:
-			if numb < 1024.0:
-				return f"{numb:.2f} {unit}{type}"
-			numb /= 1024.0
-		return f"{numb:.2f} {unit}{type}"
-	except Exception as e:
-		logging.exception(f"Error {e}", exc_info=True, stack_info=True)
-		print (e)
-#		traceback.print_exc()
-##==============-------------------   End   -------------------==============##
-
 def get_tree_size(path: str) -> int:
 	"""Return total size of files in path and subdirs. If is_dir() or stat() fails, print an error message to stderr
 	and assume zero size (for example, file has been deleted).
@@ -457,6 +460,7 @@ def safe_options(strm, opts ):
 			except ValueError:
 				pass
 	return safe
+##==============-------------------   End   -------------------==============##
 
 def parse_from_to(strm, dictio, de_bug=True):
 	msj = sys._getframe().f_code.co_name
@@ -480,6 +484,46 @@ def parse_from_to(strm, dictio, de_bug=True):
 		return next(iter(resul.values()))
 	else:
 		return None
+##==============-------------------   End   -------------------==============##
+
+def Trace(message: str, exception: Exception, debug: bool = False) -> None:
+	"""Prints a traceback and debug info for a given exception"""
+	max_chars = 42
+	print("+-" * max_chars)
+	print(f"Msg: {message}\nErr: {exception}\nRep: {repr(exception)}")
+	print("-+" * max_chars)
+	max_chars *= 2
+
+	print("Stack")
+	print("=" * max_chars)
+	stack = traceback.extract_stack()
+	template = " {filename:<26} | {lineno:5} | {funcname:<20} | {source:>12}"
+	for filename, lineno, funcname, source in stack:
+		if funcname != "<module>":
+			funcname = funcname + "()"
+		print(
+			template.format(
+				filename=os.path.basename(filename),
+				lineno=lineno,
+				source=source,
+				funcname=funcname,
+			)
+		)
+
+	print("=" * max_chars)
+	print("Sys Exec_Info")
+	exc_type, exc_value, exc_traceback = sys.exc_info()
+	print("-" * max_chars)
+	for frame in traceback.extract_tb(exc_traceback):
+		print(
+			f" {os.path.basename(frame.filename):<26} | {frame.lineno:5} | {frame.name:20} | {frame.line:12} "
+		)
+		print("-" * max_chars)
+	print("=" * max_chars)
+	logging.exception(f"Msg: {message}   Err: {exception}", exc_info=True, stack_info=True)
+#	logging.error    (f"Msg: {message}   Err: {exception}", exc_info=True, stack_info=True))
+
+	time.sleep(3)
 
 ##==============-------------------   End   -------------------==============##
 
@@ -543,3 +587,77 @@ def res_chk(folder='.'):
 		print("\nResources OK\n")
 		return True
 ##==============-------------------   End   -------------------==============##
+
+def vis_compr(string1, string2, no_match_c='|', match_c='='):
+	''' Visualy show diferences between sting1 graphx string2  '''
+	str_t = datetime.datetime.now()
+	message = sys._getframe().f_code.co_name + ':'
+	print(f"     +{message}=: Start: {str_t:%T}")
+
+	#	print (f"\n1: {string1}\n2: {string2}\n ??")
+	# XXX: # TODO: location of differences , chunking
+	graphx = ''
+	n_diff = 0
+	if len(string2) < len(string1):
+		string1, string2 = string2, string1
+	for c1, c2 in zip(string1, string2):
+		if c1 == c2:
+			graphx += match_c
+		else:
+			graphx += no_match_c
+			n_diff += 1
+	delta = len(string2) - len(string1)
+	graphx += delta * no_match_c
+	n_diff += delta
+	if n_diff :
+		print(f"{n_diff} Differences \n1: {string1}\n {graphx}\nMove: {string2}\n")
+	return graphx, n_diff
+#>=-------------------------------------------------------------------------=<#
+
+def calculate_total_bits(width, height, pixel_format):
+	bits_per_pixel = {
+		'yuv420p8':		12, #  8-bit YUV 4:2:0
+		'p010le':		15, # 10-bit Packed YUV 4:2:0
+		'yuv420p10le':	15, # 10-bit YUV 4:2:0
+		'yuv422p8':		16, #  8-bit YUV 4:2:2
+		'yuv422p10le':	20, # 10-bit YUV 4:2:2
+		'yuv444p8':		24, #  8-bit YUV 4:4:4
+		'yuv444p10le':	30, # 10-bit YUV 4:4:4
+		# Add more pixel formats as needed
+	}
+	bpp = bits_per_pixel.get(pixel_format, None)
+	if bpp is None:
+		raise ValueError(f"Unsupported pixel format: {pixel_format}")
+	total_bits = width * height * bpp
+	print(f"Total bits for a frame with pixel format '{pixel_format}': {total_bits}")
+	return total_bits
+'''
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Define the x values (base) ranging from 1 to 10
+x_values = np.linspace(1, 10, 500)
+
+# Calculate the corresponding y values for each exponent (0.7, 0.5, 0.3)
+y_values_07 = x_values ** 0.7
+y_values_05 = x_values ** 0.5
+y_values_03 = x_values ** 0.3
+
+# Plot the graphs
+plt.figure(figsize=(10, 6))
+plt.plot(x_values, y_values_07, label='y = x^0.7', color='b')
+plt.plot(x_values, y_values_05, label='y = x^0.5', color='g')
+plt.plot(x_values, y_values_03, label='y = x^0.3', color='r')
+plt.xlabel('x (Base)')
+plt.ylabel('y (Result)')
+plt.title('Graphs of y = x^0.7, y = x^0.5, and y = x^0.3')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# Evaluate which number is bigger
+result_07 = 10 ** 0.7
+result_05 = 10 ** 0.5
+result_03 = 10 ** 0.3
+(result_07, result_05, result_03)
+'''
