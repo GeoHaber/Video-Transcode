@@ -203,9 +203,8 @@ def temperature ():
 
 #  CLASES
 # XXX: https://shallowsky.com/blog/programming/python-tee.html
-import sys
 
-class Tee:
+class xxTee:
 	''' implement the Linux Tee function '''
 
 	def __init__(self, *targets):
@@ -237,9 +236,44 @@ class Tee:
 	def __exit__(self, exc_type, exc_val, exc_tb):
 		self.close()
 
+class Tee:
+	''' implement the Linux Tee function '''
+
+	def __init__(self, *targets):
+		self.targets = targets
+
+	def write(self, obj):
+		for target in self.targets:
+			try:
+				target.write(obj)
+				target.flush()
+			except (IOError, AttributeError) as e:
+				logging.error(f'Error while writing to target: {e}')
+
+	def flush(self):
+		for target in self.targets:
+			try:
+				target.flush()
+			except (IOError, AttributeError) as e:
+				logging.error(f'Error while flushing target: {e}')
+
+	def close(self):
+		for target in self.targets:
+			if target not in (sys.stdout, sys.stderr):
+				target.close()
+
+	def __enter__(self):
+		return self
+
+	def __exit__(self, exc_type, exc_val, exc_tb):
+		self.close()
+
+#with Tee(sys.stdout, open('__log.txt', 'w')) as tee:
+#	print('Hello, world!')
+
 
 class RunningAverage:
-	''' Compute the running averaga of a value '''
+	''' Compute the running average of a value '''
 
 	def __init__(self):
 		self.n = 0
@@ -256,7 +290,32 @@ class RunningAverage:
 		self.n = 0
 		self.avg = 0
 ##>>============-------------------<  End  >------------------==============<<##
-## Functions
+
+class Color:
+    BLACK = "\033[30m"
+    RED = "\033[31m"
+    GREEN = "\033[32m"
+    YELLOW = "\033[33m"
+    BLUE = "\033[34m"
+    MAGENTA = "\033[35m"
+    CYAN = "\033[36m"
+    WHITE = "\033[37m"
+    RESET = "\033[0m"
+
+    def __init__(self, color, bright=False):
+        self.color = color
+        self.bright = bright
+
+    def __str__(self):
+        return f"\033[{1 if self.bright else ''};{self.color}m" if self.bright else f"{self.color}m"
+
+# Usage:
+#print(f"{Color(Color.RED, bright=True)}This is bright red text!{Color(Color.RESET)}")
+#print(f"{Color(Color.BLUE)}This is normal blue text!{Color(Color.RESET)}")
+
+
+##XXX: Functions :XXX
+##==============-------------------  Start  -------------------==============##
 
 def hm_sz(numb: Union[str, int, float], type: str = "B") -> str:
 	'''convert file size to human readable format'''
@@ -264,14 +323,15 @@ def hm_sz(numb: Union[str, int, float], type: str = "B") -> str:
 	try:
 		if numb < 1024.0:
 			return f"{numb} {type}"
-		for unit in ['','K','M','G','T','P','E']:
+		for unit in ['K','M','G','T','P','E']:
+			numb /= 1024.0
 			if numb < 1024.0:
 				return f"{numb:.2f} {unit}{type}"
-			numb /= 1024.0
 		return f"{numb:.2f} {unit}{type}"
 	except Exception as e:
 		logging.exception(f"Error {e}", exc_info=True, stack_info=True)
 		print (e)
+		return ''
 #		traceback.print_exc()
 ##==============-------------------   End   -------------------==============##
 
@@ -279,15 +339,15 @@ def hm_time(timez: float) -> str:
 	'''Print time as years, months, weeks, days, hours, min, sec'''
 	units = {'year': 31536000,
 			 'month': 2592000,
-			 'week': 604800,
-			 'day': 86400,
-			 'hour': 3600,
-			 'min': 60,
-			 'sec': 1,
+			 'week':   604800,
+			 'day':     86400,
+			 'hour':     3600,
+			 'min':        60,
+			 'sec':         1,
 			}
-	if timez < 0:
+	if timez < 0.0:
 		return "Error negative"
-	elif timez == 0 :
+	elif timez == 0.0 :
 		return "Zero"
 	elif timez < 0.001:
 		return f"{timez * 1000:.3f} ms"
@@ -303,61 +363,71 @@ def hm_time(timez: float) -> str:
 		return ", ".join(frmt[:-1]) + " and " + frmt[-1] if len(frmt) > 1 else frmt[0] if len(frmt) == 1 else "0 sec"
 ##>>============-------------------<  End  >------------------==============<<##
 
-def file_size(path):
-	# Return file/dir size (MB)
-	mb = 1 << 20  # bytes to MiB (1024 ** 2)
-	path = Path(path)
-	if path.is_file():
-		return path.stat().st_size / mb
-	elif path.is_dir():
-		return sum(f.stat().st_size for f in path.glob('**/*') if f.is_file()) / mb
-	else:
-		return 0.0
-##>>============-------------------<  End  >------------------==============<<##
-
-
 def copy_move(src: str, dst: str, keep_it: bool = False) -> bool:
 	"""Move or copy a file from src to dst, optionally keeping the original file.
-
 	Returns True if the file was moved/copied successfully, False otherwise.
 	"""
+
 	if os.path.exists(dst) and os.path.samefile(src, dst):
 		# Files are the same, do nothing
-	#	print(f"{src} and {dst} are the same file, doing nothing.")
-		time.sleep(3)
+		print(f"{src} and {dst} are the same file, doing nothing.")
 		return True
 
 	if keep_it:
 		# Copy file to destination and do not delete original
 		try:
 			shutil.copy2(src, dst)
-	#		print(f"{src} copied to {dst}, not deleted.")
+#			print(f"{src} copied to {dst}, not deleted.")
 			return True
 		except (PermissionError, IOError, OSError) as err:
-			print(f"Error copying {src} to {dst}: {err}")
+			print(f"Error: {err}\n copying {src} to {dst}: ")
 			return False
 
-	# Move file to destination and delete original
-	try:
-		shutil.move(src, dst)
-	#	print(f"{src} moved to {dst}")
-		return True
-	except (PermissionError, IOError, OSError) as err:
-		print(f"Error moving {src} to {dst}: {err}")
-		return False
+	else:
+		# Try to move the file, and if that fails, try to copy it
+		try:
+			shutil.move(src, dst)
+			print(f"{src} moved to {dst}")
+			return True
+		except (PermissionError, IOError, OSError) as err:
+			print(f"Error: {err}\n moving {src} to {dst}:")
+			try:
+				shutil.copy2(src, dst)
+				print(f"{src} copied to {dst}, original deleted.")
+				return True
+			except (PermissionError, IOError, OSError) as err:
+				print(f"Error: {err}\n copying {src} to {dst}:")
+				return False
+
+##>>============-------------------<  End  >------------------==============<<##
+
+
+def flatten_list_of_lists(lst):
+    """Flatten a list of lists (or a mix of lists and other elements) into a single list."""
+    result = []
+    for item in lst:
+        if isinstance(item, list):
+            result.extend(item)
+        elif isinstance(item, tuple):
+            # If the item is a tuple, only extend the first element (which should be a list)
+            result.extend(item[0])
+        else:
+            result.append(item)
+    return result
+
 ##==============-------------------   End   -------------------==============##
 
 
-def print_alighned(list: str) -> None :
+def ordinal(num: int) -> str:
 	'''
-	print a formated table with the {list} values provided
+	Returns the ordinal number of a given integer, as a string.
+	eg. 1 -> 1st, 2 -> 2nd, 3 -> 3rd, etc.
 	'''
-	lens = []
-	for col in zip(*list):
-		lens.append(max([len(v) for v in col]))
-	format = "  ".join(["{:<" + str(l) + "}" for l in lens])
-	for row in list:
-		print(format.format(*row))
+	if 10 <= num % 100 < 20:
+		return '{0}\'th'.format(num)
+	else:
+		ord = {1: '\'st', 2: '\'nd', 3: '\'rd'}.get(num % 10, '\'th')
+		return f'{num}{ord}'
 ##==============-------------------   End   -------------------==============##
 
 
@@ -377,6 +447,58 @@ def divd_strn(val: str ) -> float:
 	elif '.' in val:
 		r = float(val)
 	return round( r, 3)
+##==============-------------------   End   -------------------==============##
+
+def vis_compr(string1, string2, no_match_c='|', match_c='='):
+	''' Visualy show diferences between sting1 graphx string2  '''
+	str_t = datetime.datetime.now()
+	message = sys._getframe().f_code.co_name + ':'
+	print(f"     +{message}=: Start: {str_t:%T}")
+
+	#	print (f"\n1: {string1}\n2: {string2}\n ??")
+	# XXX: # TODO: location of differences , chunking
+	graphx = ''
+	n_diff = 0
+	if len(string2) < len(string1):
+		string1, string2 = string2, string1
+	for c1, c2 in zip(string1, string2):
+		if c1 == c2:
+			graphx += match_c
+		else:
+			graphx += no_match_c
+			n_diff += 1
+	delta = len(string2) - len(string1)
+	graphx += delta * no_match_c
+	n_diff += delta
+	if n_diff :
+		print(f"{n_diff} Differences \n1: {string1}\n {graphx}\nMove: {string2}\n")
+	return graphx, n_diff
+#>=-------------------------------------------------------------------------=<#
+
+
+def file_size(path):
+	# Return file/dir size (MB)
+	mb = 1 << 20  # bytes to MiB (1024 ** 2)
+	path = Path(path)
+	if path.is_file():
+		return path.stat().st_size / mb
+	elif path.is_dir():
+		return sum(f.stat().st_size for f in path.glob('**/*') if f.is_file()) / mb
+	else:
+		return 0.0
+##>>============-------------------<  End  >------------------==============<<##
+
+
+def print_alighned(list: str) -> None :
+	'''
+	print a formated table with the {list} values provided
+	'''
+	lens = []
+	for col in zip(*list):
+		lens.append(max([len(v) for v in col]))
+	format = "  ".join(["{:<" + str(l) + "}" for l in lens])
+	for row in list:
+		print(format.format(*row))
 ##==============-------------------   End   -------------------==============##
 
 
@@ -401,20 +523,6 @@ def stmpd_rad_str(leng=13, head=''):
 		rand_ += char
 	return head +rand_
 ##==============-------------------   End   -------------------==============##
-
-
-def ordinal(num: str) -> str:
-	'''
-	Returns the ordinal number of a given integer, as a string.
-	eg. 1 -> 1st, 2 -> 2nd, 3 -> 3rd, etc.
-	'''
-	if 10 <= num % 100 < 20:
-		return '{0}\'th'.format(num)
-	else:
-		ord = {1: '\'st', 2: '\'nd', 3: '\'rd'}.get(num % 10, '\'th')
-		return f'{num}{ord}'
-##==============-------------------   End   -------------------==============##
-
 
 def get_new_fname(file_name, new_ext='', strip=''):
 	'''
@@ -587,32 +695,6 @@ def res_chk(folder='.'):
 		print("\nResources OK\n")
 		return True
 ##==============-------------------   End   -------------------==============##
-
-def vis_compr(string1, string2, no_match_c='|', match_c='='):
-	''' Visualy show diferences between sting1 graphx string2  '''
-	str_t = datetime.datetime.now()
-	message = sys._getframe().f_code.co_name + ':'
-	print(f"     +{message}=: Start: {str_t:%T}")
-
-	#	print (f"\n1: {string1}\n2: {string2}\n ??")
-	# XXX: # TODO: location of differences , chunking
-	graphx = ''
-	n_diff = 0
-	if len(string2) < len(string1):
-		string1, string2 = string2, string1
-	for c1, c2 in zip(string1, string2):
-		if c1 == c2:
-			graphx += match_c
-		else:
-			graphx += no_match_c
-			n_diff += 1
-	delta = len(string2) - len(string1)
-	graphx += delta * no_match_c
-	n_diff += delta
-	if n_diff :
-		print(f"{n_diff} Differences \n1: {string1}\n {graphx}\nMove: {string2}\n")
-	return graphx, n_diff
-#>=-------------------------------------------------------------------------=<#
 
 def calculate_total_bits(width, height, pixel_format):
 	bits_per_pixel = {
