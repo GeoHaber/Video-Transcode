@@ -8,9 +8,8 @@ import json
 import datetime	as TM
 import subprocess as SP
 
-from math	import gcd
 from collections import defaultdict
-from typing import Dict, List, Tuple, Optional
+from typing import List, Dict, Tuple, Any, Optional
 
 from My_Utils import *
 from Yaml import *
@@ -47,7 +46,7 @@ def ffprobe_create_index(input_file):
 			'-hide_banner',
 			'-analyzeduration', '100000000',
 			'-probesize', '50000000',
-			'-v', 'warning',
+			'-v', 'error',
 			'-of', 'json',
 			'-show_programs',
 			'-show_format',
@@ -63,10 +62,15 @@ def ffprobe_create_index(input_file):
 
 		# Get the format and streams metadata
 		_format = output.get('format', {})
+		if not _format :
+			msj += f"No format\n{output_json}"
+			print (msj)
+			raise Exception("No Fromat")
+
 		streams = output.get('streams', [])
 
 		# Initialize the indexes dictionary
-		indexes = {'video': [], 'audio': [], 'subtitle': []}
+		indexes = {'video': [], 'audio': [], 'subtitle': [], 'data': [], }
 		# Add the format variable to the indexes dictionary
 		indexes['format'] = _format
 
@@ -79,22 +83,35 @@ def ffprobe_create_index(input_file):
 
 			# Only retain the codec type and properties of the stream
 			if codec_type == 'video':
-				index['width'] = stream.get('width', 0)
-				index['height'] = stream.get('height', 0)
-				index['fps'] = stream.get('fps', 0)
-				index['pixel_format'] = stream.get('pixel_format', '')
+				index['width'] 				= stream.get('width', 0)
+				index['height'] 			= stream.get('height', 0)
+				index['fps'] 				= stream.get('fps', 0)
+				index['pixel_format'] 		= stream.get('pixel_format', '')
 				index['display_aspect_ratio'] = stream.get('display_aspect_ratio', '')
 				index['chroma_subsampling'] = stream.get('chroma_subsampling', '')
+
 				indexes['video'].append(index)
+
 			elif codec_type == 'audio':
-				index['bit_rate'] = stream.get('bit_rate', 0)
-				index['channels'] = stream.get('channels', 0)
-				index['samplerate'] = stream.get('sample_rate', 0)
+				index['bit_rate'] 		= stream.get('bit_rate', 0)
+				index['channels'] 		= stream.get('channels', 0)
+				index['samplerate'] 	= stream.get('sample_rate', 0)
+
 				indexes['audio'].append(index)
+
 			elif codec_type == 'subtitle':
-				index['language'] = stream.get('tags', {}).get('language', '')
-				index['forced'] = stream.get('disposition', {}).get('forced', 0)
+				index['language'] 		= stream.get('tags', {}).get('language', '')
+				index['forced'] 		= stream.get('disposition', {}).get('forced', 0)
+
 				indexes['subtitle'].append(index)
+
+			elif codec_type == 'data':
+				index['language'] = stream.get('tags', {}).get('language', '')
+
+				indexes['data'].append(index)
+
+			else :
+				input (" Earth we have a problem" )
 
 		return indexes
 	except subprocess.CalledProcessError as e:
@@ -103,6 +120,7 @@ def ffprobe_create_index(input_file):
 
 @perf_monitor
 def extract_file_info(input_file):
+	return 1
 	cmd = ['ffprobe',
 				'-hide_banner',
 				'-analyzeduration', '100000000',
@@ -112,16 +130,25 @@ def extract_file_info(input_file):
 					'-show_programs',
 					'-show_format',
 					'-show_streams',
-					'-show_error',
+#					'-show_error',
 					'-show_data',
-					'-show_private_data',
 				'-i', input_file]
 	try:
 		result = SP.run(cmd, capture_output=True, text=True, errors='ignore', encoding='utf-8')
 		output = json.loads(result.stdout)
+
 		# Use .get() method with default values
-		# XXX: We could extract more info if needed
+		format_info = output.get('format', {})
+		if not format_info :
+			msj = f"File: {input_file} Has no format\n{output}"
+			print (msj)
+			return 0.0
+#			raise Exception("No Fromat")
+		else :
+			duration	= float(format_info.get('duration', 0.0))
+
 		'''
+		# XXX: We could extract more info if needed
 		_format = output.get('format', {})
 		glb_vidolen = int(float(_format.get('duration', 0.0)) )
 		glb_bitrate = int(      _format.get('bit_rate', 0) )
@@ -130,18 +157,18 @@ def extract_file_info(input_file):
 		size		=           _format.get('size', 0)
 		'''
 
-		duration	= float(output.get('format', {}).get('duration', 0.0))
-		if de_bug : print ( duration )
+		if de_bug : print (f"F: {input_file} = {duration}" )
 		return duration
+
 	except (SP.SubprocessError, json.JSONDecodeError) as e:
-		msj += f"Error {e} getting metadata from file\n{input_file}\n{cmd}"
-		print( msj )
+		msj = f"extract_file_info\nError: {e}\nFile: {input_file}\nCopy to {Excepto}\n" # \nFFprob: {cmd}
+		print ( msj )
+		copy_move(input_file, Excepto, True)
 		return 0.0
 
 ##>>============-------------------<  End  >------------------==============<<##
-
-@perf_monitor
-def ffprobe_run(input_file, execu=ffprob, de_bug=False ) -> str :
+#@perf_monitor
+def ffprobe_run(input_file, execu=ffprob, de_bug=False) -> dict:
 	''' Run ffprobe returns a Json file with the info '''
 
 	msj = sys._getframe().f_code.co_name
@@ -150,14 +177,10 @@ def ffprobe_run(input_file, execu=ffprob, de_bug=False ) -> str :
 	str_t = time.perf_counter()
 
 	if not input_file :
-		msj += "  no input_file"
-		raise Exception(msj)
+		raise FileNotFoundError("No input_file provided.")
 
-	cmd = [execu,
-				'-hide_banner',
-				'-analyzeduration', '100000000',
-				'-probesize',		 '50000000',
-				'-v', 'warning',	# XXX quiet, panic, fatal, error, warning, info, verbose, de_bug, trace
+	cmd = [execu, '-hide_banner', '-analyzeduration', '100000000', '-probesize',		 '50000000',
+				'-v', 'error',		# XXX quiet, panic, fatal, error, warning, info, verbose, de_bug, trace
 				'-of','json',		# XXX default, csv, xml, flat, ini
 					'-show_programs',
 					'-show_format',
@@ -167,20 +190,24 @@ def ffprobe_run(input_file, execu=ffprob, de_bug=False ) -> str :
 					'-show_private_data',
 				'-i', input_file]
 
-# XXX: TBD good stuff
 	try:
-		out    = SP.run(cmd, stdout=SP.PIPE)
+		out = SP.run(cmd, stdout=SP.PIPE, check=True)
 		jsn_ou = json.loads(out.stdout.decode('utf-8'))
-	except (SP.SubprocessError, json.JSONDecodeError) as e:
-		msj += f"Error {e} getting metadata from file\n{input_file}\n{cmd}"
-		print( msj )
-		logging.error( msj )
-		raise Exception(msj)
+
+		if 'error' in jsn_ou:
+			print(f"{msj} - ffprobe reported an error: {jsn_ou['error']}")
+			raise ValueError(f"ffprobe error: {jsn_ou['error']}")
+
+	except (SP.CalledProcessError, SP.TimeoutExpired, json.JSONDecodeError) as e:
+		msj += f" Error {e}\ getting metadata from file\n{input_file}"
+		raise Exception(msj) from e
 
 	end_t = time.perf_counter()
 	print(f'  -End: {TM.datetime.now():%T}\tTotal: {hm_time(end_t - str_t)}')
+
 	return jsn_ou
 ##>>============-------------------<  End  >------------------==============<<##
+
 
 # XXX:  Returns encoded filename file_name
 @perf_monitor
@@ -325,6 +352,7 @@ def run_ffm(args, de_bug=False):
 	return True
 ##==============-------------------   End   -------------------==============##
 
+@perf_monitor
 def pars_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple[List[str], List[str], List[str], List[str], bool]:
 	''' Parse and extract data from file format '''
 	msj = sys._getframe().f_code.co_name
@@ -333,7 +361,6 @@ def pars_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple[
 	global glb_vidolen  # make it global so we can reuse for fmpeg check ...
 	global glb_bitrate
 
-	# XXX: Meta Data
 	_format_ = {
 		'bit_rate' 	 		: int,
 		'nb_streams' 		: int,
@@ -352,90 +379,85 @@ def pars_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple[
 		msj += f" 'format' keyword not in\n{ json.dumps(mta_dta, indent=2) }\n"
 		print ( msj )
 		logging.error(msj)
-		return [], True
+		raise ValueError(msj)
 
-	glb_vidolen = int(float(_format.get('duration', 0.0)) )
-	glb_bitrate = int(      _format.get('bit_rate', 0) )
-	nb_programs	= int(      _format.get('nb_programs', 0) )
-	filename	=           _format.get('filename', 'No File Name')
-	size		=           _format.get('size', 0)
+	glb_vidolen = int(float(_format.get('duration', 	0.0) ))
+	glb_bitrate = int(      _format.get('bit_rate', 	0) )
+	nb_streams	= int(      _format.get('nb_streams', 	0) )
+	nb_programs	= int(      _format.get('nb_programs', 	0) )
+	filename	=           _format.get('filename', 	'No File Name')
+	size		=           _format.get('size', 		0)
+	f_comment 	= 			_format.get('tags', 		{}).get('comment', 'No_WTF')
 
 	_strms = mta_dta.get('streams', [])
 
 	# Initialize a dictionary to group streams by codec_type
 	streams_by_type = defaultdict(list)
 
-	for i, stream in enumerate(_strms):
-		codec_type = stream.get('codec_type', None)
+	for i, stream in enumerate(_strms, start=1):
+		codec_type = stream.get('codec_type', 'wtf?')
 		streams_by_type[codec_type].append(stream)
+
+	if i != nb_streams:
+		print(f" i = {i} != nb_streams = {nb_streams}")
 
 	# Extract the lists of streams for each codec_type
 	video_streams = streams_by_type['video']
+	if not video_streams:
+		msj += f"\nNo Video in: {input_file}\n"
+		print(msj)
+		logging.error(msj)
+		raise ValueError(msj)
+
 	audio_streams = streams_by_type['audio']
+	if not audio_streams:
+		msj += f"\nNo Audio in: {input_file}\n"
+		print(msj)
+		logging.error(msj)
+		raise ValueError(msj)
+
 	subtl_streams = streams_by_type['subtitle']
 	datax_streams = streams_by_type['data']
-	wtfis_streams = streams_by_type[None]  # Streams with no codec_type or unrecognized codec_type
 
-	if wtfis_streams :
-		print (f" WTF\n{wtfis_streams}\n")
-		input ("WTF")
+	# Collect all unknown or unrecognized codec_types
+	known_types = {'video', 'audio', 'subtitle', 'data'}
+	unknown_streams = {k: v for k, v in streams_by_type.items() if k not in known_types}
 
-	if not video_streams:
-		msj = f"\nNo Video in File: {input_file}\n"
-		print(msj)
-		logging.error(msj)
-		raise ValueError(msj)
+	if unknown_streams:
+		for codec_type, streams in unknown_streams.items():
+			msg += f"  Unrecognized codec_type '{codec_type}' found in streams: {streams}"
+			print(msg)
+		input (msj)
 
-	if not audio_streams:
-		msj = f"\nNo Audio in File: {input_file}\n"
-		print(msj)
-		logging.error(msj)
-		raise ValueError(msj)
+	# Create summary message
+	stream_counts = {
+		'Prog': nb_programs,
+		'Strm': nb_streams,
+		'V': len(video_streams),
+		'A': len(audio_streams),
+		'S': len(subtl_streams),
+		'D': len(datax_streams)
+	}
 
-	stream_counts = {stream_type: len(streams) for stream_type, streams in
-				 [('Prog', nb_programs), ('V', video_streams), ('A', audio_streams), ('S', subtl_streams), ('D', datax_streams)] if
-				 streams}
+	summary_msg = f"    |>FRMT<| Size: {hm_sz(size)} | Bitrate: {hm_sz(glb_bitrate)} | Length: {hm_time(glb_vidolen)} |"
+	summary_msg += ''.join([f" {key} = {count} |" for key, count in stream_counts.items() if count != 0])
+	print(f"\033[96m{summary_msg}\033[0m")
 
-	message = f"    |< FR >|Sz: {hm_sz(size)}|Br: {hm_sz(glb_bitrate)} |L: {hm_time(glb_vidolen)} "
-	message += ''.join([f'|{stream_type} = {count}|' for stream_type, count in stream_counts.items() ])
-	print(f"{message}")
-
-	f_skip = False
-	# Check if the right signature is found
+	# Check for skip condition
 	_, ext = os.path.splitext(input_file)
-	if (_format.get('tags', {}).get('comment') == Skip_key) and (ext == '.mp4') :
-		print(f"  Skip Format")
-		# Check if filenames are the same and update f_skip accordingly
-		f_skip = True if (input_file == filename) else False
-		if f_skip:
-#			print("  Same Filename")
-			logging.info(f"Was processed: {os.path.basename(input_file)}")
-		else:
-			# Visual comparison of different filenames
-			vis_compr(input_file, filename)
-			print(f"InFile: {input_file} != Fnam: {filename}")
-			input ("Press CR")
-			raise Exception("FileName does not match")
+	f_skip = (f_comment == Skip_key) and (ext == '.mp4')
+
+	if f_skip:
+		print("  Key found")
 	else:
 		print("  Key Miss")
-	#	print(f"\nInFile: {input_file}\nFname:  {filename}\n")
-		if ( input_file != filename ) :
-			print(f"InFile: {input_file} != Fnam: {filename}")
-			vis_compr(input_file, filename)
-			input ("Press CR")
-			raise Exception("FileName does not match")
 
 	ff_video, v_skip = (pars_video(video_streams, de_bug) if video_streams else (['-vn'], False) )
 	ff_audio, a_skip = (pars_audio(audio_streams, de_bug) if audio_streams else (['-an'], False) )
 	ff_subtl, s_skip = (pars_subtl(subtl_streams, de_bug) if subtl_streams else (['-sn'], True ) )
 	ff_datat, d_skip = (pars_extrd(datax_streams, de_bug) if datax_streams else (['-dn'], True ) )
 
-	skip_it = True if ( f_skip and v_skip and a_skip and s_skip and d_skip ) else False
-
-# XXX:
-#	ff_audio = ["-c:a", "copy"]
-#	ff_subtl, s_skip = (['-sn'], False) # Remouve all Subtitle
-#	ff_subtl = ['-c:s', 'mov_text']
+	skip_it = f_skip and v_skip and a_skip and s_skip and d_skip
 
 	ff_com = ff_video + ff_audio + ff_subtl + ff_datat
 
@@ -443,12 +465,13 @@ def pars_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple[
 	if de_bug :print (f"L:{msj}\nFFcom: {ff_com} Skip:{skip_it}")
 
 	if skip_it :
-		print ( "  ! Skip All :)" )
+		print ( " ! Skip All:)" )
 	else :
 		pass
 #		print (f"com: {ff_com}\n")
 
 	return ff_com, skip_it
+
 ##>>============-------------------<  End  >------------------==============<<##
 
 # Define a helper function to select the appropriate encoder and options
@@ -462,11 +485,12 @@ def get_encoder_options(codec_name, src_pix_fmt, use_hw_accel):
 				'-pix_fmt', hw_pix_fmt,
 				'-look_ahead', '1',			# Enable lookahead
 				'-look_ahead_depth', '50',	# Set lookahead depth to ? 40 frames
-				'-global_quality',   '23',	# Use global_quality instead of CRF for QSV
+				'-global_quality',   '22',	# Use global_quality instead of CRF for QSV
 				'-preset', 'slower']		# Encoder preset
 	else:
-		# Use libx265 (HEVC) or libx264 (H.264) encoder with software options
-		return ['libx265', '-pix_fmt', src_pix_fmt, '-crf', '23', '-preset', 'slow']
+		# Use libx265 (HEVC) or libx264 (H.264) encoder with software options and 10Bit
+		return ['libx265', '-pix_fmt', 'yuv420p10le', '-crf', '22', '-preset', 'slow']
+#		return ['libx265', '-pix_fmt', src_pix_fmt, '-crf', '22', '-preset', 'slow']
 
 @perf_monitor
 def pars_video(strm_in, de_bug, use_hw_accel=True ):
@@ -493,97 +517,106 @@ def pars_video(strm_in, de_bug, use_hw_accel=True ):
 		# If it's mjpeg or other unsupported just ignore and delete
 		codec_name	= this_vid.get('codec_name', 'XXX')
 		index		= this_vid.get('index', -1)
-		if codec_name.lower() in ['mjpeg', 'png']:
+		if codec_name.lower() in ['mjpeg', 'png','XXX']:
 			ff_video += ['-map', f'-0:v:{count}']
-			msj = f"    |<V:{index:2}>|{codec_name:<8} |Del: {codec_name}:<7|"
+			msj = f"    |<V:{index:2}>|{codec_name:<8} |{codec_name} Ignored|"
 			print(msj)
 			continue
 
-		pix_fmt		= this_vid.get('pix_fmt', '')
-		tags		= this_vid.get('tags', {})
-		_vi_btrt = int(this_vid.get('bit_rate', glb_bitrate * 0.8))
-		frm_rate = divd_strn(this_vid.get('r_frame_rate'  , '25'))
-		vid_width, vid_heigh = this_vid.get('width', 2), this_vid.get('height', 1)
-		glb_totfrms = round(frm_rate * glb_vidolen)
+		pix_fmt	=	 			this_vid.get('pix_fmt', '')
+		tags	= 				this_vid.get('tags', {})
+		_vi_btrt = int(			this_vid.get('bit_rate', glb_bitrate * 0.8))
+		frm_rate = divd_strn(	this_vid.get('r_frame_rate'  , '25'))
+		vid_width, vid_heigh =	this_vid.get('width', 2), this_vid.get('height', 1)
 
+		glb_totfrms = round(frm_rate * glb_vidolen)
 		totl_pixl = vid_width * vid_heigh * glb_totfrms
 
 		# XXX: Estimate bits_per_pixel
-		bpp = 3000000
-
+		# avrg bpp = bitrate / framerate * with * height
+		avbpp = _vi_btrt / (frm_rate *  vid_width * vid_heigh  )
 		if pix_fmt.endswith("10le") :
 			msj = f"{pix_fmt} 10 Bit"
 			totl_pixl	*= 1.25  # 15/12
-			bpp 		*= 1.25
+			avbpp 		*= 1.25
 		else:
 			msj = pix_fmt
-		print (f"\nTotal Pixels= {totl_pixl}\t Bpp= {bpp}\t div= { round(totl_pixl / bpp) }")
 
 		if 'bit_rate' not in this_vid:
-			extra = ' BitRate Estimate '
-		else:
-			extra = f' {hm_sz(_vi_btrt)}'
+			extra = ' Bit Rate Estimate '
 
 		mins,  secs = divmod(glb_vidolen, 60)
 		hours, mins = divmod(mins, 60)
 
-		# Get aspect ratio using the greatest common divisor
-		comm_div = gcd(vid_width, vid_heigh)
-		smpl_width  = vid_width // comm_div
-		smpl_height = vid_heigh // comm_div
-		aspct_r = f"{smpl_width}:{smpl_height}"
+		original_ratio = vid_width / vid_heigh
+		standard_ratios = {
+			"4:3":	4 / 3,
+			"16:9":	16 / 9,
+			"3:2":	3 / 2,
+			"1:1":	1,
+			}
+		aspct_r = min(standard_ratios, key=lambda k: abs(standard_ratios[k] - original_ratio))
 
-		# XXX: Print Banner
-		msj = f"    |< CT >|{vid_width:>4}x{vid_heigh:<4}| {aspct_r} |Tfm: {hm_sz(glb_totfrms,'F'):>8}|Tpx: {hm_sz(totl_pixl, 'P'):>8}|XBr: {hm_sz(bpp):>7}| {msj}"
-		print(msj)
-		if (de_bug): print(f"S:{index} C:{index}\n {ff_vid}")
-
-		ff_vid = ['-map', f'0:v:{count}']
-		output = "SD"
-
+		ff_vid = ['-map', f'0:v:{count}', f'-c:v:{count}']
 		# Determine if codec copy or conversion is needed, and update ff_vid accordingly
-		if _vi_btrt < bpp :
-			if codec_name == 'hevc':
+		if codec_name == 'hevc':
+			if avbpp < 0.19:
 				extra += ' => Copy'
 				skip_it = True
-				ff_vid.extend([f'-c:v:{count}', 'copy'])
+				ff_vid.extend(['copy'])
 			else:
-				extra += ' => Convert to Hevc'
+				extra += f'\tReduce avbpp {avbpp}'
 				encoder_options = get_encoder_options(codec_name, this_vid['pix_fmt'], use_hw_accel)
-				ff_vid.extend([f'-c:v:{count}'] + encoder_options)
+				ff_vid.extend(encoder_options)
 		else:
-			if codec_name == 'hevc':
-				extra += f'\tReduce < {hm_sz(bpp)}'
-			else:
-				extra += ' => Convert to Hevc'
+			extra += ' => Convert to Hevc'
 			encoder_options = get_encoder_options(codec_name, this_vid['pix_fmt'], use_hw_accel)
-			ff_vid.extend([f'-c:v:{count}'] + encoder_options)
+			ff_vid.extend(encoder_options)
 
-		#Check it needs to be scaled down
-		if vid_width >= 7600 or vid_heigh >= 4300:
+		output = "SD"
+		if   vid_width >= 7600 or vid_heigh >= 4300:
 			output = "8K"
-		if vid_width >= 3800 or vid_heigh >= 2100:
+		elif vid_width >= 3800 or vid_heigh >= 2100:
 			output = "4K"
-		if vid_width >  2100 or vid_heigh >  1920:
+		elif vid_width >= 2100 or vid_heigh >= 1920:
 			output = "2K"
-			# XXX: Compute Scale
-			nw = 1920
-			nh = round((nw / vid_width) * vid_heigh)
-			ff_vid = ['-map', f'0:v:{count}', f'-c:v:{count}', 'libx265',
-								'-pix_fmt', f"{this_vid['pix_fmt']}",
-								'-crf', '23', '-preset', 'slow',
-								'-vf', f'scale={nw}:{nh}'
-								]
-			extra += f' {output} Scale {vid_width}x{vid_heigh} to {nw}x{nh}'
-		elif vid_width >= 1280 or vid_heigh >= 720:
+		elif vid_width >= 1280 or vid_heigh >=  720:
 			output = "HD"
 
-		handler_name = tags.get('handler_name')
-#		if handler_name:
-#			extra += f"  {handler_name}"
+		# Apply scaling for anything larger than HD
+		if output in ["2K", "4K", "8K"]:
+			skip_it = False
+			nw = 1920
+			nh = round((nw / vid_width) * vid_heigh)
+			ff_vid = [
+				'-map', f'0:v:{count}',
+				f'-c:v:{count}', 'libx265',  # Specify the H.265 codec here
+				'-pix_fmt', f"{this_vid['pix_fmt']}",
+				'-crf', '22','-preset', 'slow',
+				'-vf', f'scale={nw}:{nh}',
+			]
 
-		msj = f"    |<V:{index:2}>|{codec_name:<8} |Br: {hm_sz(_vi_btrt):>9}|XBr: {hm_sz(bpp):>8}|Fps: {frm_rate:>7}| {extra}"
+			extra = f' {output} Scale {vid_width}x{vid_heigh} to {nw}x{nh}'
+
+		handler_name = tags.get('handler_name','Unknown')
+		if handler_name == 'VideoHandler':
+			extra += f"  {handler_name}"
+#			ff_vid.extend([f"-metadata:s:v:{count} handler_name='{handler_name} x265 DvdZen' "])
+		else :
+			extra += f"  {handler_name} Change to: VideoHandler"
+			ff_vid.extend([f"-metadata:s:v:{count}", "handler_name='VideoHandler x265 by DvdZen'"])
+
+# XXX:
+		'''
+		-metadata:s:v:{count} handler_name="My Video Handler" \
+		-metadata:s:a:{count} handler_name="My Audio Handler" \
+		-metadata:s:s:{count} handler_name="My Subtitle Handler" \
+
+		'''
+# XXX:
+		msj = f"    |<V:{index:2}>|{codec_name:<8} |{vid_width:>4}x{vid_heigh:<4}:{aspct_r}|Br: {hm_sz(_vi_btrt):>6}|Abpp: {round(avbpp, 2):>3}|Fps: {frm_rate:>7}|Tfm: {hm_sz(glb_totfrms,'F'):>8}| {extra}"
 		print(f"\033[91m{msj}\033[0m")
+	#	print (f"\033[91m     AVbpp= {round(avbpp, 2)}\t {round(totl_pixl/1000000000)} Giga pixels\033[0m")
 
 		ff_video += ff_vid
 		skip_it  &= skip_it
@@ -630,7 +663,7 @@ def pars_audio(streams_in, de_bug=False):
 
 		# Check if the language is in the list of languages to keep
 		keep_language	= language in Keep_langua or only_audio
-		copy_codec		= codec_name in ('aac', 'vorbis', 'mp2', 'mp3') and channels < 9
+		copy_codec		= codec_name in ('aac', 'vorbis', 'mp2', 'mp3') and channels <= 8
 		reduce_bitrate	= au_bitrate > Max_a_btr
 
 		if keep_language:
@@ -673,27 +706,33 @@ def pars_audio(streams_in, de_bug=False):
 			ff_aud.extend([f'-disposition:s:a:{count}', 'none'])
 
 		# Optional handler_name
-		handler_name = this_aud.get('tags', {}).get('handler_name')
-#		if handler_name:
-#			extra += f"  {handler_name}"
-
+		handler_name = this_aud.get('handler_name','Unknown')
+		if handler_name == 'Audio':
+			extra += f"  {handler_name}"
+#			ff_aud.extend([f"-metadata:s:a:{count} handler_name='{handler_name} x265 DvdZen' "])
+		else :
+			extra += f"  {handler_name} Change to: AudioHandle"
+			ff_aud.extend([f"-metadata:s:a:{count}", "handler_name='AudioHandle x265 by DvdZen'"])
 
 		# Print information
 		msj = (f"    |<A:{this_aud['index']:2}>|{codec_name:<8} |Br: {hm_sz(au_bitrate):>9}|{language}"
 				f"|Frq: {hm_sz(aud_sample_rate, 'Hz'):>8}|Ch: {channels}|Dis: {dsp_default} Fr:{dsp_forced}| {extra}")
 		print(f'\033[92m{msj}\033[0m')
 
-		# Append options for this audio stream to the final list
-		ff_audio += ff_aud
-		all_skippable &= skip_it
-		if de_bug  or  language == 'und':
+#		if de_bug or language == 'und' :
 #			if count == 1 :
 #				language ='eng'
 #				ff_aud = [ f"-map, 0:a:{count}, -c:a:{count}, libvorbis, -q:a:{count}, 8, -metadata:s:a:{count}, language={language}" ]
 #			else :
 #				ff_aud = []
-			print ( f"A: {ff_aud} L={language}")
+#			ff_aud.extend([f'-metadata:s:a:{count}', f'language=eng'])
+#			print ( f"   A: {ff_aud} L={language}")
 #			input ('Next')
+
+
+		# Append options for this audio stream to the final list
+		ff_audio += ff_aud
+		all_skippable &= skip_it
 
 	# If no audio streams were kept, keep the first one (if available)
 	if not kept_audio and streams_in:
@@ -734,7 +773,7 @@ def pars_subtl(streams_in, de_bug=False):
 		if codec_name in ('hdmv_pgs_subtitle', 'dvd_subtitle', 'ass', 'unknown?'):
 			extra += f" Del: {this_sub['codec_name']} {language} < |"
 			# TBD Extract bitmap subtitles to a separate file
-			output_filename = f"subtitle_stream{index}_{language}.sup"
+			output_filename = f"subtl_stream{index}_{language}.sup"
 			#ff_sub.extend([f'-c:s:{count}', 'copy', '-y', output_filename ])
 			extracted_subs.append({
 				'index': index,
@@ -942,17 +981,8 @@ def zabrain_run(input_file: str, mta_dta: Dict[str, any], de_bug: bool= False ) 
 		print (f"\n{msj}\nF:{input_file}\nM:{mta_dta} Exit:")
 		return False , True
 
-	try:
-		ff_run_cmnd, skip_it = pars_frmat(input_file, mta_dta, de_bug)
-	except ValueError as e:
-		msj += f" Error: {e}"
-		print ( msj )
-		# Handle the exception here (e.g., log the error, skip the file, etc.)
-		logging.error(msj)
-		skip_it = True  # Skip the file if an error occurs in pars_frmat
-		ff_run_cmnd = []  # Set ff_run_cmnd to an empty list
-		raise ValueError(msj)
-#		breakpoint()  # Set a breakpoint here
+	ff_run_cmnd, skip_it = pars_frmat(input_file, mta_dta, de_bug)
+#	breakpoint()  # Set a breakpoint here
 
 	end_t = time.perf_counter()
 	print(f'  -End: {TM.datetime.now():%T}\tTotal: {hm_time(end_t - str_t)}')

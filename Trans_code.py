@@ -15,6 +15,10 @@ from My_Utils	import get_new_fname, copy_move, hm_sz, hm_time
 from concurrent.futures import ThreadPoolExecutor
 from sklearn.cluster import DBSCAN
 
+
+'''# XXX: Sort order = True Biggest First, False = Smallest first '''
+Sort_Order = True
+#de_bug = True
 ''' Global Variables '''
 glb_totfrms = 0
 glb_vidolen = 0
@@ -22,22 +26,12 @@ vid_width   = 0
 aud_smplrt  = 0
 total_size  = 0
 
-#WFolder = r"F:\Media\TV"
-#WFolder = r"F:\Media\Movie"
-#WFolder = r"F:\BackUp\_Adlt"
-#WFolder = r"F:\Media\MasterClass Collection"
-#WFolder = r"C:\Users\Geo\Desktop\Except"
-#WFolder = r"C:\Users\Geo\Desktop\Except\Retry"
-
-#de_bug = True
-
 ancr_time = f"{TM.datetime.now(): %Y %j %H-%M-%S }"
-Log_File = sys.argv[0].strip('.py') + ancr_time + '_.log'
+Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')} {ancr_time}.log"
 
 # Create a Tee instance that writes to both the original sys.stdout and a log file
 # Save the original sys.stdout
 qa = Tee(sys.stdout, open(Log_File, 'w', encoding=console_encoding))
-#qa = Tee(sys.stdout, open(Log_File, 'w', encoding='utf-8'))
 sys.stdout = qa
 
 '''
@@ -76,7 +70,6 @@ print(f"Script absolute path: {os.path.abspath(__file__)}")
 
 
 ##>>============-------------------< Start >------------------==============<<##
-
 @perf_monitor
 def metric(x, y, size_margin, leng_margin):
 	''' used for clustering '''
@@ -179,19 +172,23 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 						f_path = os.path.join(root, one_file)
 						try:
 							file_s = os.path.getsize(f_path)
+							if file_s  < 10 :
+								print(f"Remove Empty file: {f_path}")
+								input (" Yes ?")
+								os.remove(f_path)
+							elif file_s > 1000 and len(f_path) < 333:
+								# Submit the extract_file_info => defined in FFMpeg.py to the thread pool
+								future = executor.submit(extract_file_info, f_path)
+								# Store the future result along with the file information
+								futures.append((f_path, file_s, ext, cur_dir, dirs, future))
+							else:
+								msj= f"\nSkip {f_path}\nSz:{file_s} path L {len(f_path)}"
+								logging.error(msj)
+								print (msj)
+								copy_move(f_path, Excepto, False)
 						except Exception as e:
 							print (f"Error getting size of file {f_path}: {e}")
 							continue
-						if file_s > 1000 and len(f_path) < 333:
-							# Submit the extract_file_info => defined in FFMpeg.py to the thread pool
-							future = executor.submit(extract_file_info, f_path)
-							# Store the future result along with the file information
-							futures.append((f_path, file_s, ext, cur_dir, dirs, future))
-						else:
-							msj= f"\nSkip {f_path}\nSz:{file_s} path L {len(f_path)}"
-							logging.error(msj)
-							print (msj)
-							copy_move(f_path, Excepto, False)
 			# Wait for all the futures to complete to extract the executor results
 			for f_path, file_s, ext, cur_dir, dirs, future in futures:
 				video_length = future.result()
@@ -224,10 +221,10 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 	# Sort Order reverse = True -> Descending Biggest first
 	# XXX:
 	order = "Descending" if sort_order else "Ascending"
-	print(f"   Sort order: {order}")
+	print(f"  Sorted: {order}")
 
 	end_t = time.perf_counter()
-	print(f'  -End: {TM.datetime.now():%T}\tTotal: {hm_time(end_t - str_t)}')
+	print(f' -End: {TM.datetime.now():%T}\tTotal: {hm_time(end_t - str_t)}')
 
 	return sorted(_lst, key=lambda Item: Item[1], reverse=sort_order)
 
@@ -245,6 +242,7 @@ def clean_up(input_file: str, output_file: str, skip_it: str, debug: bool) -> in
 
 	str_t = time.perf_counter()
 	print(f"  +{msj} Start: {TM.datetime.now():%T}")
+	logging.info(f"{msj}")
 
 	if not input_file or not output_file:
 		msj += (f" {msj} Inf: {input_file} Out: {output_file} Exit:")
@@ -313,7 +311,6 @@ def clean_up(input_file: str, output_file: str, skip_it: str, debug: bool) -> in
 
 ##>>============-------------------<  End  >------------------==============<<##
 
-
 if __name__ == '__main__':
 	str_t = time.perf_counter()
 
@@ -329,7 +326,7 @@ if __name__ == '__main__':
 	if not len (WFolder) :
 		print (" Wfolder needs to be defined and point to the root diredtory to be Proccesed")
 
-	fl_lst = scan_folder( WFolder, File_extn , sort_order = True )
+	fl_lst = scan_folder( WFolder, File_extn , sort_order = Sort_Order )
 	fl_nmb = len(fl_lst)
 
 	saved = 0
@@ -381,18 +378,26 @@ if __name__ == '__main__':
 
 			except ValueError as e :
 				errod +=1
-				msj = f" -:Except: {e}\n{file_p}\n\t{hm_sz(file_s)}\nMoved"
+				msj = f" +: ValueError: {e}\n{os.path.dirname(file_p)}\n\t{os.path.basename(file_p)}\t{hm_sz(file_s)}\nMoved"
 				print( msj )
-				copy_move(file_p, Excepto, False)
-				continue
+				if de_bug :
+					input ( 'Next')
+				if ( copy_move(file_p, Excepto, False , True) ) :
+					print ( "Done")
+				else :
+					input ("WTF")
 
 			except Exception as e :
 				errod +=1
-				msj = f" +:Except: {e}\n{os.path.dirname(file_p)}\n\t{os.path.basename(file_p)}\t{hm_sz(file_s)}\nCopied"
+				msj = f" +: Exception: {e}\n{os.path.dirname(file_p)}\n\t{os.path.basename(file_p)}\t{hm_sz(file_s)}\nCopied"
 				print( msj )
-				copy_move(file_p, Excepto, True)
+				if de_bug :
+					input ( 'Next')
 #				breakpoint(continue)
-				continue
+				if ( copy_move(file_p, Excepto, False , True) ) :
+					print ( "Done")
+				else :
+					input ("WTF")
 
 			if not skip_it:
 				print(f"  Saved Total: {hm_sz(saved)}")

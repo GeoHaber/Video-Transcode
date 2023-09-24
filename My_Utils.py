@@ -21,12 +21,33 @@ from	functools	import wraps
 
 #  DECORATORS
 # XXX: color codes: https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
+'''
+\033[91m : Red
+\033[92m : Green
+\033[93m : Yellow
+\033[94m : Blue
+\033[95m : Purple
+\033[96m : Cyan
+\033[0m : Reset color
+'''
+
 def color_print(fg: int = 37, bg: int = 40):
 	def decorator(func):
 		def wrapper(text):
 			print(f"\033[{fg}m\033[{bg}m{func(text)}\033[0m")
 		return wrapper
 	return decorator
+
+def debug(func):
+	def wrapper(*args, **kwargs):
+		str_t = TM.datetime.now()
+		msg = func.__name__ + ':'
+		print(f" +{msg}=: Start: {str_t:%T}")
+		result = func(*args, **kwargs)
+		end_t = TM.datetime.now()
+		print(f" -{msg}=: End:   {end_t:%T}")
+		return result
+	return wrapper
 
 def perf_monitor(func):
 	""" Measure performance of a function """
@@ -291,39 +312,68 @@ class RunningAverage:
 		self.avg = 0
 ##>>============-------------------<  End  >------------------==============<<##
 
+class RunningStats:
+
+	def __init__(self):
+		self.total = 0.0
+		self.count = 0
+		self.min_val = float('inf')
+		self.max_val = float('-inf')
+
+	def update(self, num):
+		self.total += num
+		self.count += 1
+		self.min_val = min(self.min_val, num)
+		self.max_val = max(self.max_val, num)
+		self.print_stats()
+
+	def print_stats(self):
+		running_average = self.total / self.count if self.count != 0 else 0.0
+		print(f"Current number: {num}, Running average: {running_average}")
+		print(f"Minimum value: {self.min_val}")
+		print(f"Maximum value: {self.max_val}")
+##>>============-------------------<  End  >------------------==============<<##
+
 class Color:
-    BLACK = "\033[30m"
-    RED = "\033[31m"
-    GREEN = "\033[32m"
-    YELLOW = "\033[33m"
-    BLUE = "\033[34m"
-    MAGENTA = "\033[35m"
-    CYAN = "\033[36m"
-    WHITE = "\033[37m"
-    RESET = "\033[0m"
+	BLACK = "\033[30m"
+	RED = "\033[31m"
+	GREEN = "\033[32m"
+	YELLOW = "\033[33m"
+	BLUE = "\033[34m"
+	MAGENTA = "\033[35m"
+	CYAN = "\033[36m"
+	WHITE = "\033[37m"
+	RESET = "\033[0m"
 
-    def __init__(self, color, bright=False):
-        self.color = color
-        self.bright = bright
+	def __init__(self, color, bright=False):
+		self.color = color
+		self.bright = bright
 
-    def __str__(self):
-        return f"\033[{1 if self.bright else ''};{self.color}m" if self.bright else f"{self.color}m"
+	def __str__(self):
+		return f"\033[{1 if self.bright else ''};{self.color}m" if self.bright else f"{self.color}m"
 
 # Usage:
 #print(f"{Color(Color.RED, bright=True)}This is bright red text!{Color(Color.RESET)}")
 #print(f"{Color(Color.BLUE)}This is normal blue text!{Color(Color.RESET)}")
 
 
-##XXX: Functions :XXX
+##	XXX: Functions :XXX
 ##==============-------------------  Start  -------------------==============##
-
 def hm_sz(numb: Union[str, int, float], type: str = "B") -> str:
-	'''convert file size to human readable format'''
+	"""
+	Convert a file size to human-readable format.
+
+	Parameters:
+	- size (int): File size in bytes.
+
+	Returns:
+	- str: Human-readable file size.
+	"""
 	numb = float(numb)
 	try:
 		if numb < 1024.0:
 			return f"{numb} {type}"
-		for unit in ['K','M','G','T','P','E']:
+		for unit in ['K','M','G','T','P','E'] :
 			numb /= 1024.0
 			if numb < 1024.0:
 				return f"{numb:.2f} {unit}{type}"
@@ -363,57 +413,51 @@ def hm_time(timez: float) -> str:
 		return ", ".join(frmt[:-1]) + " and " + frmt[-1] if len(frmt) > 1 else frmt[0] if len(frmt) == 1 else "0 sec"
 ##>>============-------------------<  End  >------------------==============<<##
 
-def copy_move(src: str, dst: str, keep_it: bool = False) -> bool:
-	"""Move or copy a file from src to dst, optionally keeping the original file.
-	Returns True if the file was moved/copied successfully, False otherwise.
+def copy_move(src: str, dst: str, keep_original: bool = False, verbose: bool = False) -> bool:
+	"""
+	Copy or move a file.
+
+	Parameters:
+	- src (str): Source file path.
+	- dst (str): Destination file path.
+	- keep_original (bool, optional): If True, keep the original file. Defaults to False.
+	- verbose (bool optional): If True print message. Defaults to False.
 	"""
 
+	(action, transfer_func) = ("_Copied", shutil.copy2) if keep_original else ("_Moved", shutil.move)
+
 	if os.path.exists(dst) and os.path.samefile(src, dst):
-		# Files are the same, do nothing
-		print(f"{src} and {dst} are the same file, doing nothing.")
+		if not keep_original:
+			os.remove(src)
+			if verbose:
+				print(f"Source {src} and destination {dst} are the same. Source has been deleted.")
+		else:
+			if verbose:
+				print(f"{src} and {dst} are the same, nothing to do.")
 		return True
 
-	if keep_it:
-		# Copy file to destination and do not delete original
-		try:
-			shutil.copy2(src, dst)
-#			print(f"{src} copied to {dst}, not deleted.")
-			return True
-		except (PermissionError, IOError, OSError) as err:
-			print(f"Error: {err}\n copying {src} to {dst}: ")
-			return False
-
-	else:
-		# Try to move the file, and if that fails, try to copy it
-		try:
-			shutil.move(src, dst)
-			print(f"{src} moved to {dst}")
-			return True
-		except (PermissionError, IOError, OSError) as err:
-			print(f"Error: {err}\n moving {src} to {dst}:")
-			try:
-				shutil.copy2(src, dst)
-				print(f"{src} copied to {dst}, original deleted.")
-				return True
-			except (PermissionError, IOError, OSError) as err:
-				print(f"Error: {err}\n copying {src} to {dst}:")
-				return False
-
-##>>============-------------------<  End  >------------------==============<<##
+	try:
+		transfer_func(src, dst)
+		if verbose:
+			print(f"{action}: {src}\nTo    : {dst}")
+		return True
+	except (PermissionError, IOError, OSError) as err:
+		print(f"\ncopy_move Error: {err}\n{action}: {src} to {dst}")
+		return False
 
 
 def flatten_list_of_lists(lst):
-    """Flatten a list of lists (or a mix of lists and other elements) into a single list."""
-    result = []
-    for item in lst:
-        if isinstance(item, list):
-            result.extend(item)
-        elif isinstance(item, tuple):
-            # If the item is a tuple, only extend the first element (which should be a list)
-            result.extend(item[0])
-        else:
-            result.append(item)
-    return result
+	"""Flatten a list of lists (or a mix of lists and other elements) into a single list."""
+	result = []
+	for item in lst:
+		if isinstance(item, list):
+			result.extend(item)
+		elif isinstance(item, tuple):
+			# If the item is a tuple, only extend the first element (which should be a list)
+			result.extend(item[0])
+		else:
+			result.append(item)
+	return result
 
 ##==============-------------------   End   -------------------==============##
 
