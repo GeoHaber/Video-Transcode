@@ -225,73 +225,34 @@ def temperature ():
 #  CLASES
 # XXX: https://shallowsky.com/blog/programming/python-tee.html
 
-class xxTee:
-	''' implement the Linux Tee function '''
+class Tee(object):
+    def __init__(self, *files):
+        self.files = files
+        self.original_stdout = sys.stdout
 
-	def __init__(self, *targets):
-		self.targets = targets
+    def write(self, obj):
+        if not isinstance(obj, str):  # Handle non-str write calls
+            obj = str(obj)
+        for file in self.files:
+            file.write(obj)
+            file.flush()  # Flush after write to keep output in sync
 
-	def write(self, obj):
-		for target in self.targets:
-			try:
-				target.write(obj)
-				target.flush()
-			except (IOError, AttributeError) as e:
-				print(f'Error while writing to target: {e}', file=sys.stderr)
+    def flush(self):
+        for file in self.files:
+            file.flush()
 
-	def flush(self):
-		for target in self.targets:
-			try:
-				target.flush()
-			except (IOError, AttributeError) as e:
-				print(f'Error while flushing target: {e}', file=sys.stderr)
+    def close(self):
+        for file in self.files:
+            if file is not self.original_stdout:
+                file.close()
 
-	def close(self):
-		for target in self.targets:
-			if target not in (sys.stdout, sys.stderr):
-				target.close()
+    def __enter__(self):
+        sys.stdout = self
+        return self
 
-	def __enter__(self):
-		return self
-
-	def __exit__(self, exc_type, exc_val, exc_tb):
-		self.close()
-
-class Tee:
-	''' implement the Linux Tee function '''
-
-	def __init__(self, *targets):
-		self.targets = targets
-
-	def write(self, obj):
-		for target in self.targets:
-			try:
-				target.write(obj)
-				target.flush()
-			except (IOError, AttributeError) as e:
-				logging.error(f'Error while writing to target: {e}')
-
-	def flush(self):
-		for target in self.targets:
-			try:
-				target.flush()
-			except (IOError, AttributeError) as e:
-				logging.error(f'Error while flushing target: {e}')
-
-	def close(self):
-		for target in self.targets:
-			if target not in (sys.stdout, sys.stderr):
-				target.close()
-
-	def __enter__(self):
-		return self
-
-	def __exit__(self, exc_type, exc_val, exc_tb):
-		self.close()
-
-#with Tee(sys.stdout, open('__log.txt', 'w')) as tee:
-#	print('Hello, world!')
-
+    def __exit__(self, exc_type, exc_value, traceback):
+        sys.stdout = self.original_stdout
+        self.close()
 
 class RunningAverage:
 	''' Compute the running average of a value '''
@@ -382,7 +343,6 @@ def hm_sz(numb: Union[str, int, float], type: str = "B") -> str:
 		logging.exception(f"Error {e}", exc_info=True, stack_info=True)
 		print (e)
 		return ''
-#		traceback.print_exc()
 ##==============-------------------   End   -------------------==============##
 
 def hm_time(timez: float) -> str:
@@ -444,6 +404,7 @@ def copy_move(src: str, dst: str, keep_original: bool = False, verbose: bool = F
 	except (PermissionError, IOError, OSError) as err:
 		print(f"\ncopy_move Error: {err}\n{action}: {src} to {dst}")
 		return False
+##==============-------------------   End   -------------------==============##
 
 
 def flatten_list_of_lists(lst):

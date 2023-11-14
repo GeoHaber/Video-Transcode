@@ -5,20 +5,32 @@ import re
 import sys
 import math
 import psutil
-import logging
 import datetime as TM
 
 from Yaml		import *
 from FFMpeg		import *
-from My_Utils	import get_new_fname, copy_move, hm_sz, hm_time
+from My_Utils	import get_new_fname, copy_move, hm_sz, hm_time, Tee
 
 from concurrent.futures import ThreadPoolExecutor
 from sklearn.cluster import DBSCAN
 
 
-'''# XXX: Sort order = True Biggest First, False = Smallest first '''
+#de_bug = True
+
+Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')}_{TM.datetime.now().strftime('%Y_%j_%H_%M_%S')}.log"
+
+# XXX: Sort order = True Biggest First, False = Smallest first
 Sort_Order = True
 #de_bug = True
+
+#WFolder = r"F:\Media\TV"
+#WFolder = r"F:\Media\Movie"
+#WFolder = r"F:\BackUp\_Adlt"
+#WFolder = r"F:\Media\MasterClass Collection"
+#WFolder = r"F:\BackUp\_Movies"
+#WFolder = r"C:\Users\Geo\Desktop\Except"
+
+#
 ''' Global Variables '''
 glb_totfrms = 0
 glb_vidolen = 0
@@ -26,47 +38,6 @@ vid_width   = 0
 aud_smplrt  = 0
 total_size  = 0
 
-ancr_time = f"{TM.datetime.now(): %Y %j %H-%M-%S }"
-Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')} {ancr_time}.log"
-
-# Create a Tee instance that writes to both the original sys.stdout and a log file
-# Save the original sys.stdout
-qa = Tee(sys.stdout, open(Log_File, 'w', encoding=console_encoding))
-sys.stdout = qa
-
-'''
-log_filename = os.path.splitext(Log_File)[0]
-
-log_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "_logs")
-log_path = os.path.join(log_dir, log_filename)
-
-# Create a logs directory if it does not exist
-if not os.path.exists(log_dir):
-	print(f"Creating log directory: {log_dir}")  # Debugging line
-	os.makedirs(log_dir)
-else :
-	print(f"Log directory (absolute): {os.path.abspath(log_dir)}")
-
-# Configure the logger
-handler = logging.FileHandler(log_path)
-handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
-logging.getLogger().addHandler(handler)
-# Print the return value of the logging.FileHandler() function
-print(f"handler = {handler}")
-
-# Test logging message
-logging.debug("This is a debug message.")
-logging.exception("Test")
-logging.info("Test log message. This is a test message from the logger.")
-# Print message indicating that the logger configuration is complete
-logging.basicConfig(filename="_loging.log", level=logging.INFO)
-logging.info("This is a test message")
-print("Logger configuration complete.")
-'''
-
-print(f"Python version: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
-print(f"{psutil.cpu_count()} CPU's\t ¯\_(%)_/¯\nTime:\t\t {ancr_time}" )
-print(f"Script absolute path: {os.path.abspath(__file__)}")
 
 
 ##>>============-------------------< Start >------------------==============<<##
@@ -183,7 +154,6 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 								futures.append((f_path, file_s, ext, cur_dir, dirs, future))
 							else:
 								msj= f"\nSkip {f_path}\nSz:{file_s} path L {len(f_path)}"
-								logging.error(msj)
 								print (msj)
 								copy_move(f_path, Excepto, False)
 						except Exception as e:
@@ -236,18 +206,14 @@ def clean_up(input_file: str, output_file: str, skip_it: str, debug: bool) -> in
 	msj = sys._getframe().f_code.co_name
 
 	if skip_it:
-		logging.info(f"{msj} skip_it={skip_it}")
 		return 0
-	logging.info(f"{msj}")
 
 	str_t = time.perf_counter()
 	print(f"  +{msj} Start: {TM.datetime.now():%T}")
-	logging.info(f"{msj}")
 
 	if not input_file or not output_file:
 		msj += (f" {msj} Inf: {input_file} Out: {output_file} Exit:")
 		print(msj)
-		logging.info(msj)
 		return False
 
 	try:
@@ -257,8 +223,7 @@ def clean_up(input_file: str, output_file: str, skip_it: str, debug: bool) -> in
 	except FileNotFoundError as e:
 		msj += f" Input file: {input_file} does not exist !!\n"
 		print(f"  ={msj}")
-		logging.info(msj)
-		return 0
+		return False
 
 	try:
 		outf_sz = os.path.getsize(output_file)
@@ -281,13 +246,6 @@ def clean_up(input_file: str, output_file: str, skip_it: str, debug: bool) -> in
 		print(msg)
 		seems_to_small = get_new_fname(input_file, "_seems_small.mp4", TmpF_Ex)
 		copy_move(output_file, seems_to_small)
-		return 0
-
-	# Check if input file size is 10% smaller than output file size
-	if inpf_sz < 0.7 * outf_sz:
-		print( msg)
-		print("  Skip renaming !")
-		time.sleep(5)
 		return 0
 
 	if debug:
@@ -314,105 +272,110 @@ def clean_up(input_file: str, output_file: str, skip_it: str, debug: bool) -> in
 if __name__ == '__main__':
 	str_t = time.perf_counter()
 
-	print(f'Main Start: {TM.datetime.now()}')
+	with Tee(sys.stdout, open(Log_File, 'w', encoding='utf-8')) as qa:
 
-	if not os.path.exists(Excepto): # XXX: DEfined in .yml file
-		print (f"Creating dir: {Excepto}")
-		os.mkdir(Excepto)
+		print(f"Python version: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+		print(f"{psutil.cpu_count()} CPU's\t ¯\_(%)_/¯" )
+		print(f"Script absolute path: {os.path.abspath(__file__)}")
 
-	time.sleep(1)
-	print("-" * 70)
+		print(f'Main Start: {TM.datetime.now()}')
 
-	if not len (WFolder) :
-		print (" Wfolder needs to be defined and point to the root diredtory to be Proccesed")
+		if not os.path.exists(Excepto): # XXX: DEfined in .yml file
+			print (f"Creating dir: {Excepto}")
+			os.mkdir(Excepto)
 
-	fl_lst = scan_folder( WFolder, File_extn , sort_order = Sort_Order )
-	fl_nmb = len(fl_lst)
+		time.sleep(1)
+		print("-" * 70)
 
-	saved = 0
-	procs = 0
-	skipt = 0
-	errod = 0
-	for cnt, each in enumerate(fl_lst) :
-		cnt += 1
-		file_p	= each[0]
-		file_s	= each[1]
-		ext		= each[2]
-		dirs	= each[3]
+		if not len (WFolder) :
+			print (" Wfolder needs to be defined and point to the root diredtory to be Proccesed")
 
-		if os.path.isfile(file_p)  :
-			print(f'\n{file_p}\n{ordinal(cnt)} of {fl_nmb}, {ext}, {hm_sz(file_s)}.')
-			if len (file_p) < 333 :
-				free_disk_space = shutil.disk_usage( WFolder ).free
-				free_temp_space = shutil.disk_usage( r"C:" ).free
-				if free_disk_space < ( 3 * file_s ) or free_temp_space < ( 3 * file_s ) :
-					print ('\n!!! ', file_p[0:2], hm_sz(free_disk_space), " Free Space" )
-					input ("Not Enoug space on Drive")
-			else :
-				input (" File name too long > 333 ")
-			try:
-				logging.info(f"\nProc: {file_p}")
-				all_good =          ffprobe_run( file_p, ffprob,   de_bug )
-#				de_bug = True
-				all_good, skip_it = zabrain_run( file_p, all_good, de_bug )
-				if  skip_it  == True :
-					print(f"\033[91m   | Skip ffmpeg_run |\033[0m")
-					skipt += 1
-				all_good = ffmpeg_run( file_p, all_good, skip_it, ffmpeg, de_bug )
-				logging.info(f"FFMPEG out = {all_good}")
-				if not all_good and not skip_it :
-					print ( " FFMPEG did not create anything good")
-					time.sleep(5)
-		#		print(f"\033[91m   | Make 3x3 matrix |\033[0m")
-		#		if matrix_it (file_p, ext='.png') and not all_good :
-		#			continue
-#				print (" Create 4x Speedup\n")
-#				speed_up  (file_p, execu )
-#				print ("\n Create a Short version\n")
-#				short_ver (file_p, execu, de_bug )
-#				video_diff( file_p, all_good )
+		fl_lst = scan_folder( WFolder, File_extn , sort_order = Sort_Order , do_clustering = False )
+		fl_nmb = len(fl_lst)
 
-				saved += clean_up( file_p, all_good, skip_it, de_bug ) or 0
-				procs +=1
-				total_size += glb_vidolen
+		saved = 0
+		procs = 0
+		skipt = 0
+		errod = 0
+		for cnt, each in enumerate(fl_lst) :
+			cnt += 1
+			file_p	= each[0]
+			file_s	= each[1]
+			ext		= each[2]
+			dirs	= each[3]
+			skip_it = False
 
-			except ValueError as e :
-				errod +=1
-				msj = f" +: ValueError: {e}\n{os.path.dirname(file_p)}\n\t{os.path.basename(file_p)}\t{hm_sz(file_s)}\nMoved"
-				print( msj )
-				if de_bug :
-					input ( 'Next')
-				if ( copy_move(file_p, Excepto, False , True) ) :
-					print ( "Done")
+			if os.path.isfile(file_p)  :
+				print(f'\n{file_p}\n{ordinal(cnt)} of {fl_nmb}, {ext}, {hm_sz(file_s)}.')
+				if len (file_p) < 333 :
+					free_disk_space = shutil.disk_usage( WFolder ).free
+					free_temp_space = shutil.disk_usage( r"C:" ).free
+					if free_disk_space < ( 3 * file_s ) or free_temp_space < ( 3 * file_s ) :
+						print ('\n!!! ', file_p[0:2], hm_sz(free_disk_space), " Free Space" )
+						input ("Not Enoug space on Drive")
 				else :
-					input ("WTF")
+					input (" File name too long > 333 ")
+				try:
+					all_good =          ffprobe_run( file_p, ffprob,   de_bug )
+	#				de_bug = True
+					all_good, skip_it = zabrain_run( file_p, all_good, de_bug )
+					if  skip_it  == True :
+						print(f"\033[91m   | Skip ffmpeg_run |\033[0m")
+						skipt += 1
+					all_good = ffmpeg_run( file_p, all_good, skip_it, ffmpeg, de_bug )
+					if not all_good and not skip_it :
+						print ( " FFMPEG did not create anything good")
+						time.sleep(5)
+			#		print(f"\033[91m   | Make 3x3 matrix |\033[0m")
+			#		if matrix_it (file_p, ext='.png') and not all_good :
+			#			continue
+	#				print (" Create 4x Speedup\n")
+	#				speed_up  (file_p, execu )
+	#				print ("\n Create a Short version\n")
+	#				short_ver (file_p, execu, de_bug )
+	#				video_diff( file_p, all_good )
 
-			except Exception as e :
+					saved += clean_up( file_p, all_good, skip_it, de_bug ) or 0
+					procs +=1
+					total_size += glb_vidolen
+
+				except ValueError as e :
+					errod +=1
+					msj = f" +: ValueError: {e}\n{os.path.dirname(file_p)}\n\t{os.path.basename(file_p)}\t{hm_sz(file_s)}\nMoved"
+					print( msj )
+					if de_bug :
+						input ( 'Next')
+					if ( copy_move(file_p, Excepto, False , True) ) :
+						print ( "Done")
+					else :
+						input ("WTF")
+
+				except Exception as e :
+					errod +=1
+					msj = f" +: Exception: {e}\n{os.path.dirname(file_p)}\n\t{os.path.basename(file_p)}\t{hm_sz(file_s)}\nCopied"
+					print( msj )
+					if de_bug :
+						input ( 'Next')
+	#				breakpoint(continue)
+					if ( copy_move(file_p, Excepto, False , True) ) :
+						print ( "Done")
+					else :
+						input ("WTF")
+
+				if not skip_it:
+					print(f"  Saved Total: {hm_sz(saved)}")
+
+			else:
+				mess = f'Not Found-: {file_p}\t\t{hm_sz(file_s)}'
+				print(f"\n{mess}\n")
 				errod +=1
-				msj = f" +: Exception: {e}\n{os.path.dirname(file_p)}\n\t{os.path.basename(file_p)}\t{hm_sz(file_s)}\nCopied"
-				print( msj )
-				if de_bug :
-					input ( 'Next')
-#				breakpoint(continue)
-				if ( copy_move(file_p, Excepto, False , True) ) :
-					print ( "Done")
-				else :
-					input ("WTF")
+				time.sleep(1)
+				continue	# continue forces the loop to start the next iteration pass will continue through the remainder or the loop body
 
-			if not skip_it:
-				print(f"  Saved Total: {hm_sz(saved)}")
+		end_t = time.perf_counter()
+		print(f'  Done: {TM.datetime.now():%T}\tTotal: {hm_time(end_t - str_t)}\n')
 
-		else:
-			mess = f'Not Found-: {file_p}\t\t{hm_sz(file_s)}'
-			print(f"\n{mess}\n")
-			errod +=1
-			time.sleep(1)
-			continue	# continue forces the loop to start the next iteration pass will continue through the remainder or the loop body
-
-	end_t = time.perf_counter()
-	print(f'  Done: {TM.datetime.now():%T}\tTotal: {hm_time(end_t - str_t)}\n')
-
-	print(f"\n  Saved in Total: {hm_sz(saved)} Time: {hm_time(total_size)}\n  Files: {fl_nmb}\tProces: {procs}\tSkip: {skipt}\tErr: {errod}\n")
+		print(f"\n  Saved in Total: {hm_sz(saved)} Time: {hm_time(total_size)}\n  Files: {fl_nmb}\tProces: {procs}\tSkip: {skipt}\tErr: {errod}\n")
 
 	sys.stdout.flush()
 	input('All Done :)')
