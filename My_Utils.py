@@ -37,37 +37,55 @@ def color_print(fg: int = 37, bg: int = 40):
 			print(f"\033[{fg}m\033[{bg}m{func(text)}\033[0m")
 		return wrapper
 	return decorator
+import time
+import psutil
+import tracemalloc
+import logging
+from functools import wraps
+import sys
+
+import time
+import psutil
+import tracemalloc
+import logging
+from functools import wraps
+import sys
+
+import traceback
+
+import traceback
 
 def debug(func):
 	def wrapper(*args, **kwargs):
-		str_t = TM.datetime.now()
-		msg = func.__name__ + ':'
-		print(f" +{msg}=: Start: {str_t:%T}")
-		result = func(*args, **kwargs)
-		end_t = TM.datetime.now()
-		print(f" -{msg}=: End:   {end_t:%T}")
-		return result
+		calling_function = sys._getframe().f_back.f_code.co_name if sys._getframe().f_back is not None else "Top Level"
+		try:
+			result = func(*args, **kwargs)
+			return result
+		except Exception as e:
+			traceback.print_exc()
+			print(f"Exception in {calling_function}: {e}")
 	return wrapper
 
 def perf_monitor(func):
-	""" Measure performance of a function """
 	@wraps(func)
 	def wrapper(*args, **kwargs):
-		strt_time			= time.perf_counter()
-		cpu_percent_prev	= psutil.cpu_percent(interval=0.05, percpu=False)
+		calling_function = sys._getframe().f_back.f_code.co_name if sys._getframe().f_back is not None else "Top Level"
+		strt_time = time.perf_counter()
+		cpu_percent_prev = psutil.cpu_percent(interval=0.05, percpu=False)
 		tracemalloc.start()
 		try:
 			return func(*args, **kwargs)
 		except Exception as e:
-			logging.exception(f"Exception in {func.__name__}: {e}",exc_info=True, stack_info=True)
+			traceback.print_exc()
+			print(f"Exception in {calling_function}: {e}")
 		finally:
-			current, peak	= tracemalloc.get_traced_memory()
+			current, peak = tracemalloc.get_traced_memory()
 			tracemalloc.stop()
-			cpu_percent		= psutil.cpu_percent(interval=None, percpu=False)
-			cpu_percnt		= cpu_percent - cpu_percent_prev
-			end_time 		= time.perf_counter()
-			duration		= end_time - strt_time
-			msj = f"{func.__name__}\t\tUsed {abs(cpu_percnt):>5.1f} % CPU: {hm_time(duration)}\t Mem: [avr:{hm_sz(current):>8}, max:{hm_sz(peak):>8}]\t({func.__doc__})"
+			cpu_percent = psutil.cpu_percent(interval=None, percpu=False)
+			cpu_percnt = cpu_percent - cpu_percent_prev
+			end_time = time.perf_counter()
+			duration = end_time - strt_time
+			msj = f"{calling_function}\t\tUsed {abs(cpu_percnt):>5.1f} % CPU: {duration:.2f} sec\t Mem: [avr:{current}, max:{peak}]\t({func.__doc__})"
 			logging.info(msj)
 	return wrapper
 
@@ -223,36 +241,35 @@ def temperature ():
 ##>>============-------------------<  End  >------------------==============<<##
 
 #  CLASES
-# XXX: https://shallowsky.com/blog/programming/python-tee.html
-
+# XXX:
 class Tee(object):
-    def __init__(self, *files):
-        self.files = files
-        self.original_stdout = sys.stdout
+	def __init__(self, *files):
+		self.files = files
+		self.original_stdout = sys.stdout
 
-    def write(self, obj):
-        if not isinstance(obj, str):  # Handle non-str write calls
-            obj = str(obj)
-        for file in self.files:
-            file.write(obj)
-            file.flush()  # Flush after write to keep output in sync
+	def write(self, obj):
+		if not isinstance(obj, str):  # Handle non-str write calls
+			obj = str(obj)
+		for file in self.files:
+			file.write(obj)
+			file.flush()  # Flush after write to keep output in sync
 
-    def flush(self):
-        for file in self.files:
-            file.flush()
+	def flush(self):
+		for file in self.files:
+			file.flush()
 
-    def close(self):
-        for file in self.files:
-            if file is not self.original_stdout:
-                file.close()
+	def close(self):
+		for file in self.files:
+			if file is not self.original_stdout:
+				file.close()
 
-    def __enter__(self):
-        sys.stdout = self
-        return self
+	def __enter__(self):
+		sys.stdout = self
+		return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        sys.stdout = self.original_stdout
-        self.close()
+	def __exit__(self, exc_type, exc_value, traceback):
+		sys.stdout = self.original_stdout
+		self.close()
 
 class RunningAverage:
 	''' Compute the running average of a value '''
@@ -383,8 +400,8 @@ def copy_move(src: str, dst: str, keep_original: bool = False, verbose: bool = F
 	- keep_original (bool, optional): If True, keep the original file. Defaults to False.
 	- verbose (bool optional): If True print message. Defaults to False.
 	"""
-
-	(action, transfer_func) = ("_Copied", shutil.copy2) if keep_original else ("_Moved", shutil.move)
+	if verbose:
+		print(f"\ncopy_move called with src: {src}, dst: {dst}, keep_original: {keep_original}\n")
 
 	if os.path.exists(dst) and os.path.samefile(src, dst):
 		if not keep_original:
@@ -397,6 +414,7 @@ def copy_move(src: str, dst: str, keep_original: bool = False, verbose: bool = F
 		return True
 
 	try:
+		(action, transfer_func) = ("_Copied", shutil.copy2) if keep_original else ("_Moved", shutil.move)
 		transfer_func(src, dst)
 		if verbose:
 			print(f"{action}: {src}\nTo    : {dst}")
@@ -422,8 +440,14 @@ def flatten_list_of_lists(lst):
 
 ##==============-------------------   End   -------------------==============##
 
+def ordinal(n: int ) -> str :
+	if 10 <= n % 100 <= 20:
+		suffix = 'th'
+	else:
+		suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
+	return f"{n}{suffix}"
 
-def ordinal(num: int) -> str:
+def oldordinal(num: int) -> str:
 	'''
 	Returns the ordinal number of a given integer, as a string.
 	eg. 1 -> 1st, 2 -> 2nd, 3 -> 3rd, etc.

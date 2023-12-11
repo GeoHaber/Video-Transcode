@@ -5,7 +5,6 @@ import re
 import sys
 import math
 import psutil
-import datetime as TM
 
 from Yaml		import *
 from FFMpeg		import *
@@ -14,21 +13,21 @@ from My_Utils	import get_new_fname, copy_move, hm_sz, hm_time, Tee
 from concurrent.futures import ThreadPoolExecutor
 from sklearn.cluster import DBSCAN
 
-
 #de_bug = True
+Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')}_{time.strftime('%Y_%j_%H-%M-%S')}.log"
 
-Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')}_{TM.datetime.now().strftime('%Y_%j_%H_%M_%S')}.log"
+#Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')}_{TM.datetime.now().strftime('%Y_%j_%H_%M_%S')}.log"
 
-# XXX: Sort order = True Biggest First, False = Smallest first
+# XXX: Sort order True = Biggest first, False = Smallest first
 Sort_Order = True
-#de_bug = True
 
-#WFolder = r"F:\Media\TV"
-#WFolder = r"F:\Media\Movie"
-#WFolder = r"F:\BackUp\_Adlt"
-#WFolder = r"F:\Media\MasterClass Collection"
-#WFolder = r"F:\BackUp\_Movies"
-#WFolder = r"C:\Users\Geo\Desktop\Except"
+#Root = r"F:\Media"
+#Root = r"F:\Media\TV"
+#Root = r"F:\Media\Movie"
+#Root = r"F:\BackUp\_Adlt"
+#Root = r"F:\Media\MasterClass Collection"
+#Root = r"F:\BackUp\_Movies"
+#Root = r"C:\Users\Geo\Desktop\Except"
 
 #
 ''' Global Variables '''
@@ -37,8 +36,6 @@ glb_vidolen = 0
 vid_width   = 0
 aud_smplrt  = 0
 total_size  = 0
-
-
 
 ##>>============-------------------< Start >------------------==============<<##
 @perf_monitor
@@ -71,14 +68,14 @@ def perform_clustering(data: List[List[float]], _lst: List[List]) -> None:
 		clusters[label].append(_lst[i])
 
 	# Creata a File , Split the path into drive letter and relative path
-	components = os.path.normpath(WFolder).split(os.sep)
+	components = os.path.normpath(Root).split(os.sep)
 	use = components[2]
 #	print (components, use)
 	filename = f'_Zposiduble_{use}_.txt'
 
 	with open(filename, "w", encoding='utf-8') as file:
 		# Write content to the file
-		file.write(f"Posible Doubles in {WFolder}!\n")
+		file.write(f"Posible Doubles in {Root}!\n")
 	# Output the clusters after the scan is complete
 		for label, cluster in clusters.items():
 			# Initialize lists to store sizes and lengths from the cluster
@@ -115,7 +112,7 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 	msj = sys._getframe().f_code.co_name
 	str_t = time.perf_counter()
 
-	msj += f" Start: {TM.datetime.now():%T}\tRoot: {root}\tSize: {hm_sz(get_tree_size(root))}"
+	msj += f" Start: {time.strftime('%H:%M:%S')}\tRoot: {root}\tSize: {hm_sz(get_tree_size(root))}"
 	print (msj)
 
 	# Validate inputs
@@ -159,6 +156,7 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 						except Exception as e:
 							print (f"Error getting size of file {f_path}: {e}")
 							continue
+
 			# Wait for all the futures to complete to extract the executor results
 			for f_path, file_s, ext, cur_dir, dirs, future in futures:
 				video_length = future.result()
@@ -168,6 +166,7 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 				_lst.append(info)
 				# append DAta fro Clustering
 				data.append([file_s, video_length])
+
 	# if File
 	elif os.path.isfile(root):
 		_, ext = os.path.splitext(root.lower())
@@ -181,20 +180,20 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 		return None
 
 	end_t = time.perf_counter()
-	print(f'  Scan Done : {TM.datetime.now():%T}\tTotal: {hm_time(end_t - str_t)}')
+	print(f"  Scan Done : {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}")
 
 	# Perform clustering if the flag is set
 	if do_clustering:
-		print(f'  Start Clustering : {TM.datetime.now():%T}')
+		print(f"  Start Clustering : {time.strftime('%H:%M:%S')}")
 		perform_clustering(data, _lst)
 
 	# Sort Order reverse = True -> Descending Biggest first
 	# XXX:
 	order = "Descending" if sort_order else "Ascending"
-	print(f"  Sorted: {order}")
+	print(f"  Sort: {order}")
 
 	end_t = time.perf_counter()
-	print(f' -End: {TM.datetime.now():%T}\tTotal: {hm_time(end_t - str_t)}')
+#	print(f' -End: {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}')
 
 	return sorted(_lst, key=lambda Item: Item[1], reverse=sort_order)
 
@@ -209,7 +208,7 @@ def clean_up(input_file: str, output_file: str, skip_it: str, debug: bool) -> in
 		return 0
 
 	str_t = time.perf_counter()
-	print(f"  +{msj} Start: {TM.datetime.now():%T}")
+	print(f"  +{msj} Start: {time.strftime('%H:%M:%S')}")
 
 	if not input_file or not output_file:
 		msj += (f" {msj} Inf: {input_file} Out: {output_file} Exit:")
@@ -262,9 +261,6 @@ def clean_up(input_file: str, output_file: str, skip_it: str, debug: bool) -> in
 
 	print(msg)
 
-	end_t = time.perf_counter()
-	print(f"  -End: {TM.datetime.now():%T}\tTotal: {hm_time(end_t - str_t)}")
-
 	return (inpf_sz - outf_sz)
 
 ##>>============-------------------<  End  >------------------==============<<##
@@ -280,104 +276,101 @@ if __name__ == '__main__':
 
 		print(f'Main Start: {TM.datetime.now()}')
 
-		if not os.path.exists(Excepto): # XXX: DEfined in .yml file
-			print (f"Creating dir: {Excepto}")
+		if not os.path.exists(Excepto): # XXX: Defined in .yml file
+			print(f"Creating dir: {Excepto}")
 			os.mkdir(Excepto)
 
 		time.sleep(1)
 		print("-" * 70)
 
-		if not len (WFolder) :
-			print (" Wfolder needs to be defined and point to the root diredtory to be Proccesed")
+		if not len (Root) :
+			print("Wfolder needs to be defined and point to the root directory to be processed")
 
-		fl_lst = scan_folder( WFolder, File_extn , sort_order = Sort_Order , do_clustering = False )
+		fl_lst = scan_folder(Root, File_extn, sort_order=Sort_Order, do_clustering=False)
 		fl_nmb = len(fl_lst)
 
 		saved = 0
 		procs = 0
 		skipt = 0
 		errod = 0
-		for cnt, each in enumerate(fl_lst) :
+		for cnt, each in enumerate(fl_lst):
+			str_t = time.perf_counter()
 			cnt += 1
-			file_p	= each[0]
-			file_s	= each[1]
-			ext		= each[2]
-			dirs	= each[3]
+			file_p  = each[0]
+			file_s  = each[1]
+			ext     = each[2]
+			dirs    = each[3]
 			skip_it = False
 
 			if os.path.isfile(file_p)  :
-				print(f'\n{file_p}\n{ordinal(cnt)} of {fl_nmb}, {ext}, {hm_sz(file_s)}.')
-				if len (file_p) < 333 :
-					free_disk_space = shutil.disk_usage( WFolder ).free
-					free_temp_space = shutil.disk_usage( r"C:" ).free
-					if free_disk_space < ( 3 * file_s ) or free_temp_space < ( 3 * file_s ) :
-						print ('\n!!! ', file_p[0:2], hm_sz(free_disk_space), " Free Space" )
-						input ("Not Enoug space on Drive")
+				print(f'\n{file_p}\n{ordinal(cnt)} of {fl_nmb}  {hm_sz(file_s)}')
+				if len(file_p) < 333 :
+					free_disk_space = shutil.disk_usage(Root).free
+					free_temp_space = shutil.disk_usage(r"C:").free
+					if free_disk_space < (3 * file_s) or free_temp_space < (3 * file_s) :
+						print('\n!!! ', file_p[0:2], hm_sz(free_disk_space), " Free Space" )
+						input("Not enough space on Drive")
 				else :
-					input (" File name too long > 333 ")
+					input("File name too long > 333 ")
 				try:
-					all_good =          ffprobe_run( file_p, ffprob,   de_bug )
-	#				de_bug = True
-					all_good, skip_it = zabrain_run( file_p, all_good, de_bug )
-					if  skip_it  == True :
+					all_good = ffprobe_run(file_p, ffprob, de_bug)
+					all_good, skip_it = zabrain_run(file_p, all_good, de_bug)
+					if skip_it:
 						print(f"\033[91m   | Skip ffmpeg_run |\033[0m")
 						skipt += 1
-					all_good = ffmpeg_run( file_p, all_good, skip_it, ffmpeg, de_bug )
+					all_good = ffmpeg_run(file_p, all_good, skip_it, ffmpeg, de_bug)
 					if not all_good and not skip_it :
-						print ( " FFMPEG did not create anything good")
+						print("FFMPEG did not create anything good")
 						time.sleep(5)
-			#		print(f"\033[91m   | Make 3x3 matrix |\033[0m")
-			#		if matrix_it (file_p, ext='.png') and not all_good :
-			#			continue
-	#				print (" Create 4x Speedup\n")
-	#				speed_up  (file_p, execu )
-	#				print ("\n Create a Short version\n")
-	#				short_ver (file_p, execu, de_bug )
-	#				video_diff( file_p, all_good )
-
-					saved += clean_up( file_p, all_good, skip_it, de_bug ) or 0
-					procs +=1
+					saved += clean_up(file_p, all_good, skip_it, de_bug) or 0
+					procs += 1
 					total_size += glb_vidolen
 
-				except ValueError as e :
-					errod +=1
+				except ValueError as e:
+					if e.args[0] == "Skip It":
+						print(f"Go on: {e}")
+						continue   # Continue to the next iteration of a loop
+					errod += 1
 					msj = f" +: ValueError: {e}\n{os.path.dirname(file_p)}\n\t{os.path.basename(file_p)}\t{hm_sz(file_s)}\nMoved"
-					print( msj )
-					if de_bug :
-						input ( 'Next')
-					if ( copy_move(file_p, Excepto, False , True) ) :
-						print ( "Done")
-					else :
-						input ("WTF")
+					print(msj)
 
-				except Exception as e :
-					errod +=1
+					if de_bug:
+						input('Next')
+					if (copy_move(file_p, Excepto, False, True)):
+						print("Done")
+					else:
+						input("ValuError WTF")
+
+				except Exception as e:
+					errod += 1
 					msj = f" +: Exception: {e}\n{os.path.dirname(file_p)}\n\t{os.path.basename(file_p)}\t{hm_sz(file_s)}\nCopied"
-					print( msj )
-					if de_bug :
-						input ( 'Next')
-	#				breakpoint(continue)
-					if ( copy_move(file_p, Excepto, False , True) ) :
-						print ( "Done")
-					else :
-						input ("WTF")
+					print(msj)
+					if de_bug:
+						input('Next')
+					if (copy_move(file_p, Excepto, False, True)):
+						print("Done")
+					else:
+						input("Exception WTF")
 
 				if not skip_it:
+					end_t = time.perf_counter()
+					print(f"  -End: {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}")
 					print(f"  Saved Total: {hm_sz(saved)}")
 
 			else:
 				mess = f'Not Found-: {file_p}\t\t{hm_sz(file_s)}'
 				print(f"\n{mess}\n")
-				errod +=1
+				errod += 1
 				time.sleep(1)
-				continue	# continue forces the loop to start the next iteration pass will continue through the remainder or the loop body
+				continue   # Continue to the next iteration of the loop
 
 		end_t = time.perf_counter()
-		print(f'  Done: {TM.datetime.now():%T}\tTotal: {hm_time(end_t - str_t)}\n')
+		print(f"  Done: {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}\n")
 
 		print(f"\n  Saved in Total: {hm_sz(saved)} Time: {hm_time(total_size)}\n  Files: {fl_nmb}\tProces: {procs}\tSkip: {skipt}\tErr: {errod}\n")
 
 	sys.stdout.flush()
 	input('All Done :)')
 	exit()
+
 ##>>============-------------------<  End  >------------------==============<<##

@@ -34,7 +34,7 @@ Language = Yml_Data.get('Language', {})
 Not_valid = Glob.get('junk_nm', None)
 
 Excepto = Path.get('Excepto', None)
-WFolder = Path.get('WFolder', None)
+Root	= Path.get('Root', None)
 TmpF_Ex = Path.get('Tmp_exte', None)
 MinF_sz = Path.get('Min_fsize', None)
 
