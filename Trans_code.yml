@@ -7,7 +7,7 @@ Path:
   user:             root
   passwd:           my secret password
   Min_fsize:        120000
-  WFolder:          C:\\Users\\Geo\\Desktop\\downloads
+  Root:             C:\\Users\\Geo\\Desktop\\downloads
   Excepto:          C:\\Users\\Geo\\Desktop\\Except
   Tmp_exte:         '.mp4' #.png or .jpg
 

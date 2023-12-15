@@ -330,17 +330,17 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 		'S': len(subtl_streams),
 		'D': len(datax_streams)
 	}
-	summary_msg = f"    |=Title| {title} |\n    |>FRMT<| Size: {hm_sz(size)} | Bitrate: {hm_sz(glb_bitrate)} | Length: {hm_time(glb_vidolen)} |"
-	summary_msg += ''.join([f" {key} = {count} |" for key, count in stream_counts.items() if count != 0])
+	summary_msg = f"    |=Title|{title}|\n    |>FRMT<|Size: {hm_sz(size)}|Bitrate: {hm_sz(glb_bitrate)}|Length: {hm_time(glb_vidolen)}|"
+	summary_msg += ''.join([f" {key}: {count}|" for key, count in stream_counts.items() if count != 0])
 
 	# Check for skip condition
 	_, ext = os.path.splitext(input_file)
 	f_skip = (f_comment == Skip_key) and (ext == '.mp4')
 
 	if f_skip:
-		summary_msg += f" Key OK"        # {filename}"
+		summary_msg += f" Key OK"        # {filename}
 	else:
-		summary_msg += f" Key not OK"    # {filename}"
+		summary_msg += f" Key not OK"    # {filename}
 
 	print(f"\033[96m{summary_msg}\033[0m")
 
@@ -351,6 +351,8 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 	ff_audio, a_skip = (parse_audio(audio_streams, de_bug) if audio_streams else (['-an'], False) )
 	ff_subtl, s_skip = (parse_subtl(subtl_streams, de_bug) if subtl_streams else (['-sn'], True ) )
 	ff_datat, d_skip = (parse_extrd(datax_streams, de_bug) if datax_streams else (['-dn'], True ) )
+
+	d_skip = True	# XXX: Avoid reencode
 
 	ff_com = ff_video + ff_audio + ff_subtl + ff_datat
 	skip_it = f_skip & v_skip & a_skip & s_skip & d_skip
@@ -501,8 +503,8 @@ def parse_video(strm_in, de_bug, use_hw_accel=True ):
 				ff_vid.extend([f"-metadata:s:v:{indx}", "handler_name=VideoHandler x265 by DvdZen"])
 				skip_it = False
 
-			msj = f"    |<V:{indx:2}>|{codec_name:<8} |{vid_width:>4}x{vid_heigh:<4}|{aspct_r}|Btrt: {hm_sz(_vi_btrt):>6}|Tfm: {hm_sz(glb_totfrms,'F'):>8}|Avbpp: {avbpp:>3}|Fps: {frm_rate:>7}| {extra}"
-			print(f"\033[91m{msj}\033[0m")
+			message = f"    |<V:{indx:2}>|{codec_name:^6}|{vid_width:>4}x{vid_heigh:<4}|{aspct_r}|Btrt: {hm_sz(_vi_btrt):>6}|Tfm: {hm_sz(glb_totfrms,'F'):>8}|Avbpp: {avbpp:>3}|Fps: {frm_rate:>7}| {extra}"
+			print(f"\033[91m{message}\033[0m")
 
 		ff_video += ff_vid
 		skip_it  &= skip_it
@@ -602,7 +604,7 @@ def parse_audio(streams, de_bug=False):
 				stream_options.extend([f"-metadata:s:a:{indx}", "handler_name=SoundHandler x265 by DvdZen"])
 				skip_current = False
 
-		message = (f"    |<A:{indx:2}>|{codec_name:<8} |Br:{hm_sz(bitrate):>9}|{language}"
+		message = (f"    |<A:{indx:2}>|{codec_name:^6}|Br:{hm_sz(bitrate):>9}|{language}"
 					f"|Frq: {hm_sz(sample_rate, 'Hz'):>8}|Ch: {channels}|Dis: {dispo_default} Fr:{dispo_forced}| {extra_info}")
 		print(f'\033[92m{message}\033[0m')
 
@@ -680,7 +682,7 @@ def parse_subtl(streams_in, de_bug=False):
 					skip_it = False
 
 		# Print message for this subtitle stream
-		message = f"    |<S:{indx:2}>|{codec_name:<9}|{codec_type:<9}|{language:3}|Disp: default={disposition['default']}, forced={disposition['forced']}|{extra}"
+		message = f"    |<S:{indx:2}>|{codec_name:^6}|{codec_type[:8]}|{language:3}|Disp: default={disposition['default']}, forced={disposition['forced']}|{extra}"
 		print(f"\033[94m{message}\033[0m")
 
 		ff_subttl += ff_sub  # Only add if the list is not empty
@@ -731,7 +733,7 @@ def parse_extrd(streams_in, de_bug=False):
 		'''
 
 		ff_dd = ['-map', f'-0:d:{indx}' ]
-		msj = f"    |<D:{indx:2}>| {codec_name:<8}| {codec_lng_nam:<9}| {codec_type:^11} | {handler_name} | Remouve it"
+		msj = f"    |<D:{indx:2}>|{codec_name:^6}| {codec_lng_nam:<9}| {codec_type:^11} | {handler_name} | Remouve it"
 
 		print(msj)
 
@@ -896,9 +898,9 @@ def show_progrs(line_to, sy, de_bug=False):
 				mints, secs = divmod(int(eta), 60)
 				hours, mints = divmod(mints, 60)
 				_eta = f"{hours:02d}:{mints:02d}:{secs:02d}"
-				_P = f"\r    | {sy} |Size: {hm_sz(regx_val['size']):>7}|Frames: {int(regx_val['frame']):>6}|Fps: {fp_int:>3}|BitRate: {regx_val['bitrate']:>6}|Speed: {sp_float:>5}|ETA: {_eta:>8}|  "
+				_P = f"\r    | {sy} |Size: {hm_sz(regx_val['size']):>7}|Frames: {int(regx_val['frame']):>6}|Fps: {fp_int:>3}|BitRate: {hm_sz(regx_val['bitrate']):>6}|Speed: {sp_float:>5}|ETA: {_eta:>8}|  "
 				if de_bug:
-					print(f"\n {line_to}\n | {sy} |Size: {hm_sz(regx_val['size']):>7}|Frames: {int(regx_val['frame']):>6}|Fps: {fp_int:>3}|BitRate: {regx_val['bitrate']:>6}|Speed: {sp_float:>5}|ETA: {_eta:>8}|")
+					print(f"\n {line_to}\n | {sy} |Size: {hm_sz(regx_val['size']):>7}|Frames: {int(regx_val['frame']):>6}|Fps: {fp_int:>3}|BitRate: {hm_sz(regx_val['bitrate']):>6}|Speed: {sp_float:>5}|ETA: {_eta:>8}|")
 		except Exception as e:
 			msj = f"Exception in {msj}: {e} {line_to}"
 			print(msj)

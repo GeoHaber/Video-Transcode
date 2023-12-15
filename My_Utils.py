@@ -362,6 +362,7 @@ def hm_sz(numb: Union[str, int, float], type: str = "B") -> str:
 		return ''
 ##==============-------------------   End   -------------------==============##
 
+
 def hm_time(timez: float) -> str:
 	'''Print time as years, months, weeks, days, hours, min, sec'''
 	units = {'year': 31536000,
@@ -372,6 +373,7 @@ def hm_time(timez: float) -> str:
 			 'min':        60,
 			 'sec':         1,
 			}
+
 	if timez < 0.0:
 		return "Error negative"
 	elif timez == 0.0 :
@@ -382,11 +384,11 @@ def hm_time(timez: float) -> str:
 		return f"{timez:>5.3f} sec{'s' if timez > 1 else ''}"
 	else:
 		frmt = []
-		for unit, seconds_per_unit in units.items() :
-			value = timez // seconds_per_unit
+		for unit, unit_ot_time in units.items() :
+			value = timez // unit_ot_time
 			if value != 0:
 				frmt.append(f"{int(value)} {unit}{'s' if value > 1 else ''}")
-			timez %= seconds_per_unit
+			timez %= unit_ot_time
 		return ", ".join(frmt[:-1]) + " and " + frmt[-1] if len(frmt) > 1 else frmt[0] if len(frmt) == 1 else "0 sec"
 ##>>============-------------------<  End  >------------------==============<<##
 
@@ -440,28 +442,17 @@ def flatten_list_of_lists(lst):
 
 ##==============-------------------   End   -------------------==============##
 
+
 def ordinal(n: int ) -> str :
 	if 10 <= n % 100 <= 20:
 		suffix = 'th'
 	else:
 		suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
-	return f"{n}{suffix}"
-
-def oldordinal(num: int) -> str:
-	'''
-	Returns the ordinal number of a given integer, as a string.
-	eg. 1 -> 1st, 2 -> 2nd, 3 -> 3rd, etc.
-	'''
-	if 10 <= num % 100 < 20:
-		return '{0}\'th'.format(num)
-	else:
-		ord = {1: '\'st', 2: '\'nd', 3: '\'rd'}.get(num % 10, '\'th')
-		return f'{num}{ord}'
+	return f"{n}'{suffix}"
 ##==============-------------------   End   -------------------==============##
 
 
 def divd_strn(val: str ) -> float:
-	msj = sys._getframe().f_code.co_name
 	'''
 	Returns floating point resul for string (n/d) or val it's fp '.'
 	'''
@@ -477,6 +468,7 @@ def divd_strn(val: str ) -> float:
 		r = float(val)
 	return round( r, 3)
 ##==============-------------------   End   -------------------==============##
+
 
 def vis_compr(string1, string2, no_match_c='|', match_c='='):
 	''' Visualy show diferences between sting1 graphx string2  '''

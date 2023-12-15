@@ -6,7 +6,6 @@ import sys
 import math
 import psutil
 
-from Yaml		import *
 from FFMpeg		import *
 from My_Utils	import get_new_fname, copy_move, hm_sz, hm_time, Tee
 
@@ -15,8 +14,6 @@ from sklearn.cluster import DBSCAN
 
 #de_bug = True
 Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')}_{time.strftime('%Y_%j_%H-%M-%S')}.log"
-
-#Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')}_{TM.datetime.now().strftime('%Y_%j_%H_%M_%S')}.log"
 
 # XXX: Sort order True = Biggest first, False = Smallest first
 Sort_Order = True
