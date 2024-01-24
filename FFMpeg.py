@@ -144,6 +144,7 @@ def ffmpeg_run(input_file: str, ff_com: str, skip_it: bool, execu: str = ffmpeg,
 	out_file = os.path.normpath('_' + stmpd_rad_str(7, file_name[0:20]))
 	out_file = re.sub(r'[^\w\s_-]+', '', out_file).strip().replace(' ', '_') + TmpF_Ex
 
+	ffmpeg_vers =	SP.check_output(["ffmpeg", "-version"]).decode("utf-8").splitlines()[0].split()[2]
 	ff_head = [execu, "-thread_queue_size", "24", "-i", input_file, "-hide_banner"]
 # XXX: Disable Hardware acceleation for short vid
 #    ffmpeg -ss 00:01:00 -i input.mp4 -t 00:00:30  # XXX: start at 1 minute and encode only 30 seconds
@@ -152,11 +153,12 @@ def ffmpeg_run(input_file: str, ff_com: str, skip_it: bool, execu: str = ffmpeg,
 	ff_tail = [
 		"-metadata", f"title={file_name} x256",
 		"-metadata", f"comment={Skip_key}",
-		"-metadata", "copyright= 2023 Me",
-		"-metadata", "author= Encoded by the one and only GeoHab",
-		"-metadata", "encoder= ffmpeg 6.00",
-#        "-movflags", "+faststart",
-#        "-fflags"  , "+fastseek",
+		"-metadata",	"copyright=2023 Me",
+		"-metadata",	"author=Encoded by the One and only GeoHab",
+		"-metadata",	f"encoder=ffmpeg {ffmpeg_vers}",
+		"-movflags",	"+faststart",
+		"-fflags"  ,	"+fastseek",
+		"-fflags",		"+genpts",
 		"-y", out_file,
 			   #"-fflags", "+genpts,+igndts",
 #        "-f", "matroska"
@@ -355,7 +357,7 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 	d_skip = True	# XXX: Avoid reencode
 
 	ff_com = ff_video + ff_audio + ff_subtl + ff_datat
-	skip_it = f_skip & v_skip & a_skip & s_skip & d_skip
+	skip_it = f_skip or (v_skip & a_skip & s_skip & d_skip)
 
 	if de_bug :
 		print (f"FFcom: {ff_com}\nSkip:{skip_it}")
@@ -388,7 +390,7 @@ def get_encoder_options(codec_name, src_pix_fmt, use_hw_accel):
 ##>>============-------------------<  End  >------------------==============<<##
 
 @perf_monitor
-def parse_video(strm_in, de_bug, use_hw_accel=True ):
+def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 	''' Parse and extract data from video streams '''
 	msj = sys._getframe().f_code.co_name
 
@@ -428,7 +430,7 @@ def parse_video(strm_in, de_bug, use_hw_accel=True ):
 		# If it's mjpeg or other unsupported just and delete
 		if codec_name.lower() in ['mjpeg', 'png', 'XXX']:
 			ff_vid = ['-map', f'-0:v:{indx}']
-			msj = f"    |<V:{indx:2}>|{codec_name:<8} | Remouve it |"
+			msj = f"    |<V:{indx:2}>|{codec_name:^8}| Remouve it |"
 			print(msj)
 			continue
 		else :
@@ -459,12 +461,13 @@ def parse_video(strm_in, de_bug, use_hw_accel=True ):
 			ff_vid = ['-map', f'0:v:{indx}', f'-c:v:{indx}']
 			# Determine if codec copy or conversion is needed, and update ff_vid accordingly
 			if codec_name == 'hevc':
-				if avbpp < 2.8 or _vi_btrt < 4000 :
+				max_vid_btrt = 3200000
+				if avbpp < 8 and _vi_btrt < max_vid_btrt :
 					extra += ' => Copy'
 					skip_it = True
 					ff_vid.extend(['copy'])
 				else:
-					extra += f' | Reduce Avbpp {avbpp:>3} Btrt: {hm_sz(_vi_btrt):>6}|'
+					extra += f' |Reduce Avbpp {avbpp:>3} & Btrt: {hm_sz(_vi_btrt):>6}|'
 					encoder_options = get_encoder_options(codec_name, this_vid['pix_fmt'], use_hw_accel)
 					ff_vid.extend(encoder_options)
 			else:
@@ -496,14 +499,14 @@ def parse_video(strm_in, de_bug, use_hw_accel=True ):
 				]
 				extra = f' {output} Scale {vid_width}x{vid_heigh} to {nw}x{nh}'
 
-			if handler_name == 'VideoHandler x265 by DvdZen':
+			if handler_name == 'VideoHandler x265':
 				extra += f"  {handler_name}"
 			else :
 				extra += f" {handler_name} => Change to: Video"
-				ff_vid.extend([f"-metadata:s:v:{indx}", "handler_name=VideoHandler x265 by DvdZen"])
+				ff_vid.extend([f"-metadata:s:v:{indx}", "handler_name=VideoHandler x265"])
 				skip_it = False
 
-			message = f"    |<V:{indx:2}>|{codec_name:^6}|{vid_width:>4}x{vid_heigh:<4}|{aspct_r}|Btrt: {hm_sz(_vi_btrt):>6}|Tfm: {hm_sz(glb_totfrms,'F'):>8}|Avbpp: {avbpp:>3}|Fps: {frm_rate:>7}| {extra}"
+			message = f"    |<V:{indx:2}>|{codec_name:^8}|{vid_width:<4}x{vid_heigh:<4}|{aspct_r}|Btrt: {hm_sz(_vi_btrt):>6}|Avbpp: {avbpp:>3}|Fps: {frm_rate:>7}|Tfm: {hm_sz(glb_totfrms,'F'):>8}| {extra}"
 			print(f"\033[91m{message}\033[0m")
 
 		ff_video += ff_vid
@@ -521,6 +524,8 @@ def parse_video(strm_in, de_bug, use_hw_accel=True ):
 # XXX: Audio
 @perf_monitor
 def parse_audio(streams, de_bug=False):
+	"""Parse and extract data from audio streams."""
+	msj = sys._getframe().f_code.co_name
 	only_audio = len(streams) == 1
 	ffmpeg_audio_options = []
 	all_skippable = True
@@ -597,14 +602,14 @@ def parse_audio(streams, de_bug=False):
 				stream_options.extend([ f'-metadata:s:a:{indx}', f'language={language}', f'-disposition:s:a:{indx}', '+default+forced' ])
 				extra_info += f" | Set {language} to +default"
 
-			if handler_name == "SoundHandler x265 by DvdZen":
+			if handler_name == "SoundHandler":
 				extra_info += f" handler_name: {handler_name}"
 			else :
 				extra_info += f" handler_name: {handler_name} Change to: Sound"
-				stream_options.extend([f"-metadata:s:a:{indx}", "handler_name=SoundHandler x265 by DvdZen"])
+				stream_options.extend([f"-metadata:s:a:{indx}", "handler_name=SoundHandler"])
 				skip_current = False
 
-		message = (f"    |<A:{indx:2}>|{codec_name:^6}|Br:{hm_sz(bitrate):>9}|{language}"
+		message = (f"    |<A:{indx:2}>|{codec_name:^8}|Br:{hm_sz(bitrate):>9}|{language}"
 					f"|Frq: {hm_sz(sample_rate, 'Hz'):>8}|Ch: {channels}|Dis: {dispo_default} Fr:{dispo_forced}| {extra_info}")
 		print(f'\033[92m{message}\033[0m')
 
@@ -652,7 +657,7 @@ def parse_subtl(streams_in, de_bug=False):
 
 		if codec_name in ('hdmv_pgs_subtitle', 'dvd_subtitle', 'ass', 'unknown?'):
 			ff_sub = [f'-map', f'-0:s:{indx}']
-			extra += f" Mark for deletion: {codec_name} {language} |"
+			extra += f" Delete: {codec_name} {language} |"
 		elif codec_name in ('subrip', 'mov_text'):
 			ff_sub = [f'-map', f'0:s:{indx}']
 			if language == 'eng':
@@ -670,19 +675,19 @@ def parse_subtl(streams_in, de_bug=False):
 #                ff_sub.extend([f'-c:s:{indx}', 'mov_text', f'-metadata:s:s:{indx}', f'language={language}'])
 			else:
 				ff_sub = [f'-map', f'-0:s:{indx}']
-				extra += f" Mark for deletion: {codec_name} {language} X"
+				extra += f" Delete: {codec_name} {language} X"
 
 			if ff_sub != [f'-map', f'-0:s:{indx}'] :
-				if handler_name == "SubtitlHandle x265 by DvdZen":
+				if handler_name == "SubtitlHandle":
 					extra += f"  {handler_name}"
 					skip_it = True
 				else :
 					extra += f" handler_name: {handler_name} Change to: Subtitl"
-					ff_sub.extend([f"-metadata:s:s:{indx}", "handler_name=SubtitlHandle x265 by DvdZen"])
+					ff_sub.extend([f"-metadata:s:s:{indx}", "handler_name=SubtitlHandle"])
 					skip_it = False
 
 		# Print message for this subtitle stream
-		message = f"    |<S:{indx:2}>|{codec_name:^6}|{codec_type[:8]}|{language:3}|Disp: default={disposition['default']}, forced={disposition['forced']}|{extra}"
+		message = f"    |<S:{indx:2}>|{codec_name[:8]:^8}|{codec_type[:8]}|{language:3}|Disp: default={disposition['default']}, forced={disposition['forced']}|{extra}"
 		print(f"\033[94m{message}\033[0m")
 
 		ff_subttl += ff_sub  # Only add if the list is not empty
@@ -725,15 +730,15 @@ def parse_extrd(streams_in, de_bug=False):
 		'''
 		if handler_name == 'SubtitleHandler' :
 			ff_dd = ['-map', f'0:d:{indx}', f'-c:d:{indx}', 'copy']
-			msj = f"    |<D:{indx:2}>| {codec_name:<8}| {codec_lng_nam:<9}| {codec_type:^11} | {handler_name}"
+			msj = f"    |<D:{indx:2}>| {codec_name:^8}| {codec_lng_nam:<9}| {codec_type:^11} | {handler_name}"
 			skip_it = True
 		else:
 			ff_dd = ['-map', f'-0:d:{indx}' ]
-			msj = f"    |<D:{indx:2}>| {codec_name:<8}| {codec_lng_nam:<9}| {codec_type:^11} | {handler_name} | Remouve it"
+			msj = f"    |<D:{indx:2}>| {codec_name:^8}| {codec_lng_nam:<9}| {codec_type:^11} | {handler_name} | Remouve it"
 		'''
 
 		ff_dd = ['-map', f'-0:d:{indx}' ]
-		msj = f"    |<D:{indx:2}>|{codec_name:^6}| {codec_lng_nam:<9}| {codec_type:^11} | {handler_name} | Remouve it"
+		msj = f"    |<D:{indx:2}>|{codec_name:^8}| {codec_lng_nam:<9}| {codec_type:^11} | {handler_name} | Remouve it"
 
 		print(msj)
 

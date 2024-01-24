@@ -14,12 +14,13 @@ import	datetime as TM
 import	platform
 import	traceback
 import	tracemalloc
-import	logging
 
 from	typing		import Union
 from	functools	import wraps
 
-#  DECORATORS
+import	logging
+
+
 # XXX: color codes: https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
 '''
 \033[91m : Red
@@ -30,6 +31,7 @@ from	functools	import wraps
 \033[96m : Cyan
 \033[0m : Reset color
 '''
+# XXX: DECORATORS
 
 def color_print(fg: int = 37, bg: int = 40):
 	def decorator(func):
@@ -37,23 +39,7 @@ def color_print(fg: int = 37, bg: int = 40):
 			print(f"\033[{fg}m\033[{bg}m{func(text)}\033[0m")
 		return wrapper
 	return decorator
-import time
-import psutil
-import tracemalloc
-import logging
-from functools import wraps
-import sys
 
-import time
-import psutil
-import tracemalloc
-import logging
-from functools import wraps
-import sys
-
-import traceback
-
-import traceback
 
 def debug(func):
 	def wrapper(*args, **kwargs):
@@ -143,11 +129,6 @@ def logit(logfile='out.log', de_bug=False):
 			return result
 		return wrapper
 	return logging_decorator
-'''
-@logit(logfile='mylog.log', de_bug=True)
-def my_function(x, y):
-	return x + y
-'''
 
 def handle_exception(func):
 	"""Decorator to handle exceptions."""
@@ -333,7 +314,6 @@ class Color:
 # Usage:
 #print(f"{Color(Color.RED, bright=True)}This is bright red text!{Color(Color.RESET)}")
 #print(f"{Color(Color.BLUE)}This is normal blue text!{Color(Color.RESET)}")
-
 
 ##	XXX: Functions :XXX
 ##==============-------------------  Start  -------------------==============##
@@ -595,11 +575,11 @@ def parse_from_to(strm, dictio, de_bug=True):
 	msj = sys._getframe().f_code.co_name
 	resul = {}
 	try:
-		resul = {k: (int(strm[k]) if type(dictio[k]) == int else
-					 float(strm[k]) if type(dictio[k]) == float else
-					 dict(strm[k]) if type(dictio[k]) == dict else
-					 strm[k])
-				 for k in dictio.keys() if k in strm}
+		resul = {k: (int(strm[k])	if type(dictio[k]) == int else
+					float(strm[k])	if type(dictio[k]) == float else
+					dict(strm[k])	if type(dictio[k]) == dict else
+					strm[k])
+				for k in dictio.keys() if k in strm}
 	except Exception as e:
 		logging.exception(f"Error {e}", exc_info=True, stack_info=True, extra=msj)
 		msj = f'\n{len(strm)}\n{strm}\n{len(resul)}\n{resul}'
