@@ -10,7 +10,7 @@ from FFMpeg		import *
 from My_Utils	import get_new_fname, copy_move, hm_sz, hm_time, Tee
 
 from concurrent.futures import ThreadPoolExecutor
-from sklearn.cluster import DBSCAN
+#from sklearn.cluster import DBSCAN
 
 #de_bug = True
 Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')}_{time.strftime('%Y_%j_%H-%M-%S')}.log"
@@ -24,7 +24,8 @@ Sort_Order = True
 #Root = r"F:\BackUp\_Adlt"
 #Root = r"F:\Media\MasterClass Collection"
 #Root = r"F:\BackUp\_Movies"
-#Root = r"C:\Users\Geo\Desktop\Except"
+#Root = r"C:\Users\Geo\Videos"
+#Root = r"C:\Users\Geo\Videos"
 
 #
 ''' Global Variables '''
@@ -161,7 +162,7 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 				if de_bug :
 					print(f"{info}")
 				_lst.append(info)
-				# append DAta fro Clustering
+				# append Data fro Clustering
 				data.append([file_s, video_length])
 
 	# if File
@@ -237,11 +238,11 @@ def clean_up(input_file: str, output_file: str, skip_it: str, debug: bool) -> in
 	extra = "+ Gain:" if ratio > 0 else "- Lost:"
 	msg = f"    Size Was: {hm_sz(inpf_sz)} Is: {hm_sz(outf_sz)} {extra} {hm_sz(abs(inpf_sz - outf_sz))} {ratio:>8}%"
 
-	if ratio > 98:
-		msg += " ! Huge diff !"
+	if abs(ratio) > 98 :
+		msg += " ! Huge difference !"
 		print(msg)
-		seems_to_small = get_new_fname(input_file, "_seems_small.mp4", TmpF_Ex)
-		copy_move(output_file, seems_to_small)
+		huge_diff = get_new_fname(input_file, "_Huge_Diff.mp4", TmpF_Ex)
+		copy_move(output_file, huge_diff)
 		return 0
 
 	if debug:
@@ -267,8 +268,8 @@ if __name__ == '__main__':
 
 	with Tee(sys.stdout, open(Log_File, 'w', encoding='utf-8')) as qa:
 
-		print(f"Python version: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
-		print(f"{psutil.cpu_count()} CPU's\t ¯\_(%)_/¯" )
+		print(f"Python version:  {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+		print(f"{psutil.cpu_count()} CPU's\t ¯\\_(%)_/¯" )
 		print(f"Script absolute path: {os.path.abspath(__file__)}")
 
 		print(f'Main Start: {TM.datetime.now()}')

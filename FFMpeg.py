@@ -27,7 +27,7 @@ if not os.path.exists(ffmpeg) or not os.path.exists(ffprob) :
 	raise OSError
 
 #SP.run( [ffmpeg, '-version'] )
-version = f"ffmpeg version: {SP.run(['ffmpeg', '-version'], stdout=SP.PIPE).stdout.decode('utf-8')[14:20]} (:)"
+version = f"Ffmpeg version: {SP.run(['ffmpeg', '-version'], stdout=SP.PIPE).stdout.decode('utf-8')[14:20]} (:)"
 print( version )
 
 ##==============-------------------   End   -------------------==============##
@@ -41,8 +41,8 @@ def extract_file_info(input_file):
 				'-probesize',         '50000000',
 				'-v', 'error',        # XXX quiet, panic, fatal, error, warning, info, verbose, de_bug, trace
 				'-of','json',        # XXX default, csv, xml, flat, ini
-					'-show_programs',
 					'-show_format',
+					'-show_programs',
 					'-show_streams',
 #                    '-show_error',
 					'-show_data',
@@ -64,15 +64,6 @@ def extract_file_info(input_file):
 		else :
 			duration    = float(format_info.get('duration', 0.0))
 
-		'''
-		# XXX: We could extract more info if needed
-		_format = output.get('format', {})
-		glb_vidolen = int(float(_format.get('duration', 0.0)) )
-		glb_bitrate = int(      _format.get('bit_rate', 0) )
-		nb_programs    = int(      _format.get('nb_programs', 0) )
-		filename    =           _format.get('filename', 'No File Name')
-		size        =           _format.get('size', 0)
-		'''
 
 		if de_bug : print (f"F: {input_file} = {duration}" )
 		return duration
@@ -95,16 +86,18 @@ def ffprobe_run(input_file, execu=ffprob, de_bug=False) -> dict:
 	if not input_file :
 		raise FileNotFoundError("No input_file provided.")
 
-	cmd = [execu, '-hide_banner', '-analyzeduration', '100000000', '-probesize',         '50000000',
-				'-v', 'error',        # XXX quiet, panic, fatal, error, warning, info, verbose, de_bug, trace
-				'-of','json',        # XXX default, csv, xml, flat, ini
-					'-show_programs',
-					'-show_format',
-					'-show_streams',
-					'-show_error',
-					'-show_data',
-					'-show_private_data',
-				'-i', input_file]
+	cmd = [execu, '-hide_banner',
+					'-analyzeduration', '100000000',
+					'-probesize',         '50000000',
+					'-v', 'error',		# XXX quiet, panic, fatal, error, warning, info, verbose, de_bug, trace
+					'-of','json',		# XXX default, csv, xml, flat, ini
+						'-show_programs',
+						'-show_format',
+						'-show_streams',
+						'-show_error',
+						'-show_data',
+						'-show_private_data',
+					'-i', input_file]
 
 	try:
 		out = SP.run(cmd, stdout=SP.PIPE, check=True)
@@ -140,19 +133,20 @@ def ffmpeg_run(input_file: str, ff_com: str, skip_it: bool, execu: str = ffmpeg,
 
 	print(f"  +{msj} Start: {TM.datetime.now():%T}")
 
-	file_name, _ = os.path.splitext(os.path.basename(input_file))
-	out_file = os.path.normpath('_' + stmpd_rad_str(7, file_name[0:20]))
-	out_file = re.sub(r'[^\w\s_-]+', '', out_file).strip().replace(' ', '_') + TmpF_Ex
+	file_name, _	= os.path.splitext(os.path.basename(input_file))
+	out_file		= os.path.normpath('_' + stmpd_rad_str(7, file_name[0:20]))
+	out_file		= re.sub(r'[^\w\s_-]+', '', out_file).strip().replace(' ', '_') + TmpF_Ex
 
 	ffmpeg_vers =	SP.check_output(["ffmpeg", "-version"]).decode("utf-8").splitlines()[0].split()[2]
+
 	ff_head = [execu, "-thread_queue_size", "24", "-i", input_file, "-hide_banner"]
 # XXX: Disable Hardware acceleation for short vid
 #    ffmpeg -ss 00:01:00 -i input.mp4 -t 00:00:30  # XXX: start at 1 minute and encode only 30 seconds
 #    ff_head = [execu, '-ss', '00:06:00', "-thread_queue_size", "24", "-i", input_file, "-t", "00:0:45" ]
 
 	ff_tail = [
-		"-metadata", f"title={file_name} x256",
-		"-metadata", f"comment={Skip_key}",
+		"-metadata",	f"title={file_name} x256",
+		"-metadata",	f"comment={Skip_key}",
 		"-metadata",	"copyright=2023 Me",
 		"-metadata",	"author=Encoded by the One and only GeoHab",
 		"-metadata",	f"encoder=ffmpeg {ffmpeg_vers}",
@@ -160,8 +154,6 @@ def ffmpeg_run(input_file: str, ff_com: str, skip_it: bool, execu: str = ffmpeg,
 		"-fflags"  ,	"+fastseek",
 		"-fflags",		"+genpts",
 		"-y", out_file,
-			   #"-fflags", "+genpts,+igndts",
-#        "-f", "matroska"
 	]
 
 #    p = psutil.Process()
@@ -276,12 +268,12 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 	glb_vidolen = int(float(_Format.get('duration',     0.0) ))
 	glb_bitrate = int(      _Format.get('bit_rate',     0) )
 
-	nb_streams    = int(      _Format.get('nb_streams',     0) )
-	nb_programs    = int(      _Format.get('nb_programs',     0) )
+	nb_streams  = int(      _Format.get('nb_streams',     0) )
+	nb_programs = int(      _Format.get('nb_programs',     0) )
 	filename    =           _Format.get('filename',     'No File Name')
 	size        =           _Format.get('size',         0)
-	f_comment     =             _Format.get('tags',         {}).get('comment', 'No_WTF')
-	title         =            _Format.get('tags',         {}).get('title', 'No_WTF')
+	f_comment   =           _Format.get('tags',         {}).get('comment', 'No_WTF')
+	title       =           _Format.get('tags',         {}).get('title', 'No_WTF')
 
 	_Streams = mta_dta.get('streams', [])
 	if debug: print(f"S: {json.dumps(_Streams, indent=2)}\n ")
@@ -356,8 +348,9 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 
 	d_skip = True	# XXX: Avoid reencode
 
-	ff_com = ff_video + ff_audio + ff_subtl + ff_datat
-	skip_it = f_skip or (v_skip & a_skip & s_skip & d_skip)
+	ff_com  = ff_video + ff_audio + ff_subtl + ff_datat
+	skip_it = f_skip & v_skip & a_skip & s_skip & d_skip
+	skip_it = f_skip
 
 	if de_bug :
 		print (f"FFcom: {ff_com}\nSkip:{skip_it}")
@@ -421,8 +414,8 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 
 		tags            = this_vid.get('tags', {})
 		handler_name    = tags.get('handler_name','Unknown')
-		_vi_btrt = int(          this_vid.get('bit_rate', glb_bitrate * 0.8))
-		frm_rate = divd_strn(    this_vid.get('r_frame_rate'  , '25'))
+		_vi_btrt = int(       this_vid.get('bit_rate', glb_bitrate * 0.8))
+		frm_rate = divd_strn( this_vid.get('r_frame_rate'  , '25'))
 
 		if 'bit_rate' not in this_vid:
 			extra = ' Bit Rate Estimate '
@@ -461,7 +454,8 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 			ff_vid = ['-map', f'0:v:{indx}', f'-c:v:{indx}']
 			# Determine if codec copy or conversion is needed, and update ff_vid accordingly
 			if codec_name == 'hevc':
-				max_vid_btrt = 3200000
+				max_vid_btrt = 3800000
+#				print ( hm_sz( max_vid_btrt ) )
 				if avbpp < 8 and _vi_btrt < max_vid_btrt :
 					extra += ' => Copy'
 					skip_it = True
@@ -526,6 +520,7 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 def parse_audio(streams, de_bug=False):
 	"""Parse and extract data from audio streams."""
 	msj = sys._getframe().f_code.co_name
+
 	only_audio = len(streams) == 1
 	ffmpeg_audio_options = []
 	all_skippable = True
@@ -536,9 +531,9 @@ def parse_audio(streams, de_bug=False):
 		extra_info = ""
 		skip_current = False
 
-		index            = audio_stream.get('index', -1)
-		codec_name        = audio_stream.get('codec_name', None)
-		sample_rate        = audio_stream.get('sample_rate', None)
+		index           = audio_stream.get('index', -1)
+		codec_name      = audio_stream.get('codec_name', None)
+		sample_rate     = audio_stream.get('sample_rate', None)
 		bitrate = int(    audio_stream.get('bit_rate', 0))
 		channels        = audio_stream.get('channels', -100)
 
@@ -546,9 +541,9 @@ def parse_audio(streams, de_bug=False):
 		language        = tags.get('language', 'und')
 		handler_name    = tags.get('handler_name','Unknown')
 
-		disposition        = audio_stream.get('disposition', {})
+		disposition     = audio_stream.get('disposition', {})
 		dispo_forced    = disposition.get('forced', 0)
-		dispo_default    = disposition.get('default', 0)
+		dispo_default   = disposition.get('default', 0)
 
 		# Estimate bitrate if missing
 		if bitrate == 0:

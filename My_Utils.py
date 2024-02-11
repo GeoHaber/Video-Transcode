@@ -222,35 +222,54 @@ def temperature ():
 ##>>============-------------------<  End  >------------------==============<<##
 
 #  CLASES
-# XXX:
 class Tee(object):
-	def __init__(self, *files):
-		self.files = files
-		self.original_stdout = sys.stdout
+    RED_START = "\033[91m"  # ANSI escape code for red
+    COLOR_END = "\033[0m"   # ANSI escape code to reset color
 
-	def write(self, obj):
-		if not isinstance(obj, str):  # Handle non-str write calls
-			obj = str(obj)
-		for file in self.files:
-			file.write(obj)
-			file.flush()  # Flush after write to keep output in sync
+    def __init__(self, *files, error_on=False):
+        self.files = files
+        self.error_on = error_on
+        self.original_stdout = sys.stdout
+        self.original_stderr = sys.stderr
 
-	def flush(self):
-		for file in self.files:
-			file.flush()
+    def write(self, obj):
+        is_stderr = (obj is sys.stderr)
+        if not isinstance(obj, str):
+            obj = str(obj)
 
-	def close(self):
-		for file in self.files:
-			if file is not self.original_stdout:
-				file.close()
+        # Process stderr only if error_on is True
+        if is_stderr and self.error_on:
+            obj = self.RED_START + obj + self.COLOR_END
 
-	def __enter__(self):
-		sys.stdout = self
-		return self
+        for file in self.files:
+            if file in (self.original_stdout, self.original_stderr) and not (is_stderr and not self.error_on):
+                file.write(obj)
+            else:
+                # Write to file without color codes
+                file.write(obj.replace(self.RED_START, '').replace(self.COLOR_END, ''))
+            file.flush()
 
-	def __exit__(self, exc_type, exc_value, traceback):
-		sys.stdout = self.original_stdout
-		self.close()
+    def flush(self):
+        for file in self.files:
+            file.flush()
+
+    def close(self):
+        for file in self.files:
+            if file not in (self.original_stdout, self.original_stderr):
+                file.close()
+
+    def __enter__(self):
+        sys.stdout = self
+        if self.error_on:
+            sys.stderr = self
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        sys.stdout = self.original_stdout
+        if self.error_on:
+            sys.stderr = self.original_stderr
+        self.close()
+
 
 class RunningAverage:
 	''' Compute the running average of a value '''
@@ -527,7 +546,9 @@ def stmpd_rad_str(leng=13, head=''):
 
 def get_new_fname(file_name, new_ext='', strip=''):
 	'''
-	Returns a new filename derived from the Old File by adding and or removing
+	Returns new filename derived from file_name by:
+	 add	new_ext
+	 remove	strip
 	'''
 	fnm, ext = os.path.splitext(file_name)
 	if len(strip):
