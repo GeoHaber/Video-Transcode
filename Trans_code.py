@@ -24,7 +24,7 @@ Sort_Order = True
 #Root = r"F:\BackUp\_Adlt"
 #Root = r"F:\Media\MasterClass Collection"
 #Root = r"F:\BackUp\_Movies"
-#Root = r"C:\Users\Geo\Videos"
+#Root = r"C:\Users\Geo\Desktop\TestIng"
 #Root = r"C:\Users\Geo\Videos"
 
 #
@@ -268,8 +268,8 @@ if __name__ == '__main__':
 
 	with Tee(sys.stdout, open(Log_File, 'w', encoding='utf-8')) as qa:
 
-		print(f"Python version:  {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
 		print(f"{psutil.cpu_count()} CPU's\t ¯\\_(%)_/¯" )
+		print(f"Python version:  {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
 		print(f"Script absolute path: {os.path.abspath(__file__)}")
 
 		print(f'Main Start: {TM.datetime.now()}')
@@ -282,7 +282,7 @@ if __name__ == '__main__':
 		print("-" * 70)
 
 		if not len (Root) :
-			print("Wfolder needs to be defined and point to the root directory to be processed")
+			print("Root directory not provided")
 
 		fl_lst = scan_folder(Root, File_extn, sort_order=Sort_Order, do_clustering=False)
 		fl_nmb = len(fl_lst)
@@ -291,6 +291,7 @@ if __name__ == '__main__':
 		procs = 0
 		skipt = 0
 		errod = 0
+		total_time = 0
 		for cnt, each in enumerate(fl_lst):
 			str_t = time.perf_counter()
 			cnt += 1
@@ -350,10 +351,11 @@ if __name__ == '__main__':
 					else:
 						input("Exception WTF")
 
-				if not skip_it:
-					end_t = time.perf_counter()
-					print(f"  -End: {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}")
-					print(f"  Saved Total: {hm_sz(saved)}")
+				end_t = time.perf_counter()
+				tot_t = end_t - str_t
+				total_time += tot_t
+				print(f"  -End: {time.strftime('%H:%M:%S')}\tTotal: {hm_time(tot_t)}")
+				print(f"  Total saved: {hm_sz(saved)}")
 
 			else:
 				mess = f'Not Found-: {file_p}\t\t{hm_sz(file_s)}'
@@ -363,11 +365,9 @@ if __name__ == '__main__':
 				continue   # Continue to the next iteration of the loop
 
 		end_t = time.perf_counter()
-		print(f"  Done: {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}\n")
+		print(f"\n Done: {time.strftime('%H:%M:%S')}\t Total Time: {hm_time(total_time)}")
+		print(f" Files: {fl_nmb}\tProces: {procs}\tSkip: {skipt}\tErr: {errod}\n Saved in Total: {hm_sz(saved)}\n")
 
-		print(f"\n  Saved in Total: {hm_sz(saved)} Time: {hm_time(total_size)}\n  Files: {fl_nmb}\tProces: {procs}\tSkip: {skipt}\tErr: {errod}\n")
-
-	sys.stdout.flush()
 	input('All Done :)')
 	exit()
 

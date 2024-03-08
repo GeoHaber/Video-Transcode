@@ -40,6 +40,25 @@ def color_print(fg: int = 37, bg: int = 40):
 		return wrapper
 	return decorator
 
+def name_time(func):
+	"""
+	A decorator that prints the function's name, start time, end time,
+	and the duration it took to execute the function.
+	"""
+	@wraps(func)
+	def wrapper(*args, **kwargs):
+		start_time = time.perf_counter()
+		print(f"  +{func.__name__} Start: {time.strftime('%H:%M:%S')}")
+
+		result = func(*args, **kwargs)
+
+		end_time = time.perf_counter()
+		duration = end_time - start_time
+		hours, remainder = divmod(duration, 3600)
+		minutes, seconds = divmod(remainder, 60)
+#		print(f"  -Time: {int(hours)}h:{int(minutes)}m:{seconds:.2f}s")
+		return result
+	return wrapper
 
 def debug(func):
 	def wrapper(*args, **kwargs):
@@ -223,52 +242,55 @@ def temperature ():
 
 #  CLASES
 class Tee(object):
-    RED_START = "\033[91m"  # ANSI escape code for red
-    COLOR_END = "\033[0m"   # ANSI escape code to reset color
+	RED_START = "\033[91m"  # ANSI escape code for red
+	COLOR_END = "\033[0m"   # ANSI escape code to reset color
 
-    def __init__(self, *files, error_on=False):
-        self.files = files
-        self.error_on = error_on
-        self.original_stdout = sys.stdout
-        self.original_stderr = sys.stderr
+	def __init__(self, *files, error_on=False):
+		self.files = files
+		self.error_on = error_on  # Default is now False, so stderr is not captured unless specified
+		self.original_stdout = sys.stdout
+		self.original_stderr = sys.stderr
 
-    def write(self, obj):
-        is_stderr = (obj is sys.stderr)
-        if not isinstance(obj, str):
-            obj = str(obj)
+	def write(self, obj):
+		is_stderr = (obj is sys.stderr)
+		if not isinstance(obj, str):
+			obj = str(obj)
 
-        # Process stderr only if error_on is True
-        if is_stderr and self.error_on:
-            obj = self.RED_START + obj + self.COLOR_END
+		# Only process stderr if error_on is True
+		if is_stderr and self.error_on:
+			obj = self.RED_START + obj + self.COLOR_END
 
-        for file in self.files:
-            if file in (self.original_stdout, self.original_stderr) and not (is_stderr and not self.error_on):
-                file.write(obj)
-            else:
-                # Write to file without color codes
-                file.write(obj.replace(self.RED_START, '').replace(self.COLOR_END, ''))
-            file.flush()
+		for file in self.files:
+			# Check if error_on is True before writing stderr output
+			if file in (self.original_stdout, self.original_stderr):
+				if not is_stderr or (is_stderr and self.error_on):
+					file.write(obj)
+			else:
+				# Write to file without color codes
+				file.write(obj.replace(self.RED_START, '').replace(self.COLOR_END, ''))
+			file.flush()
 
-    def flush(self):
-        for file in self.files:
-            file.flush()
+	def flush(self):
+		for file in self.files:
+			file.flush()
 
-    def close(self):
-        for file in self.files:
-            if file not in (self.original_stdout, self.original_stderr):
-                file.close()
+	def close(self):
+		for file in self.files:
+			if file not in (self.original_stdout, self.original_stderr):
+				file.close()
 
-    def __enter__(self):
-        sys.stdout = self
-        if self.error_on:
-            sys.stderr = self
-        return self
+	def __enter__(self):
+		sys.stdout = self
+		if self.error_on:  # Only set sys.stderr to self if error_on is True
+			sys.stderr = self
+		return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        sys.stdout = self.original_stdout
-        if self.error_on:
-            sys.stderr = self.original_stderr
-        self.close()
+	def __exit__(self, exc_type, exc_value, traceback):
+		sys.stdout = self.original_stdout
+		if self.error_on:
+			sys.stderr = self.original_stderr
+		self.close()
+
 
 
 class RunningAverage:
@@ -341,54 +363,52 @@ def hm_sz(numb: Union[str, int, float], type: str = "B") -> str:
 	Convert a file size to human-readable format.
 
 	Parameters:
-	- size (int): File size in bytes.
+	- numb (str, int, float): File size.
+	- type (str): Type of file size (default is "B" for bytes).
 
 	Returns:
 	- str: Human-readable file size.
 	"""
+	units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB']
 	numb = float(numb)
-	try:
-		if numb < 1024.0:
-			return f"{numb} {type}"
-		for unit in ['K','M','G','T','P','E'] :
-			numb /= 1024.0
-			if numb < 1024.0:
-				return f"{numb:.2f} {unit}{type}"
-		return f"{numb:.2f} {unit}{type}"
-	except Exception as e:
-		logging.exception(f"Error {e}", exc_info=True, stack_info=True)
-		print (e)
-		return ''
-##==============-------------------   End   -------------------==============##
 
+	for unit in units:
+		if abs(numb) < 1024.0:
+			return f"{numb:.2f} {unit}"
+		numb /= 1024.0
+
+	return f"{numb:.2f} {unit}"
+##==============-------------------   End   -------------------==============##
 
 def hm_time(timez: float) -> str:
 	'''Print time as years, months, weeks, days, hours, min, sec'''
-	units = {'year': 31536000,
-			 'month': 2592000,
-			 'week':   604800,
-			 'day':     86400,
-			 'hour':     3600,
-			 'min':        60,
-			 'sec':         1,
-			}
+	units = {
+		'year': 31536000,
+		'month': 2592000,
+		'week': 604800,
+		'day': 86400,
+		'hour': 3600,
+		'min': 60,
+		'sec': 1,
+	}
 
 	if timez < 0.0:
-		return "Error negative"
-	elif timez == 0.0 :
-		return "Zero"
+		return "Error: time cannot be negative."
+	elif timez == 0.0:
+		return "Zero time."
 	elif timez < 0.001:
 		return f"{timez * 1000:.3f} ms"
 	elif timez < 60:
-		return f"{timez:>5.3f} sec{'s' if timez > 1 else ''}"
+		return f"{timez:>5.3f} sec{'s' if timez != 1 else ''}"
 	else:
 		frmt = []
-		for unit, unit_ot_time in units.items() :
-			value = timez // unit_ot_time
+		for unit, unit_of_time in units.items():
+			value = timez // unit_of_time
 			if value != 0:
 				frmt.append(f"{int(value)} {unit}{'s' if value > 1 else ''}")
-			timez %= unit_ot_time
-		return ", ".join(frmt[:-1]) + " and " + frmt[-1] if len(frmt) > 1 else frmt[0] if len(frmt) == 1 else "0 sec"
+			timez %= unit_of_time
+		return ", ".join(frmt[:-1]) + " and " + frmt[-1] if len(frmt) > 1 else frmt[0] if frmt else "0 sec"
+
 ##>>============-------------------<  End  >------------------==============<<##
 
 def copy_move(src: str, dst: str, keep_original: bool = False, verbose: bool = False) -> bool:

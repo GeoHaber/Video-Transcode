@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-
 import os
 import re
 import sys
@@ -37,15 +36,15 @@ def extract_file_info(input_file):
 	return 1
 	cmd = ['ffprobe',
 				'-hide_banner',
-				'-analyzeduration', '100000000',
-				'-probesize',         '50000000',
-				'-v', 'error',        # XXX quiet, panic, fatal, error, warning, info, verbose, de_bug, trace
-				'-of','json',        # XXX default, csv, xml, flat, ini
+				'-analyzeduration',	'100000000',
+				'-probesize',		 '50000000',
+				'-v', 'error',		# XXX quiet, panic, fatal, error, warning, info, verbose, de_bug, trace
+				'-of','json',		# XXX default, csv, xml, flat, ini
 					'-show_format',
 					'-show_programs',
 					'-show_streams',
-#                    '-show_error',
 					'-show_data',
+#					'-show_error',
 				'-i', input_file]
 	try:
 		result = SP.run(cmd, capture_output=True, text=True, errors='ignore', encoding='utf-8')
@@ -63,7 +62,6 @@ def extract_file_info(input_file):
 			return 0.0
 		else :
 			duration    = float(format_info.get('duration', 0.0))
-
 
 		if de_bug : print (f"F: {input_file} = {duration}" )
 		return duration
@@ -108,7 +106,7 @@ def ffprobe_run(input_file, execu=ffprob, de_bug=False) -> dict:
 			raise ValueError(f"ffprobe error: {jsn_ou['error']}")
 
 	except (SP.CalledProcessError, SP.TimeoutExpired, json.JSONDecodeError) as e:
-		msj += f" Error {e}\ getting metadata from file\n{input_file}"
+		msj += f" Error {e} getting metadata from file \n{input_file}"
 		raise Exception(msj) from e
 
 	end_t = time.perf_counter()
@@ -268,15 +266,14 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 	glb_vidolen = int(float(_Format.get('duration',     0.0) ))
 	glb_bitrate = int(      _Format.get('bit_rate',     0) )
 
-	nb_streams  = int(      _Format.get('nb_streams',     0) )
-	nb_programs = int(      _Format.get('nb_programs',     0) )
+	nb_streams  = int(      _Format.get('nb_streams',   0) )
+	nb_programs = int(      _Format.get('nb_programs',  0) )
 	filename    =           _Format.get('filename',     'No File Name')
 	size        =           _Format.get('size',         0)
-	f_comment   =           _Format.get('tags',         {}).get('comment', 'No_WTF')
-	title       =           _Format.get('tags',         {}).get('title', 'No_WTF')
+	f_comment   =           _Format.get('tags',         {}).get('comment', 'No_comment')
+	title       =           _Format.get('tags',         {}).get('title', 'No_title')
 
 	_Streams = mta_dta.get('streams', [])
-	if debug: print(f"S: {json.dumps(_Streams, indent=2)}\n ")
 
 	# Initialize a dictionary to group streams by codec_type
 	streams_by_type = defaultdict(list)
@@ -285,6 +282,8 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 		codec_type = stream.get('codec_type')
 		streams_by_type[codec_type].append(stream)
 
+	if debug:
+		print(f"S: {json.dumps(_Streams, indent=2)}\n ")
 	# Collect all unknown or unrecognized codec_types
 	known_types = {'video', 'audio', 'subtitle', 'data'}
 	unknown_streams = {k: v for k, v in streams_by_type.items() if k not in known_types}
@@ -301,24 +300,16 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 
 	# Extract the lists of streams for each codec_type
 	video_streams = streams_by_type['video']
-	if not video_streams:
-		msj += f"\nNo Video in: {input_file}\n"
-		print(msj)
-		raise ValueError(msj)
 
 	audio_streams = streams_by_type['audio']
-	if not audio_streams:
-		msj += f"\nNo Audio in: {input_file}\n"
-		print(msj)
-		raise ValueError(msj)
 
 	subtl_streams = streams_by_type['subtitle']
 	datax_streams = streams_by_type['data']
 
 	# Create summary message
 	stream_counts = {
-		'Prog': nb_programs,
-		'Strm': nb_streams,
+		'Prgrm': nb_programs,
+		'Strms': nb_streams,
 		'V': len(video_streams),
 		'A': len(audio_streams),
 		'S': len(subtl_streams),
@@ -341,23 +332,38 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 	# DEBUG:
 #    de_bug = True
 
-	ff_video, v_skip = (parse_video(video_streams, de_bug) if video_streams else (['-vn'], False) )
-	ff_audio, a_skip = (parse_audio(audio_streams, de_bug) if audio_streams else (['-an'], False) )
-	ff_subtl, s_skip = (parse_subtl(subtl_streams, de_bug) if subtl_streams else (['-sn'], True ) )
-	ff_datat, d_skip = (parse_extrd(datax_streams, de_bug) if datax_streams else (['-dn'], True ) )
+	ff_com = []
+	if video_streams:
+		ff_video, v_skip = parse_video(video_streams, de_bug)
+		ff_com.extend(ff_video)
+		skip_it = v_skip or f_skip
+	else :
+		msj += f"\nNo Video in: {input_file}\n"
+		print(msj)
+		raise ValueError(msj)
+	if audio_streams:
+		ff_audio, a_skip = parse_audio(audio_streams, de_bug)
+		ff_com.extend(ff_audio)
+		skip_it = skip_it and a_skip
+	else :
+		msj += f"\nNo Audio in: {input_file}\n"
+		print(msj)
+		raise ValueError(msj)
+	if subtl_streams:
+		ff_subtl, s_skip = parse_subtl(subtl_streams, de_bug)
+		ff_com.extend(ff_subtl)
+		skip_it = skip_it and s_skip
+	if datax_streams:
+		ff_datat, d_skip = parse_extrd(datax_streams, de_bug)
+		ff_com.extend(ff_datat)
+		d_skip = True	# XXX: Avoid reencode
 
-	d_skip = True	# XXX: Avoid reencode
-
-	ff_com  = ff_video + ff_audio + ff_subtl + ff_datat
-	skip_it = f_skip & v_skip & a_skip & s_skip & d_skip
-	skip_it = f_skip
+# XXX: Skip if Key OK !!!
+		skip_it = skip_it or d_skip
 
 	if de_bug :
-		print (f"FFcom: {ff_com}\nSkip:{skip_it}")
-		input ("Yes?")
+		print(f"FFcom: {ff_com}\nSkip: {skip_it}")
 
-	if skip_it :
-		print ("  ! Skip All" )
 
 	return ff_com, skip_it
 
@@ -496,7 +502,7 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 			if handler_name == 'VideoHandler x265':
 				extra += f"  {handler_name}"
 			else :
-				extra += f" {handler_name} => Change to: Video"
+				extra += f" {handler_name} => Change to: VideoHandler"
 				ff_vid.extend([f"-metadata:s:v:{indx}", "handler_name=VideoHandler x265"])
 				skip_it = False
 
@@ -552,8 +558,8 @@ def parse_audio(streams, de_bug=False):
 
 		# Get channel info
 		extra_info += {
-			1: "Mono",
-			2: "Stereo"
+			1: " Mono",
+			2: " Stereo"
 		}.get(channels, f"{channels - 1}.1 Channels" if 2 < channels < 8 else f" {channels} Channels")
 
 		keep_language = language in Keep_langua or only_audio
@@ -600,7 +606,7 @@ def parse_audio(streams, de_bug=False):
 			if handler_name == "SoundHandler":
 				extra_info += f" handler_name: {handler_name}"
 			else :
-				extra_info += f" handler_name: {handler_name} Change to: Sound"
+				extra_info += f" handler_name: {handler_name} Change to: SoundHandler"
 				stream_options.extend([f"-metadata:s:a:{indx}", "handler_name=SoundHandler"])
 				skip_current = False
 
@@ -677,7 +683,7 @@ def parse_subtl(streams_in, de_bug=False):
 					extra += f"  {handler_name}"
 					skip_it = True
 				else :
-					extra += f" handler_name: {handler_name} Change to: Subtitl"
+					extra += f" handler_name: {handler_name} Change to: SubtitlHandle"
 					ff_sub.extend([f"-metadata:s:s:{indx}", "handler_name=SubtitlHandle"])
 					skip_it = False
 
@@ -926,37 +932,11 @@ def matrix_it(input_file, execu=ffmpeg, ext ='.png'):
 # XXX Create Matrix Colage:
 	file_name, _ext = os.path.splitext(input_file)
 	if _ext not in File_extn: # XXX: Very unlikely !!
-		msj = f"Input: {input_file}\n Not video file."
+		msj = f"Input: {input_file} Not video file."
 		raise Exception (msj)
 
-	'''
-	# Get the directory path of the input file
-	input_file_dir = os.path.dirname(input_file)
-
-	# Get the basename of the input file
-	infil_name, _  = os.path.splitext(os.path.basename(input_file))
-#    print (infil_name)
-
-	# Get a list of files and directories in the input file's directory
-	all_entries = os.listdir(input_file_dir)
-
-	for cnt, file in enumerate(all_entries) :
-		zz, _ext = os.path.splitext(file)
-	#    print (f" {cnt:02d}: {file}")
-		if ( _ext == ext ) and ( zz == infil_name ):
-	# XXX:         print (f"{file} == {infil_name}")
-
-	# Escape special characters in the file_name[:6] substring
-	key_ = re.escape(file_name[5:8])
-	# Create a pattern that matches files starting with the same first 6 characters and ending with .png
-	pattern = fr'^{key_}.*\.{ext}$'
-	# Filter the list to include only .png files that match the pattern
-	matching_files = [entry for entry in all_entries if os.path.isfile(entry) and re.match(pattern, entry)]
-	if matching_files :
-		print(f'  We have= {matching_files}')
-	'''
 	if os.path.isfile(file_name + ext):
-		print( f"   | PNG Exists ¯\_(%)_/¯ Skip")
+		print( f"   | PNG Exists ¯\\_(%)_/¯ Skip")
 		end_t = time.perf_counter()
 		print(f'  -End: {TM.datetime.now():%T}\tTotal: {hm_time(end_t - str_t)}')
 		return False
@@ -969,7 +949,7 @@ def matrix_it(input_file, execu=ffmpeg, ext ='.png'):
 
 		skip0 = '00:01:13'
 #        zzzle =  "[0:v]select=not(mod(n\," + slice + ")), scale=" + width + ":-1:, tile=3x3:nb_frames=9:padding=3:margin=3"
-		zzzle = f"[0:v]select=not(mod(n\, {slice})), scale={width}:-1:, tile=3x3:nb_frames=9:padding=3:margin=3 "
+		zzzle = f"[0:v]select=not(mod(n\\, {slice})), scale={width}:-1:, tile=3x3:nb_frames=9:padding=3:margin=3 "
 
 		if glb_totfrms > 6000:
 			todo = (execu, '-ss', skip0, '-vsync', 'vfr', '-i', input_file, '-frames', '1', '-vf', zzzle, '-y', file_name)
