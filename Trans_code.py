@@ -18,15 +18,6 @@ Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')}_{time.strftime('%Y_%
 # XXX: Sort order True = Biggest first, False = Smallest first
 Sort_Order = True
 
-#Root = r"F:\Media"
-#Root = r"F:\Media\TV"
-#Root = r"F:\Media\Movie"
-#Root = r"F:\BackUp\_Adlt"
-#Root = r"F:\Media\MasterClass Collection"
-#Root = r"F:\BackUp\_Movies"
-#Root = r"C:\Users\Geo\Desktop\TestIng"
-#Root = r"C:\Users\Geo\Videos"
-
 #
 ''' Global Variables '''
 glb_totfrms = 0
