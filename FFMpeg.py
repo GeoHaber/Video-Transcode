@@ -76,7 +76,6 @@ def extract_file_info(input_file):
 #@perf_monitor
 def ffprobe_run(input_file, execu=ffprob, de_bug=False) -> dict:
 	''' Run ffprobe returns a Json file with the info '''
-
 	msj = sys._getframe().f_code.co_name
 	print(f"  +{msj} Start: {TM.datetime.now():%T}")
 	str_t = time.perf_counter()
@@ -108,9 +107,7 @@ def ffprobe_run(input_file, execu=ffprob, de_bug=False) -> dict:
 	except (SP.CalledProcessError, SP.TimeoutExpired, json.JSONDecodeError) as e:
 		msj += f" Error {e} getting metadata from file \n{input_file}"
 		raise Exception(msj) from e
-
 	end_t = time.perf_counter()
-#    print(f'  -End: {TM.datetime.now():%T}\tTotal: {hm_time(end_t - str_t)}')
 
 	return jsn_ou
 ##>>============-------------------<  End  >------------------==============<<##
@@ -263,13 +260,14 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 		print ( msj )
 		raise ValueError(msj)
 
-	glb_vidolen = int(float(_Format.get('duration',     0.0) ))
+	glb_vidolen = int(float(_Format.get('duration',     0.0)) )
 	glb_bitrate = int(      _Format.get('bit_rate',     0) )
 
 	nb_streams  = int(      _Format.get('nb_streams',   0) )
 	nb_programs = int(      _Format.get('nb_programs',  0) )
 	filename    =           _Format.get('filename',     'No File Name')
 	size        =           _Format.get('size',         0)
+
 	f_comment   =           _Format.get('tags',         {}).get('comment', 'No_comment')
 	title       =           _Format.get('tags',         {}).get('title', 'No_title')
 
@@ -284,25 +282,21 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 
 	if debug:
 		print(f"S: {json.dumps(_Streams, indent=2)}\n ")
-	# Collect all unknown or unrecognized codec_types
+		# Collect all unknown or unrecognized codec_types
 	known_types = {'video', 'audio', 'subtitle', 'data'}
 	unknown_streams = {k: v for k, v in streams_by_type.items() if k not in known_types}
-
 	if unknown_streams:
 		for codec_type, streams in unknown_streams.items():
-#            msj += f" Unrecognized codec_type '{codec_type}'\n found in streams: {json.dumps(streams, indent=2)}"
+	#            msj += f" Unrecognized codec_type '{codec_type}'\n found in streams: {json.dumps(streams, indent=2)}"
 			msj += f" Unrecognized codec_type '{codec_type}' in stream {i}"
 			print(msj)
-
 	if i != nb_streams:
 		print(f" i = {i} != nb_streams = {nb_streams}")
 		input ("WTF")
 
 	# Extract the lists of streams for each codec_type
 	video_streams = streams_by_type['video']
-
 	audio_streams = streams_by_type['audio']
-
 	subtl_streams = streams_by_type['subtitle']
 	datax_streams = streams_by_type['data']
 
@@ -329,9 +323,7 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 
 	print(f"\033[96m{summary_msg}\033[0m")
 
-	# DEBUG:
-#    de_bug = True
-
+# Call parse functions for streams if they exist
 	ff_com = []
 	if video_streams:
 		ff_video, v_skip = parse_video(video_streams, de_bug)
@@ -341,6 +333,7 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 		msj += f"\nNo Video in: {input_file}\n"
 		print(msj)
 		raise ValueError(msj)
+
 	if audio_streams:
 		ff_audio, a_skip = parse_audio(audio_streams, de_bug)
 		ff_com.extend(ff_audio)
@@ -349,21 +342,23 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 		msj += f"\nNo Audio in: {input_file}\n"
 		print(msj)
 		raise ValueError(msj)
+
 	if subtl_streams:
 		ff_subtl, s_skip = parse_subtl(subtl_streams, de_bug)
 		ff_com.extend(ff_subtl)
 		skip_it = skip_it and s_skip
+	else :
+		print( f"    | No Subtitle   |")
+		# XXX: TBD Add subtitle from file if available
+
 	if datax_streams:
 		ff_datat, d_skip = parse_extrd(datax_streams, de_bug)
 		ff_com.extend(ff_datat)
 		d_skip = True	# XXX: Avoid reencode
-
-# XXX: Skip if Key OK !!!
 		skip_it = skip_it or d_skip
 
-	if de_bug :
+	if de_bug:
 		print(f"FFcom: {ff_com}\nSkip: {skip_it}")
-
 
 	return ff_com, skip_it
 
@@ -648,13 +643,13 @@ def parse_subtl(streams_in, de_bug=False):
 		extra = ''
 
 		index        = this_sub.get('index', -1)
-		codec_name    = this_sub.get('codec_name', 'unknown?')
-		codec_type    = this_sub.get('codec_type', 'unknown?')
-		disposition = this_sub.get('disposition', {'forced': 0, 'default': 0})
+		codec_name   = this_sub.get('codec_name', 'unknown?')
+		codec_type   = this_sub.get('codec_type', 'unknown?')
+		disposition	 = this_sub.get('disposition', {'forced': 0, 'default': 0})
 
-		tags        = this_sub.get('tags', {})
-		handler_name    = tags.get('handler_name', 'Unknown')
-		language        = tags.get('language', 'und')
+		tags         = this_sub.get('tags', {})
+		handler_name = tags.get('handler_name', 'Unknown')
+		language     = tags.get('language', 'und')
 
 		if codec_name in ('hdmv_pgs_subtitle', 'dvd_subtitle', 'ass', 'unknown?'):
 			ff_sub = [f'-map', f'-0:s:{indx}']
@@ -719,27 +714,18 @@ def parse_extrd(streams_in, de_bug=False):
 #        if de_bug:    print(f"    +{msj} Start: {TM.datetime.now():%T}\n {json.dumps(this_dat, indent=2)}")
 		ff_dd = []
 
-		index            = this_dat.get('index', -1)
-		codec_name        = this_dat.get('codec_name', '')
-		codec_lng_nam    = this_dat.get('codec_long_name', '')
-		codec_type        = this_dat.get('codec_type', '')
+		index			= this_dat.get('index', -1)
+		codec_name      = this_dat.get('codec_name', '')
+		codec_lng_nam   = this_dat.get('codec_long_name', '')
+		codec_type      = this_dat.get('codec_type', '')
 
 		tags            = this_dat.get('tags', {})
 		handler_name = tags.get('handler_name', 'Unknown')
 
 		skip_it = False
-		'''
-		if handler_name == 'SubtitleHandler' :
-			ff_dd = ['-map', f'0:d:{indx}', f'-c:d:{indx}', 'copy']
-			msj = f"    |<D:{indx:2}>| {codec_name:^8}| {codec_lng_nam:<9}| {codec_type:^11} | {handler_name}"
-			skip_it = True
-		else:
-			ff_dd = ['-map', f'-0:d:{indx}' ]
-			msj = f"    |<D:{indx:2}>| {codec_name:^8}| {codec_lng_nam:<9}| {codec_type:^11} | {handler_name} | Remouve it"
-		'''
 
 		ff_dd = ['-map', f'-0:d:{indx}' ]
-		msj = f"    |<D:{indx:2}>|{codec_name:^8}| {codec_lng_nam:<9}| {codec_type:^11} | {handler_name} | Remouve it"
+		msj = f"    |<D:{index:2}>|{codec_name:^8}| {codec_lng_nam:<9}| {codec_type:^11} | {handler_name} | Remouve it"
 
 		print(msj)
 
