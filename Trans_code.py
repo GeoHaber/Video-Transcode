@@ -189,68 +189,55 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 ##>>============-------------------<  End  >------------------==============<<##
 
 @perf_monitor
-def clean_up(input_file: str, output_file: str, skip_it: str, debug: bool) -> int:
+def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> int:
 	"""Take care of renaming temp files etc.."""
 	msj = sys._getframe().f_code.co_name
 
 	if skip_it:
 		return 0
 
-	str_t = time.perf_counter()
 	print(f"  +{msj} Start: {time.strftime('%H:%M:%S')}")
 
-	if not input_file or not output_file:
-		msj += (f" {msj} Inf: {input_file} Out: {output_file} Exit:")
-		print(msj)
-		return False
 
 	try:
+		if not os.path.exists(input_file):
+			print(f"Input file '{input_file}' does not exist.")
+			return -1
 		inpf_sz = os.path.getsize(input_file)
-		if not inpf_sz or inpf_sz == 0:
-			raise Exception(f" In  file size {inpf_sz} Zero")
-	except FileNotFoundError as e:
-		msj += f" Input file: {input_file} does not exist !!\n"
-		print(f"  ={msj}")
-		return False
 
-	try:
+		# Check if output file is ready
+		if not os.path.exists(output_file):
+			print(f"Output file '{output_file}' does not exist.")
+			return -1
+
 		outf_sz = os.path.getsize(output_file)
-		if not outf_sz or outf_sz == 0:
-			raise Exception(f" Out file size {outf_sz} Zero")
-	except FileNotFoundError as e:
-		msj += f" Output file: {output_file} does not exist !!\n   Cp: {input_file}\n   To: {Excepto}"
-		print(f"  ={msj}\n\n")
-		doit = copy_move(input_file, Excepto, True)
-		if not doit:
-			raise ValueError(msj)
-		return False
 
-	ratio = round(100 * ((outf_sz - inpf_sz) / inpf_sz), 2)
-	extra = "+ Gain:" if ratio > 0 else "- Lost:"
-	msg = f"    Size Was: {hm_sz(inpf_sz)} Is: {hm_sz(outf_sz)} {extra} {hm_sz(abs(inpf_sz - outf_sz))} {ratio:>8}%"
+		ratio = round(100 * ((outf_sz - inpf_sz) / inpf_sz), 1)
+		extra = "+ Gain:" if ratio > 0 else "- Lost:"
+		msg = f"    Size Was: {hm_sz(inpf_sz)} Is: {hm_sz(outf_sz)} {extra} {hm_sz(abs(inpf_sz - outf_sz))} {ratio:>8}%"
 
-	if abs(ratio) > 98 :
-		msg += " ! Huge difference !"
+		if   ratio > 120:
+			msg += " ! Bigger !"
+		elif ratio < -100:
+			msg += " ! Smaller !"
+		delete_me_file = input_file + "_DeletMe.old"
+		os.rename(input_file, delete_me_file)
+		input_file += '.mp4'
+		os.rename(output_file, input_file)
+		msg += " Successfully renamed"
 		print(msg)
-		huge_diff = get_new_fname(input_file, "_Huge_Diff.mp4", TmpF_Ex)
-		copy_move(output_file, huge_diff)
-		return 0
 
-	if debug:
-		msj += "\t de_bug mode input file not Changed"
-		print(msj)
-		return 0
+		return inpf_sz - outf_sz
 
-	_, xt = os.path.splitext(input_file)
-	delte_me_fnam = get_new_fname(input_file, "_DeletMe.old", TmpF_Ex)
-	copy_move(input_file, delte_me_fnam)
-	new_done_fnam = get_new_fname(input_file, TmpF_Ex, xt)
-	if os.path.exists(output_file):
-		copy_move(output_file, new_done_fnam)
+	except FileNotFoundError as e:
+		print(f"Error accessing file: {e}")
+	except PermissionError as e:
+		print(f"Permission denied when renaming files: {e}")
+	except Exception as e:
+		print(f"An error occurred: {e}")
 
-	print(msg)
+	return -1
 
-	return (inpf_sz - outf_sz)
 
 ##>>============-------------------<  End  >------------------==============<<##
 

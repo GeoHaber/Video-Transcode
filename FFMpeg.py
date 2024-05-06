@@ -32,20 +32,19 @@ print( version )
 ##==============-------------------   End   -------------------==============##
 
 @perf_monitor
-def extract_file_info(input_file):
-	return 1
+def extract_file_info(input_file, debug=False):
 	cmd = ['ffprobe',
-				'-hide_banner',
-				'-analyzeduration',	'100000000',
-				'-probesize',		 '50000000',
-				'-v', 'error',		# XXX quiet, panic, fatal, error, warning, info, verbose, de_bug, trace
-				'-of','json',		# XXX default, csv, xml, flat, ini
-					'-show_format',
-					'-show_programs',
-					'-show_streams',
-					'-show_data',
-#					'-show_error',
-				'-i', input_file]
+		   '-hide_banner',
+		   '-analyzeduration', '100000000',
+		   '-probesize', '50000000',
+		   '-v', 'error',
+		   '-of', 'json',
+		   '-show_format',
+		   '-show_programs',
+		   '-show_streams',
+		   '-show_data',
+#                    '-show_error',
+		   '-i', input_file]
 	try:
 		result = SP.run(cmd, capture_output=True, text=True, errors='ignore', encoding='utf-8')
 		output = json.loads(result.stdout)
@@ -53,24 +52,22 @@ def extract_file_info(input_file):
 		# Use .get() method with default values
 		format_info = output.get('format', {})
 		if not format_info :
-			msj = f"File: {input_file} Has no format\n{output}"
-			print (msj)
-			choice = input("Move = y ? ").lower
-			if choice == 'y':
-				if (copy_move( input_file, Excepto, False, True )):
-					print("Done")
-			return 0.0
-		else :
-			duration    = float(format_info.get('duration', 0.0))
+			raise ValueError(f"File '{input_file}' has no format information")
 
-		if de_bug : print (f"F: {input_file} = {duration}" )
+		duration = float(format_info.get('duration', 0.0))
+		if debug:
+			print(f"Duration of {input_file}: {duration}")
 		return duration
 
-	except (SP.SubprocessError, json.JSONDecodeError) as e:
-		msj = f"extract_file_info\nError: {e}\nFile: {input_file}\nCopy to {Excepto}\n" # \nFFprob: {cmd}
-		print ( msj )
-		copy_move(input_file, Excepto, True)
-		return 0.0
+	except FileNotFoundError:
+		raise FileNotFoundError(f"Input file '{input_file}' not found")
+	except SP.CalledProcessError as e:
+		raise SP.CalledProcessError(f"Error executing ffprobe command for file '{input_file}': {e}")
+	except json.JSONDecodeError as e:
+		raise json.JSONDecodeError(f"Error decoding JSON output for file '{input_file}': {e}")
+
+	except Exception as e:
+		raise Exception(f"Error processing file '{input_file}': {e}")
 
 ##>>============-------------------<  End  >------------------==============<<##
 #@perf_monitor
@@ -86,8 +83,8 @@ def ffprobe_run(input_file, execu=ffprob, de_bug=False) -> dict:
 	cmd = [execu, '-hide_banner',
 					'-analyzeduration', '100000000',
 					'-probesize',         '50000000',
-					'-v', 'error',		# XXX quiet, panic, fatal, error, warning, info, verbose, de_bug, trace
-					'-of','json',		# XXX default, csv, xml, flat, ini
+					'-v', 'error',        # XXX quiet, panic, fatal, error, warning, info, verbose, de_bug, trace
+					'-of','json',        # XXX default, csv, xml, flat, ini
 						'-show_programs',
 						'-show_format',
 						'-show_streams',
@@ -115,7 +112,7 @@ def ffprobe_run(input_file, execu=ffprob, de_bug=False) -> dict:
 
 # XXX:  Returns encoded filename file_name
 @perf_monitor
-def ffmpeg_run(input_file: str, ff_com: str, skip_it: bool, execu: str = ffmpeg, de_bug: bool = False, max_retries: int = 2, retry_delay: int = 3 ) -> str:
+def ffmpeg_run(input_file: str, ff_com: str, skip_it: bool, execu: str = "ffmpeg", de_bug: bool = False, max_retries: int = 2, retry_delay: int = 3) -> str:
 	"""Create command line, run ffmpeg then retries and runs again if fails"""
 
 	msj = sys._getframe().f_code.co_name
@@ -128,11 +125,15 @@ def ffmpeg_run(input_file: str, ff_com: str, skip_it: bool, execu: str = ffmpeg,
 
 	print(f"  +{msj} Start: {TM.datetime.now():%T}")
 
-	file_name, _	= os.path.splitext(os.path.basename(input_file))
-	out_file		= os.path.normpath('_' + stmpd_rad_str(7, file_name[0:20]))
-	out_file		= re.sub(r'[^\w\s_-]+', '', out_file).strip().replace(' ', '_') + TmpF_Ex
+	file_name, _    = os.path.splitext(os.path.basename(input_file))
+	out_file        = os.path.normpath('_' + stmpd_rad_str(7, file_name[0:20]))
+	out_file        = re.sub(r'[^\w\s_-]+', '', out_file).strip().replace(' ', '_') + TmpF_Ex
 
-	ffmpeg_vers =	SP.check_output(["ffmpeg", "-version"]).decode("utf-8").splitlines()[0].split()[2]
+	try:
+		ffmpeg_vers = SP.check_output([execu, "-version"]).decode("utf-8").splitlines()[0].split()[2]
+	except SP.CalledProcessError as e:
+		print(f"Error getting ffmpeg version: {e}")
+		return ''
 
 	ff_head = [execu, "-thread_queue_size", "24", "-i", input_file, "-hide_banner"]
 # XXX: Disable Hardware acceleation for short vid
@@ -140,14 +141,14 @@ def ffmpeg_run(input_file: str, ff_com: str, skip_it: bool, execu: str = ffmpeg,
 #    ff_head = [execu, '-ss', '00:06:00', "-thread_queue_size", "24", "-i", input_file, "-t", "00:0:45" ]
 
 	ff_tail = [
-		"-metadata",	f"title={file_name} x256",
-		"-metadata",	f"comment={Skip_key}",
-		"-metadata",	"copyright=2023 Me",
-		"-metadata",	"author=Encoded by the One and only GeoHab",
-		"-metadata",	f"encoder=ffmpeg {ffmpeg_vers}",
-		"-movflags",	"+faststart",
-		"-fflags"  ,	"+fastseek",
-		"-fflags",		"+genpts",
+		"-metadata",    f"title={file_name} x256",
+		"-metadata",    f"comment={Skip_key}",
+		"-metadata",    "copyright=2023 Me",
+		"-metadata",    "author=Encoded by the One and only GeoHab",
+		"-metadata",    f"encoder=ffmpeg {ffmpeg_vers}",
+		"-movflags",    "+faststart",
+		"-fflags"  ,    "+fastseek",
+		"-fflags",        "+genpts",
 		"-y", out_file,
 	]
 
@@ -160,25 +161,20 @@ def ffmpeg_run(input_file: str, ff_com: str, skip_it: bool, execu: str = ffmpeg,
 #        breakpoint()  # Set a breakpoint here
 		# XXX: not the first time :(
 		if attempt > 0 :
-			print (f" Attempt: = {attempt} ")
+			print(f"Attempt: {attempt}")
 			ff_head = [execu, "-report", "-loglevel", "verbose", "-i", input_file, "-hide_banner"]
-			todo = ff_head + ff_com + ff_tail
-			msj  = f"   {msj} Failed\n   Retry: {attempt} of {max_retries} in {retry_delay} seconds..."
-			msj += f"\n\nH:{ff_head}\nC:{ff_com}\nT:{ff_tail}\n\n"
-			print (msj)
 			time.sleep(retry_delay)
 
 		todo = ff_head + ff_com + ff_tail
-		if run_ffm(todo, de_bug=attempt):
+		if run_ffm(todo, de_bug=de_bug):
 #            end_t = time.perf_counter()
 #            print(f'  -End: {TM.datetime.now():%T}\tTotal: {hm_time(end_t - str_t)}')
 #            p.nice(psutil.NORMAL_PRIORITY_CLASS)
 			return out_file
 		elif attempt == max_retries:
-			msj += f"Error failed attempt {attempt}"
-			print (msj)
+			print(f"Error: Failed attempt {attempt}")
+			raise Exception(f"Failed after {max_retries} attempts.")
 #    p.nice(psutil.NORMAL_PRIORITY_CLASS)
-			raise Exception( msj)
 
 	return None  # Return None explicitly if the loop completes without returning a value
 
@@ -191,7 +187,7 @@ def run_ffm(args, de_bug=False):
 	if not args:
 		print(f"{msj} Exit no args = {args}")
 		return False
-#	de_bug = True
+#    de_bug = True
 	try :
 		if de_bug:
 			print(f"\n{msj} debug mode\n{' '.join(args)}\n")
@@ -265,8 +261,8 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 
 	nb_streams  = int(      _Format.get('nb_streams',   0) )
 	nb_programs = int(      _Format.get('nb_programs',  0) )
-	filename    =           _Format.get('filename',     'No File Name')
 	size        =           _Format.get('size',         0)
+	filename    =           _Format.get('filename',     'No File Name')
 
 	f_comment   =           _Format.get('tags',         {}).get('comment', 'No_comment')
 	title       =           _Format.get('tags',         {}).get('title', 'No_title')
@@ -314,6 +310,7 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 
 	# Check for skip condition
 	_, ext = os.path.splitext(input_file)
+
 	f_skip = (f_comment == Skip_key) and (ext == '.mp4')
 
 	if f_skip:
@@ -328,7 +325,8 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 	if video_streams:
 		ff_video, v_skip = parse_video(video_streams, de_bug)
 		ff_com.extend(ff_video)
-		skip_it = v_skip or f_skip
+		skip_it = f_skip or v_skip
+		if de_bug : print (f"\nSkip={skip_it}, Fskip ={f_skip}, Vskip ={v_skip}\n" )
 	else :
 		msj += f"\nNo Video in: {input_file}\n"
 		print(msj)
@@ -338,6 +336,7 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 		ff_audio, a_skip = parse_audio(audio_streams, de_bug)
 		ff_com.extend(ff_audio)
 		skip_it = skip_it and a_skip
+		if de_bug : print (f"\nSkip={skip_it}, Askip = {a_skip}\n" )
 	else :
 		msj += f"\nNo Audio in: {input_file}\n"
 		print(msj)
@@ -347,15 +346,18 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 		ff_subtl, s_skip = parse_subtl(subtl_streams, de_bug)
 		ff_com.extend(ff_subtl)
 		skip_it = skip_it and s_skip
+		if de_bug : print (f"\nSkip={skip_it}, Sskip = {s_skip}\n" )
 	else :
-		print( f"    | No Subtitle   |")
-		# XXX: TBD Add subtitle from file if available
+		ff_subtl,s_skip  = add_subtl_from_file(de_bug=True)
+		ff_com.extend(ff_subtl)
+		skip_it = skip_it and s_skip
 
 	if datax_streams:
 		ff_datat, d_skip = parse_extrd(datax_streams, de_bug)
-		ff_com.extend(ff_datat)
-		d_skip = True	# XXX: Avoid reencode
-		skip_it = skip_it or d_skip
+	#	ff_com.extend(ff_datat)
+		d_skip = True    # XXX: Avoid reencode
+		skip_it = skip_it and d_skip
+		if de_bug : print (f"\nSkip={skip_it}, Dskip = {d_skip}\n" )
 
 	if de_bug:
 		print(f"FFcom: {ff_com}\nSkip: {skip_it}")
@@ -363,6 +365,33 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 	return ff_com, skip_it
 
 ##>>============-------------------<  End  >------------------==============<<##
+
+def add_subtl_from_file(de_bug):
+	print("    | No Subtitle   |")
+	directory = os.getcwd()
+	largest_file = None
+
+	extensions = ['.srt', '.ass', '.sub']
+	for file in os.listdir(directory):
+		if any(file.endswith(ext) for ext in extensions):
+			filepath = os.path.join(directory, file)
+            # Directly compare file sizes here, updating largest_file if the current file is larger
+			if not largest_file or os.path.getsize(filepath) > os.path.getsize(largest_file):
+				largest_file = filepath
+
+	if largest_file:
+		if de_bug:
+			print(f"    Include subtitle file: {largest_file}")
+        # Return subtitle arguments and the indication that we found a subtitle file (no need to skip)
+		return ['-vf', f"subtitles='{largest_file}'"], False
+	else:
+		if de_bug:
+			print("    | No external subtitle file found |")
+        # Return empty arguments and True to indicate skipping subtitle addition
+		return [], True
+
+##>>============-------------------<  End  >------------------==============<<##
+
 
 # Define a helper function to select the appropriate encoder and options
 def get_encoder_options(codec_name, src_pix_fmt, use_hw_accel):
@@ -397,10 +426,10 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 	global glb_totfrms
 
 	ff_video = []
-	skip_it = False
 
 	for indx, this_vid in enumerate(strm_in):
 		ff_vid = []
+		skip_it = False
 		extra = ''
 
 		if 'codec_name' not in this_vid :
@@ -455,12 +484,12 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 			ff_vid = ['-map', f'0:v:{indx}', f'-c:v:{indx}']
 			# Determine if codec copy or conversion is needed, and update ff_vid accordingly
 			if codec_name == 'hevc':
-				max_vid_btrt = 3800000
-#				print ( hm_sz( max_vid_btrt ) )
+				max_vid_btrt = 4800000
+#                print ( hm_sz( max_vid_btrt ) )
 				if avbpp < 8 and _vi_btrt < max_vid_btrt :
 					extra += ' => Copy'
-					skip_it = True
 					ff_vid.extend(['copy'])
+					skip_it = True
 				else:
 					extra += f' |Reduce Avbpp {avbpp:>3} & Btrt: {hm_sz(_vi_btrt):>6}|'
 					encoder_options = get_encoder_options(codec_name, this_vid['pix_fmt'], use_hw_accel)
@@ -482,9 +511,8 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 
 			# Apply scaling for anything larger than HD
 			if output in ["2K", "4K", "8K"]:
-				skip_it = False
 				nw = 1920
-				nh = round((nw / vid_width) * vid_heigh)
+				nh = round( (nw / vid_width) * vid_heigh / 2) * 2  # Ensure nh is always even
 				ff_vid = [
 					'-map', f'0:v:{indx}',
 					f'-c:v:{indx}', 'libx265',  # Specify the H.265 codec here
@@ -493,6 +521,7 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 					'-vf', f'scale={nw}:{nh}',
 				]
 				extra = f' {output} Scale {vid_width}x{vid_heigh} to {nw}x{nh}'
+				skip_it = False
 
 			if handler_name == 'VideoHandler x265':
 				extra += f"  {handler_name}"
@@ -508,7 +537,7 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 		skip_it  &= skip_it
 
 	if de_bug :
-		print (f"V:= {ff_video}")
+		print (f"V:= {ff_video} Skip = {skip_it}")
 
 	if skip_it :
 		print ("   .Skip Video" )
@@ -645,7 +674,7 @@ def parse_subtl(streams_in, de_bug=False):
 		index        = this_sub.get('index', -1)
 		codec_name   = this_sub.get('codec_name', 'unknown?')
 		codec_type   = this_sub.get('codec_type', 'unknown?')
-		disposition	 = this_sub.get('disposition', {'forced': 0, 'default': 0})
+		disposition     = this_sub.get('disposition', {'forced': 0, 'default': 0})
 
 		tags         = this_sub.get('tags', {})
 		handler_name = tags.get('handler_name', 'Unknown')
@@ -714,7 +743,7 @@ def parse_extrd(streams_in, de_bug=False):
 #        if de_bug:    print(f"    +{msj} Start: {TM.datetime.now():%T}\n {json.dumps(this_dat, indent=2)}")
 		ff_dd = []
 
-		index			= this_dat.get('index', -1)
+		index            = this_dat.get('index', -1)
 		codec_name      = this_dat.get('codec_name', '')
 		codec_lng_nam   = this_dat.get('codec_long_name', '')
 		codec_type      = this_dat.get('codec_type', '')
@@ -856,12 +885,12 @@ def zabrain_run(input_file: str, mta_dta: Dict[str, any], de_bug: bool= False ) 
 
 # Precompile regular expressions
 regex_dict = {
-	"bitrate":	re.compile(r"bitrate=\s*([0-9\.]+)"),
-	"frame":	re.compile(r"frame=\s*([0-9]+)"),
-	"speed":	re.compile(r"speed=\s*([0-9\.]+)"),
-	"size":		re.compile(r"size=\s*([0-9]+)"),
-	"time":		re.compile(r"time=\S([0-9:]+)"),
-	"fps":		re.compile(r"fps=\s*([0-9]+)"),
+	"bitrate":    re.compile(r"bitrate=\s*([0-9\.]+)"),
+	"frame":    re.compile(r"frame=\s*([0-9]+)"),
+	"speed":    re.compile(r"speed=\s*([0-9\.]+)"),
+	"size":        re.compile(r"size=\s*([0-9]+)"),
+	"time":        re.compile(r"time=\S([0-9:]+)"),
+	"fps":        re.compile(r"fps=\s*([0-9]+)"),
 }
 
 def show_progrs(line_to, sy, de_bug=False):
