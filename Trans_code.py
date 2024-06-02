@@ -12,13 +12,14 @@ from My_Utils	import get_new_fname, copy_move, hm_sz, hm_time, Tee
 from concurrent.futures import ThreadPoolExecutor
 #from sklearn.cluster import DBSCAN
 
-#de_bug = True
+de_bug = False
 Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')}_{time.strftime('%Y_%j_%H-%M-%S')}.log"
 
 # XXX: Sort order True = Biggest first, False = Smallest first
 Sort_Order = True
 
 #
+#Root = r"C:\Users\Geo\Desktop\Except"
 ''' Global Variables '''
 glb_totfrms = 0
 glb_vidolen = 0
@@ -98,10 +99,11 @@ def perform_clustering(data: List[List[float]], _lst: List[List]) -> None:
 @perf_monitor
 def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: bool = False ) -> Optional[List[List]]:
 	'''Create the list of Files from "root with xtnsio" to Process '''
+	print (f"Root: {root}\tSize: {hm_sz(get_tree_size(root))}\n")
 	msj = sys._getframe().f_code.co_name
 	str_t = time.perf_counter()
 
-	msj += f" Start: {time.strftime('%H:%M:%S')}\tRoot: {root}\tSize: {hm_sz(get_tree_size(root))}"
+	msj += f" Start: {time.strftime('%H:%M:%S')}"
 	print (msj)
 
 	# Validate inputs
@@ -138,10 +140,10 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 								future = executor.submit(extract_file_info, f_path)
 								# Store the future result along with the file information
 								futures.append((f_path, file_s, ext, cur_dir, dirs, future))
-							else:
-								msj= f"\nSkip {f_path}\nSz:{file_s} path L {len(f_path)}"
+							elif ext:
+								msj= f"\nSkip: Ex: {ext} Sz: {hm_sz(file_s)} {f_path} path L {len(f_path)}"
 								print (msj)
-								copy_move(f_path, Excepto, False)
+#                                copy_move(f_path, Excepto, False)
 						except Exception as e:
 							print (f"Error getting size of file {f_path}: {e}")
 							continue
@@ -190,44 +192,47 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 
 @perf_monitor
 def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> int:
-	"""Take care of renaming temp files etc.."""
-	msj = sys._getframe().f_code.co_name
+	"""Take care of renaming temp files etc."""
+	function_name = sys._getframe().f_code.co_name
 
 	if skip_it:
 		return 0
 
-	print(f"  +{msj} Start: {time.strftime('%H:%M:%S')}")
+	print(f"  +{function_name} Start: {time.strftime('%H:%M:%S')}")
 
 
 	try:
 		if not os.path.exists(input_file):
 			print(f"Input file '{input_file}' does not exist.")
 			return -1
-		inpf_sz = os.path.getsize(input_file)
+		input_file_size = os.path.getsize(input_file)
 
 		# Check if output file is ready
 		if not os.path.exists(output_file):
 			print(f"Output file '{output_file}' does not exist.")
 			return -1
 
-		outf_sz = os.path.getsize(output_file)
+		output_file_size = os.path.getsize(output_file)
 
-		ratio = round(100 * ((outf_sz - inpf_sz) / inpf_sz), 1)
-		extra = "+ Gain:" if ratio > 0 else "- Lost:"
-		msg = f"    Size Was: {hm_sz(inpf_sz)} Is: {hm_sz(outf_sz)} {extra} {hm_sz(abs(inpf_sz - outf_sz))} {ratio:>8}%"
+		ratio = round(100 * ((output_file_size - input_file_size) / input_file_size), 5)
+		extra = "+ Gain:" if ratio > 0 else (" Same:" if ratio == 0 else "- Lost:")
+		msg = f"    Size Was: {hm_sz(input_file_size)} Is: {hm_sz(output_file_size)} {extra} {hm_sz(abs(input_file_size - output_file_size))} = {ratio}%"
 
 		if   ratio > 120:
-			msg += " ! Bigger !"
+			msg += " ! Much Bigger !"
 		elif ratio < -100:
-			msg += " ! Smaller !"
-		delete_me_file = input_file + "_DeletMe.old"
-		os.rename(input_file, delete_me_file)
-		input_file += '.mp4'
-		os.rename(output_file, input_file)
-		msg += " Successfully renamed"
+			msg += " ! Much Smaller !"
+		final_output_file = input_file if input_file.endswith('.mp4') else input_file.rsplit('.', 1)[0] + '.mp4'
+		temp_file = input_file + "_Delet_.old"
+		os.rename(input_file, temp_file)
+
+		shutil.move(output_file, final_output_file)
+		msg += "  Success"
 		print(msg)
 
-		return inpf_sz - outf_sz
+		if not debug:
+			os.remove(temp_file)
+		return input_file_size - output_file_size
 
 	except FileNotFoundError as e:
 		print(f"Error accessing file: {e}")
@@ -292,6 +297,8 @@ if __name__ == '__main__':
 				try:
 					all_good = ffprobe_run(file_p, ffprob, de_bug)
 					all_good, skip_it = zabrain_run(file_p, all_good, de_bug)
+					if ext != ".mp4":
+						skip_it = False
 					if skip_it:
 						print(f"\033[91m   | Skip ffmpeg_run |\033[0m")
 						skipt += 1
@@ -313,7 +320,7 @@ if __name__ == '__main__':
 
 					if de_bug:
 						input('Next')
-					if (copy_move(file_p, Excepto, False, True)):
+					if (copy_move(file_p, Excepto, True, False)):
 						print("Done")
 					else:
 						input("ValuError WTF")
@@ -324,7 +331,7 @@ if __name__ == '__main__':
 					print(msj)
 					if de_bug:
 						input('Next')
-					if (copy_move(file_p, Excepto, False, True)):
+					if (copy_move(file_p, Excepto, True, False)):
 						print("Done")
 					else:
 						input("Exception WTF")

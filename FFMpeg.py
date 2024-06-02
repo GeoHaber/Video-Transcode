@@ -26,53 +26,83 @@ if not os.path.exists(ffmpeg) or not os.path.exists(ffprob) :
 	raise OSError
 
 #SP.run( [ffmpeg, '-version'] )
-version = f"Ffmpeg version: {SP.run(['ffmpeg', '-version'], stdout=SP.PIPE).stdout.decode('utf-8')[14:20]} (:)"
+version = f"Ffmpeg version: {SP.run(['ffmpeg', '-version'], stdout=SP.PIPE).stdout.decode('utf-8')[30:33]} (:)"
 print( version )
 
 ##==============-------------------   End   -------------------==============##
 
 @perf_monitor
-def extract_file_info(input_file, debug=False):
-	cmd = ['ffprobe',
-		   '-hide_banner',
-		   '-analyzeduration', '100000000',
-		   '-probesize', '50000000',
-		   '-v', 'error',
-		   '-of', 'json',
-		   '-show_format',
-		   '-show_programs',
-		   '-show_streams',
-		   '-show_data',
-#                    '-show_error',
-		   '-i', input_file]
+def extract_file_info(input_file: str, debug: bool = True) -> float:
+	"""
+	Extracts the duration of a media file using ffprobe.
+
+	Args:
+		input_file (str): Path to the input file.
+		debug (bool, optional): Enables debug prints. Defaults to True.
+
+	  Returns:
+		float: Duration of the media file in seconds (0.0 if an error occurs).
+
+	  Raises:
+		FileNotFoundError: If the input file is not found.
+		ValueError: If ffprobe reports an error or duration cannot be extracted.
+	"""
+	if debug :
+		return 1
+
+	cmd =	[ ffprob, '-hide_banner', '-i', input_file,
+			'-analyzeduration',	'100000000',
+			'-probesize', 		'50000000',
+			'-v', 'error',       # XXX quiet, panic, fatal, error, warning, info, verbose, de_bug, trace
+			'-of','json',        # XXX default, csv, xml, flat, ini
+			'-show_format',
+			'-show_programs',
+			'-show_streams',
+			'-show_data',
+			]
+
 	try:
 		result = SP.run(cmd, capture_output=True, text=True, errors='ignore', encoding='utf-8')
-		output = json.loads(result.stdout)
+		output = json.loads(result.stdout.decode('utf-8'))
 
-		# Use .get() method with default values
 		format_info = output.get('format', {})
-		if not format_info :
-			raise ValueError(f"File '{input_file}' has no format information")
-
+		if not format_info or 'error' in format_info:
+			error_msg = output.get('error') if output else "ffprobe failed (no JSON output)"
+			print (f"ffprobe reported an error: {error_msg}")
+			choice = input("Copy file = y").lower
+			if choice == 'y':
+				if (copy_move( input_file, Excepto, True, True )):
+					print("Done")
+			raise ValueError(f"ffprobe error: {error_msg}")
 		duration = float(format_info.get('duration', 0.0))
 		if debug:
 			print(f"Duration of {input_file}: {duration}")
 		return duration
 
-	except FileNotFoundError:
-		raise FileNotFoundError(f"Input file '{input_file}' not found")
-	except SP.CalledProcessError as e:
-		raise SP.CalledProcessError(f"Error executing ffprobe command for file '{input_file}': {e}")
-	except json.JSONDecodeError as e:
-		raise json.JSONDecodeError(f"Error decoding JSON output for file '{input_file}': {e}")
-
-	except Exception as e:
-		raise Exception(f"Error processing file '{input_file}': {e}")
+	except (FileNotFoundError, SP.CalledProcessError, SP.TimeoutExpired, json.JSONDecodeError) as e:
+		msj += f" Error {e} getting metadata from file \n{input_file}"
+		raise Exception(msj) from e
+	return 0.0
 
 ##>>============-------------------<  End  >------------------==============<<##
-#@perf_monitor
-def ffprobe_run(input_file, execu=ffprob, de_bug=False) -> dict:
-	''' Run ffprobe returns a Json file with the info '''
+
+@perf_monitor
+def ffprobe_run(input_file: str, execu=ffprob, de_bug=False) -> dict:
+	"""
+	Runs ffprobe to extract media information from a file and returns the parsed JSON data.
+
+	Args:
+		input_file (str): Path to the input media file.
+		execu (str, optional): Path to the ffprobe executable (defaults to 'ffprob').
+		de_bug (bool, optional): Enables debug verbosity for ffprobe (if supported). Defaults to False.
+
+	Returns:
+		dict: Parsed JSON data containing the media information extracted by ffprobe.
+
+	Raises:
+		FileNotFoundError: If the input file is not found.
+		ValueError: If ffprobe reports an error or the JSON output cannot be decoded.
+	"""
 	msj = sys._getframe().f_code.co_name
 	print(f"  +{msj} Start: {TM.datetime.now():%T}")
 	str_t = time.perf_counter()
@@ -80,10 +110,10 @@ def ffprobe_run(input_file, execu=ffprob, de_bug=False) -> dict:
 	if not input_file :
 		raise FileNotFoundError("No input_file provided.")
 
-	cmd = [execu, '-hide_banner',
+	cmd = [execu, '-hide_banner', '-i', input_file,
 					'-analyzeduration', '100000000',
-					'-probesize',         '50000000',
-					'-v', 'error',        # XXX quiet, panic, fatal, error, warning, info, verbose, de_bug, trace
+					'-probesize',        '50000000',
+					'-v', 'error',       # XXX quiet, panic, fatal, error, warning, info, verbose, de_bug, trace
 					'-of','json',        # XXX default, csv, xml, flat, ini
 						'-show_programs',
 						'-show_format',
@@ -91,20 +121,21 @@ def ffprobe_run(input_file, execu=ffprob, de_bug=False) -> dict:
 						'-show_error',
 						'-show_data',
 						'-show_private_data',
-					'-i', input_file]
-
+					]
 	try:
 		out = SP.run(cmd, stdout=SP.PIPE, check=True)
 		jsn_ou = json.loads(out.stdout.decode('utf-8'))
 
-		if 'error' in jsn_ou:
-			print(f"{msj} - ffprobe reported an error: {jsn_ou['error']}")
-			raise ValueError(f"ffprobe error: {jsn_ou['error']}")
+		if not jsn_ou or 'error' in jsn_ou:
+			error_msg = json_data.get('error') if json_data else "ffprobe failed (no JSON output)"
+			print (f"ffprobe reported an error: {error_msg}")
+			raise ValueError(f"ffprobe error: {error_msg}")
 
-	except (SP.CalledProcessError, SP.TimeoutExpired, json.JSONDecodeError) as e:
+		return jsn_ou
+
+	except (FileNotFoundError, SP.CalledProcessError, SP.TimeoutExpired, json.JSONDecodeError) as e:
 		msj += f" Error {e} getting metadata from file \n{input_file}"
 		raise Exception(msj) from e
-	end_t = time.perf_counter()
 
 	return jsn_ou
 ##>>============-------------------<  End  >------------------==============<<##
@@ -113,15 +144,11 @@ def ffprobe_run(input_file, execu=ffprob, de_bug=False) -> dict:
 # XXX:  Returns encoded filename file_name
 @perf_monitor
 def ffmpeg_run(input_file: str, ff_com: str, skip_it: bool, execu: str = "ffmpeg", de_bug: bool = False, max_retries: int = 2, retry_delay: int = 3) -> str:
-	"""Create command line, run ffmpeg then retries and runs again if fails"""
-
+	"""Create command line, run ffmpeg then retrys again if fails"""
 	msj = sys._getframe().f_code.co_name
-	str_t = time.perf_counter()
-
 	if not input_file or skip_it:
 		msj = f"{msj} Skip={skip_it} = {input_file}"
-	#    print(msj)
-		return ''
+		return None
 
 	print(f"  +{msj} Start: {TM.datetime.now():%T}")
 
@@ -136,48 +163,33 @@ def ffmpeg_run(input_file: str, ff_com: str, skip_it: bool, execu: str = "ffmpeg
 		return ''
 
 	ff_head = [execu, "-thread_queue_size", "24", "-i", input_file, "-hide_banner"]
-# XXX: Disable Hardware acceleation for short vid
-#    ffmpeg -ss 00:01:00 -i input.mp4 -t 00:00:30  # XXX: start at 1 minute and encode only 30 seconds
-#    ff_head = [execu, '-ss', '00:06:00', "-thread_queue_size", "24", "-i", input_file, "-t", "00:0:45" ]
 
 	ff_tail = [
-		"-metadata",    f"title={file_name} x256",
-		"-metadata",    f"comment={Skip_key}",
-		"-metadata",    "copyright=2023 Me",
-		"-metadata",    "author=Encoded by the One and only GeoHab",
-		"-metadata",    f"encoder=ffmpeg {ffmpeg_vers}",
-		"-movflags",    "+faststart",
-		"-fflags"  ,    "+fastseek",
-		"-fflags",        "+genpts",
+		"-metadata", f"title={file_name} x256",
+		"-metadata", f"comment={Skip_key}",
+		"-metadata", "copyright=2023 Me",
+		"-metadata", "author=Encoded by the One and only GeoHab",
+		"-metadata", f"encoder=ffmpeg {ffmpeg_vers}",
+		"-movflags", "+faststart",
+		"-fflags", "+fastseek",
+		"-fflags", "+genpts",
 		"-y", out_file,
 	]
 
-#    p = psutil.Process()
-#    p.nice(psutil.HIGH_PRIORITY_CLASS)
-#    cpu_count = psutil.cpu_count(logical=False)
-#    p.cpu_affinity(list(range(cpu_count)))
-
 	for attempt in range(max_retries + 1):
-#        breakpoint()  # Set a breakpoint here
-		# XXX: not the first time :(
-		if attempt > 0 :
+		if attempt > 0:
 			print(f"Attempt: {attempt}")
 			ff_head = [execu, "-report", "-loglevel", "verbose", "-i", input_file, "-hide_banner"]
 			time.sleep(retry_delay)
 
 		todo = ff_head + ff_com + ff_tail
 		if run_ffm(todo, de_bug=de_bug):
-#            end_t = time.perf_counter()
-#            print(f'  -End: {TM.datetime.now():%T}\tTotal: {hm_time(end_t - str_t)}')
-#            p.nice(psutil.NORMAL_PRIORITY_CLASS)
 			return out_file
 		elif attempt == max_retries:
 			print(f"Error: Failed attempt {attempt}")
 			raise Exception(f"Failed after {max_retries} attempts.")
-#    p.nice(psutil.NORMAL_PRIORITY_CLASS)
 
-	return None  # Return None explicitly if the loop completes without returning a value
-
+	return None
 ##>>============-------------------<  End  >------------------==============<<##
 @perf_monitor
 def run_ffm(args, de_bug=False):
@@ -348,7 +360,7 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 		skip_it = skip_it and s_skip
 		if de_bug : print (f"\nSkip={skip_it}, Sskip = {s_skip}\n" )
 	else :
-		ff_subtl,s_skip  = add_subtl_from_file(de_bug=True)
+		ff_subtl, s_skip  = add_subtl_from_file(input_file, de_bug=True)
 		ff_com.extend(ff_subtl)
 		skip_it = skip_it and s_skip
 
@@ -365,30 +377,50 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 	return ff_com, skip_it
 
 ##>>============-------------------<  End  >------------------==============<<##
+def add_subtl_from_file(input_file: str, de_bug: bool) -> tuple[list, bool]:
+# XXX: Needs work it breacks the ffmpeg syntax  combined with audio and video perhaps stand alone ?
+	"""
+	Searches for a subtitle file in the same directory as the input file
+	and prompts for confirmation before adding it.
 
-def add_subtl_from_file(de_bug):
-	print("    | No Subtitle   |")
-	directory = os.getcwd()
+	Args:
+		input_file (str): Path to the input file.
+		de_bug (bool): Flag to enable debug messages.
+
+	Returns:
+		tuple: A tuple containing subtitle arguments (as a list) and a flag
+			indicating whether to skip subtitle addition (True) or not (False).
+	"""
+	print(f"    | No Subtitle |")
+
+	# Get the directory of the input file
+	directory = os.path.dirname(input_file)
+
 	largest_file = None
-
 	extensions = ['.srt', '.ass', '.sub']
+
 	for file in os.listdir(directory):
 		if any(file.endswith(ext) for ext in extensions):
 			filepath = os.path.join(directory, file)
-            # Directly compare file sizes here, updating largest_file if the current file is larger
+			# Directly compare file sizes here, updating largest_file if the current file is larger
 			if not largest_file or os.path.getsize(filepath) > os.path.getsize(largest_file):
 				largest_file = filepath
 
 	if largest_file:
 		if de_bug:
-			print(f"    Include subtitle file: {largest_file}")
-        # Return subtitle arguments and the indication that we found a subtitle file (no need to skip)
-		return ['-vf', f"subtitles='{largest_file}'"], False
+			print(f"\tExt subtitle file detected:\n    {largest_file}")
+			return [], True
+		if input("Add subtitles from this file (y/N)? ").lower() == "y":
+			# Return arguments for subtitles and indicate success (False)
+			ffcomand = '-vf', f"subtitles='{largest_file}'"
+#			return [ffcomand], False
+		else:
+			# User declined, indicate skipping subtitles (True)
+			return [], True
 	else:
 		if de_bug:
-			print("    | No external subtitle file found |")
-        # Return empty arguments and True to indicate skipping subtitle addition
-		return [], True
+			print("    | No External subtitle file found |")
+	return [], True
 
 ##>>============-------------------<  End  >------------------==============<<##
 
@@ -459,7 +491,7 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 		else :
 			# XXX: Estimate Average bits_per_pixel
 			glb_totfrms = round(frm_rate * glb_vidolen)
-			avbpp = 100000 * _vi_btrt / ( glb_totfrms * vid_width * vid_heigh )
+			avbpp = 100000 * _vi_btrt / (glb_totfrms * vid_width * vid_heigh) +1
 
 			if pix_fmt.endswith("10le") :
 				msj = f"{pix_fmt} 10 Bit"
@@ -556,24 +588,33 @@ def parse_audio(streams, de_bug=False):
 	all_skippable = True
 	audio_kept = False
 
+	english_streams = []
+	non_english_streams = []
+	previous_default = None
+	best_audio_stream = None
+
 	for indx, audio_stream in enumerate(streams):
 		stream_options = []
 		extra_info = ""
 		skip_current = False
 
-		index           = audio_stream.get('index', -1)
-		codec_name      = audio_stream.get('codec_name', None)
-		sample_rate     = audio_stream.get('sample_rate', None)
-		bitrate = int(    audio_stream.get('bit_rate', 0))
-		channels        = audio_stream.get('channels', -100)
+		index = audio_stream.get('index', -1)
+		codec_name = audio_stream.get('codec_name', None)
+		sample_rate = audio_stream.get('sample_rate', None)
+		bitrate = int(audio_stream.get('bit_rate', 0))
+		channels = audio_stream.get('channels', -100)
 
-		tags            = audio_stream.get('tags', {})
-		language        = tags.get('language', 'und')
-		handler_name    = tags.get('handler_name','Unknown')
+		tags = audio_stream.get('tags', {})
+		language = tags.get('language', 'und')
+		handler_name = tags.get('handler_name', 'Unknown')
 
-		disposition     = audio_stream.get('disposition', {})
-		dispo_forced    = disposition.get('forced', 0)
-		dispo_default   = disposition.get('default', 0)
+		disposition = audio_stream.get('disposition', {})
+		dispo_forced = disposition.get('forced', 0)
+		dispo_default = disposition.get('default', 0)
+
+		if dispo_default:
+			previous_default = audio_stream
+			extra_info += f" Previous default: {language} {channels}ch "
 
 		# Estimate bitrate if missing
 		if bitrate == 0:
@@ -590,6 +631,11 @@ def parse_audio(streams, de_bug=False):
 		copy_codec = codec_name in ('aac', 'vorbis', 'mp2', 'mp3') and channels <= 8
 		reduce_bitrate = bitrate > Max_a_btr
 
+		if language == 'eng':
+			english_streams.append((index, bitrate, channels, audio_stream))
+		else:
+			non_english_streams.append((index, bitrate, channels, audio_stream))
+
 		if keep_language:
 			audio_kept = True
 			if copy_codec:
@@ -601,10 +647,10 @@ def parse_audio(streams, de_bug=False):
 		elif not only_audio and not audio_kept:
 			stream_options = ['-map', f'0:a:{indx}', '-c:a', 'copy']
 			skip_current = True
-			audio_kept    = True
+			audio_kept = True
 		elif not only_audio:
 			stream_options = ['-map', f'-0:a:{indx}']
-			extra_info = f" Del: {language} | Remouve it"
+			extra_info = f" Del: {language} | Remove it"
 			skip_current = False
 		else:
 			stream_options = ['-map', f'0:a:{indx}']
@@ -623,23 +669,52 @@ def parse_audio(streams, de_bug=False):
 
 		# Metadata and disposition
 		if stream_options != ['-map', f'-0:a:{indx}']:  # Stream is not marked for deletion
-			if language == Default_lng :
-				stream_options.extend([ f'-metadata:s:a:{indx}', f'language={language}', f'-disposition:s:a:{indx}', '+default+forced' ])
-				extra_info += f" | Set {language} to +default"
-
 			if handler_name == "SoundHandler":
 				extra_info += f" handler_name: {handler_name}"
-			else :
+			else:
 				extra_info += f" handler_name: {handler_name} Change to: SoundHandler"
 				stream_options.extend([f"-metadata:s:a:{indx}", "handler_name=SoundHandler"])
 				skip_current = False
 
 		message = (f"    |<A:{indx:2}>|{codec_name:^8}|Br:{hm_sz(bitrate):>9}|{language}"
-					f"|Frq: {hm_sz(sample_rate, 'Hz'):>8}|Ch: {channels}|Dis: {dispo_default} Fr:{dispo_forced}| {extra_info}")
+				   f"|Frq: {hm_sz(sample_rate, 'Hz'):>8}|Ch: {channels}|Dis: {dispo_default} Fr:{dispo_forced}| {extra_info}")
 		print(f'\033[92m{message}\033[0m')
 
 		ffmpeg_audio_options += stream_options
 		all_skippable &= skip_current
+
+	# Select the best English stream based on highest bitrate
+	if english_streams:
+		best_english_stream = max(english_streams, key=lambda s: s[1])  # Prefer higher bitrate
+	else:
+		best_english_stream = None
+
+	# If no English streams, select the previous default or the best non-English stream based on highest bitrate
+	if best_english_stream:
+		best_stream = best_english_stream
+	elif previous_default:
+		best_stream = (previous_default.get('index', -1),
+					   int(previous_default.get('bit_rate', 0)),
+					   previous_default.get('channels', -100),
+					   previous_default)
+	else:
+		best_stream = max(non_english_streams, key=lambda s: s[1]) if non_english_streams else None
+
+	# Set the best stream as default and ensure only one stream is default
+	if best_stream:
+		index = best_stream[0]
+		best_audio_stream = best_stream[3]
+		language = best_audio_stream.get('tags', {}).get('language', 'und')
+		ffmpeg_audio_options.extend([f'-metadata:s:a:{index}', f'language={language}', f'-disposition:s:a:{index}', '+default'])
+		audio_kept = True
+		extra_info = f" {language} {best_stream[2]}ch {hm_sz(best_stream[1])}"
+#		print(f'\033[92m    New audio default: {extra_info} \033[0m')
+
+	# Ensure only one default stream is set
+	for indx, audio_stream in enumerate(streams):
+		if audio_stream != best_audio_stream:
+			index = audio_stream.get('index', -1)
+			ffmpeg_audio_options.extend([f'-disposition:s:a:{index}', '0'])
 
 	# Only if no audio stream was marked to be kept and there are streams available,
 	# do we default to copying the first audio stream.
@@ -650,8 +725,8 @@ def parse_audio(streams, de_bug=False):
 	if de_bug:
 		print(f"A:= {ffmpeg_audio_options}")
 
-	if all_skippable :
-		print ("   .Skip Audio" )
+	if all_skippable:
+		print("   .Skip Audio")
 
 	return ffmpeg_audio_options, all_skippable
 
@@ -674,7 +749,7 @@ def parse_subtl(streams_in, de_bug=False):
 		index        = this_sub.get('index', -1)
 		codec_name   = this_sub.get('codec_name', 'unknown?')
 		codec_type   = this_sub.get('codec_type', 'unknown?')
-		disposition     = this_sub.get('disposition', {'forced': 0, 'default': 0})
+		disposition  = this_sub.get('disposition', {'forced': 0, 'default': 0})
 
 		tags         = this_sub.get('tags', {})
 		handler_name = tags.get('handler_name', 'Unknown')
@@ -743,7 +818,7 @@ def parse_extrd(streams_in, de_bug=False):
 #        if de_bug:    print(f"    +{msj} Start: {TM.datetime.now():%T}\n {json.dumps(this_dat, indent=2)}")
 		ff_dd = []
 
-		index            = this_dat.get('index', -1)
+		index           = this_dat.get('index', -1)
 		codec_name      = this_dat.get('codec_name', '')
 		codec_lng_nam   = this_dat.get('codec_long_name', '')
 		codec_type      = this_dat.get('codec_type', '')
@@ -885,12 +960,12 @@ def zabrain_run(input_file: str, mta_dta: Dict[str, any], de_bug: bool= False ) 
 
 # Precompile regular expressions
 regex_dict = {
-	"bitrate":    re.compile(r"bitrate=\s*([0-9\.]+)"),
-	"frame":    re.compile(r"frame=\s*([0-9]+)"),
-	"speed":    re.compile(r"speed=\s*([0-9\.]+)"),
-	"size":        re.compile(r"size=\s*([0-9]+)"),
-	"time":        re.compile(r"time=\S([0-9:]+)"),
-	"fps":        re.compile(r"fps=\s*([0-9]+)"),
+	"bitrate": re.compile(r"bitrate=\s*([0-9\.]+)"),
+	"frame": re.compile(r"frame=\s*([0-9]+)"),
+	"speed": re.compile(r"speed=\s*([0-9\.]+)"),
+	"size": re.compile(r"size=\s*([0-9]+)"),
+	"time": re.compile(r"time=\S([0-9:]+)"),
+	"fps": re.compile(r"fps=\s*([0-9]+)"),
 }
 
 def show_progrs(line_to, sy, de_bug=False):
