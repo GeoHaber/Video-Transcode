@@ -1,21 +1,21 @@
-#Transcoding
-#H264 #H265 #HEVC #MPEG #transcode
+Transcoding Update
 
-The processing is done in a few steps:
+Supported almoust all video Formats: H.264, H.265/HEVC, MPEG, avi etc ...
 
-  1) Scan the directory pointed to by "WFolder" to build a list of files, while extracting some basic Info like size extension, date, etc ....
+The transcoding process involves several steps:
 
-While there are unprocessed files do:
+  Directory Scanning: Scan the directory specified by "WFolder" to create a list of files and gather basic information such as size, extension, and date.
 
-  2) Use Ffparse to parse the file, extract all Info about Video, Audio, Subtitle, etc.
+  File Parsing: Utilize Ffparse to parse each file and extract detailed information about the video, audio, and subtitles.
 
-  3) Check if hte file needs no conversion
+  Conversion Check: Determine if the file requires conversion.
 
-  4) Use the parsed results to figure out what needs to be done by FFZa_Brain to generate the proper Ffmpeg commands
+  FFMPEG Command Generation: Use the parsed data to guide FFZa_Brain in generating the appropriate Ffmpeg commands for processing.
 
-  5) Use the Ffmpeg commands generated to transcode both Audio and Video while copying or extracting the subtitles
+  Transcoding: Execute the Ffmpeg commands to transcode audio and video, while copying or extracting subtitles as needed.
 
-  6) Cleanup
+  Cleanup: Perform necessary cleanup tasks after transcoding.
 
-  7) Report results
-  
+  Reporting: Generate a report of the results.
+
+Enjoy
