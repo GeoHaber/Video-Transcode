@@ -14,11 +14,12 @@ import	datetime as TM
 import	platform
 import	traceback
 import	tracemalloc
+import	logging
 
 from	typing		import Union
 from	functools	import wraps
 
-import	logging
+#  DECORATORS
 
 
 # XXX: color codes: https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
@@ -240,58 +241,42 @@ def temperature ():
 
 ##>>============-------------------<  End  >------------------==============<<##
 
-#  CLASES
-class Tee(object):
-	RED_START = "\033[91m"  # ANSI escape code for red
-	COLOR_END = "\033[0m"   # ANSI escape code to reset color
+class Tee:
+    def __init__(self, *files, error_on=False):
+        self.files = files
+        self.error_on = error_on
+        self.original_stdout = sys.stdout
+        self.original_stderr = sys.stderr
 
-	def __init__(self, *files, error_on=False):
-		self.files = files
-		self.error_on = error_on  # Default is now False, so stderr is not captured unless specified
-		self.original_stdout = sys.stdout
-		self.original_stderr = sys.stderr
+    def write(self, obj):
+        if not isinstance(obj, str):
+            obj = str(obj)
 
-	def write(self, obj):
-		is_stderr = (obj is sys.stderr)
-		if not isinstance(obj, str):
-			obj = str(obj)
+        for file in self.files:
+            file.write(obj)
+            file.flush()
 
-		# Only process stderr if error_on is True
-		if is_stderr and self.error_on:
-			obj = self.RED_START + obj + self.COLOR_END
+    def flush(self):
+        for file in self.files:
+            file.flush()
 
-		for file in self.files:
-			# Check if error_on is True before writing stderr output
-			if file in (self.original_stdout, self.original_stderr):
-				if not is_stderr or (is_stderr and self.error_on):
-					file.write(obj)
-			else:
-				# Write to file without color codes
-				file.write(obj.replace(self.RED_START, '').replace(self.COLOR_END, ''))
-			file.flush()
+    def close(self):
+        for file in self.files:
+            if file not in (self.original_stdout, self.original_stderr):
+                file.close()
 
-	def flush(self):
-		for file in self.files:
-			file.flush()
+    def __enter__(self):
+        sys.stdout = self
+        if self.error_on:
+            sys.stderr = self
+        return self
 
-	def close(self):
-		for file in self.files:
-			if file not in (self.original_stdout, self.original_stderr):
-				file.close()
-
-	def __enter__(self):
-		sys.stdout = self
-		if self.error_on:  # Only set sys.stderr to self if error_on is True
-			sys.stderr = self
-		return self
-
-	def __exit__(self, exc_type, exc_value, traceback):
-		sys.stdout = self.original_stdout
-		if self.error_on:
-			sys.stderr = self.original_stderr
-		self.close()
-
-
+    def __exit__(self, exc_type, exc_value, traceback):
+        sys.stdout = self.original_stdout
+        if self.error_on:
+            sys.stderr = self.original_stderr
+        self.close()
+##>>============-------------------<  End  >------------------==============<<##
 
 class RunningAverage:
 	''' Compute the running average of a value '''
@@ -460,7 +445,6 @@ def flatten_list_of_lists(lst):
 	return result
 
 ##==============-------------------   End   -------------------==============##
-
 
 def ordinal(n: int ) -> str :
 	if 10 <= n % 100 <= 20:
