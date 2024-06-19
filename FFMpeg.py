@@ -66,7 +66,7 @@ def ffprobe_run(input_file: str, execu=ffprob, de_bug=False) -> dict:
 	cmd = [execu, '-hide_banner', '-i', input_file,
 					'-analyzeduration', '100000000',
 					'-probesize',        '50000000',
-					'-v', 'error',       # XXX quiet, panic, fatal, error, warning, info, verbose, de_bug, trace
+					'-v', 'fatal',       # XXX quiet, panic, fatal, error, warning, info, verbose, de_bug, trace
 					'-of','json',        # XXX default, csv, xml, flat, ini
 						'-show_programs',
 						'-show_format',
@@ -252,7 +252,7 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 	streams_by_type = defaultdict(list)
 
 	for i, stream in enumerate(_Streams, start=1):
-		codec_type = stream.get('codec_type')
+		codec_type = stream.get('codec_type','?')
 		streams_by_type[codec_type].append(stream)
 
 	if debug:
@@ -339,8 +339,9 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 		skip_it = skip_it and d_skip
 		if de_bug : print (f"\nSkip={skip_it}, Dskip = {d_skip}\n" )
 
-	if de_bug:
-		print(f"FFcom: {ff_com}\nSkip: {skip_it}")
+	if de_bug or f_skip:
+#		print(f" Skip: {skip_it}\n FFmpeg: {ff_com}\n Nothing to do")
+		return [], f_skip
 
 	return ff_com, skip_it
 

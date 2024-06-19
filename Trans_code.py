@@ -7,20 +7,24 @@ import math
 import stat
 import shutil
 import psutil
+import itertools
 
 from FFMpeg import *
 from typing import List, Optional
 from My_Utils import get_new_fname, copy_move, hm_sz, hm_time, Tee
-from concurrent.futures import ThreadPoolExecutor
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 #from sklearn.cluster import DBSCAN
 
+MultiThread = False
 de_bug = False
+Sort_Order = True
+
 Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')}_{time.strftime('%Y_%j_%H-%M-%S')}.log"
 
-Sort_Order = True
 #Root = r"F:\Media"
-#Root = r"F:\Media\TV"
+Root = r"F:\Media\TV"
 #Root = r"F:\Media\Movie"
 #Root = r"F:\BackUp\_Adlt"
 #Root = r"F:\Media\MasterClass Collection"
@@ -82,89 +86,6 @@ def perform_clustering(data: List[List[float]], _lst: List[List]) -> None:
 					print(f'[Size: {hm_sz(info[1])}\t\tLen: {int(info[5])}] - {info[0]}')
 
 @perf_monitor
-def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: bool = False) -> Optional[List[List]]:
-	"""Scans a directory for files with specified extensions, extracts information
-	in parallel, and returns a sorted list of file information.
-
-	Args:
-		root (str): Path to the root directory.
-		xtnsio (List[str]): List of file extensions (lowercase).
-		sort_order (bool): True for descending, False for ascending sort by size.
-		do_clustering (bool, optional): Enables clustering (implementation not provided). Defaults to False.
-
-	Returns:
-		Optional[List[List]]: A list of lists containing file information (path, size, extension, video length).
-		None on errors.
-	"""
-	msj = sys._getframe().f_code.co_name
-	str_t = time.perf_counter()
-	msj += f" Start: {time.strftime('%H:%M:%S')}"
-	print(f"Scan: {root}\tSize: {hm_sz(get_tree_size(root))}\n{msj}")
-
-	# Debugging prints
-#	print(f"type(xtnsio): {type(xtnsio)}")
-#	print(f"xtnsio: {xtnsio}")
-
-	if not root or not isinstance(root, str) or not os.path.isdir(root):
-		print(f"Invalid root directory: {root}")
-		return []
-	if not xtnsio or not isinstance(xtnsio, str):
-		print(f"Invalid extensions list: {xtnsio}")
-		return []
-
-	_lst = []
-	data = []
-	with ThreadPoolExecutor() as executor:
-		futures = []
-		for dirpath, _, files in os.walk(root):
-			for one_file in files:
-				_, ext = os.path.splitext(one_file.lower())
-				if ext in xtnsio:
-					f_path = os.path.join(dirpath, one_file)
-					try:
-						file_s = os.path.getsize(f_path)
-						if not os.access(f_path, os.W_OK) or not (os.stat(f_path).st_mode & stat.S_IWUSR):
-							print(f"Skip read-only file: {f_path}")
-							input("Yes ?")
-							continue
-						if file_s < 10:
-							print(f"Remove empty file: {f_path}")
-							input("Yes ?")
-							os.remove(f_path)
-						elif file_s > 1000 and len(f_path) < 333:
-							future = executor.submit(ffprobe_run, f_path)
-							futures.append((f_path, file_s, ext, future))
-						else:
-							print(f"Skip: Ex: {ext} Sz: {hm_sz(file_s)} {f_path} path L {len(f_path)}")
-					except Exception as e:
-						print(f"Error getting size of file {f_path}: {e}")
-						continue
-
-		for f_path, file_s, ext, future in futures:
-			jsn_ou = future.result()
-			info = [f_path, file_s, ext, jsn_ou]
-
-			if de_bug:
-				print(f"{info}")
-			_lst.append(info)
-
-	end_t = time.perf_counter()
-	print(f" Scan Done : {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}")
-
-	if do_clustering:
-		print(f" Start Clustering : {time.strftime('%H:%M:%S')}")
-		duration = round(float(jsn_ou.get('format', {}).get('duration', 0.0)), 1)
-		print (f"     Duration: {duration}")
-		data.append([file_s, duration])
-		perform_clustering(data, _lst)
-
-	order = "Descending >" if sort_order else "Ascending <"
-	print(f" Sort: {order}")
-
-	return sorted(_lst, key=lambda item: item[1], reverse=sort_order)
-##>>============-------------------<  End  >------------------==============<<##
-
-@perf_monitor
 def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> int:
 	function_name = sys._getframe().f_code.co_name
 
@@ -218,13 +139,14 @@ def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> i
 
 ##>>============-------------------<  End  >------------------==============<<##
 
-def process_file(file_info):
+def process_file(file_info, cnt, fl_nmb ):
 	saved, procs, skipt, errod = 0, 0, 0, 0
 	str_t = time.perf_counter()
 	file_p, file_s, ext, jsn_ou = file_info
 	skip_it = False
 	if os.path.isfile(file_p):
-		print(f'\n{file_p}\n{hm_sz(file_s)}')
+#		print(f'\n{file_p}\n{hm_sz(file_s)}')
+		print(f'\n{file_p}\n {ordinal(cnt)} of {fl_nmb}, {ext}, {hm_sz(file_s)}')
 		if len(file_p) < 333:
 			free_disk_space = shutil.disk_usage(Root).free
 			free_temp_space = shutil.disk_usage(r"C:").free
@@ -233,6 +155,7 @@ def process_file(file_info):
 				input("Not enough space on Drive")
 		else:
 			input("File name too long > 333")
+
 		try:
 			all_good, skip_it = zabrain_run(file_p, jsn_ou, de_bug)
 			if ext != ".mp4":
@@ -240,12 +163,16 @@ def process_file(file_info):
 			if skip_it:
 				print(f"\033[91m   | Skip ffmpeg_run |\033[0m")
 				skipt += 1
+
 			all_good = ffmpeg_run(file_p, all_good, skip_it, ffmpeg, de_bug)
+
 			if not all_good and not skip_it:
 				print("FFMPEG did not create anything good")
 				time.sleep(5)
+
 			saved += clean_up(file_p, all_good, skip_it, de_bug) or 0
 			procs += 1
+
 		except ValueError as e:
 			if e.args[0] == "Skip It":
 				print(f"Go on: {e}")
@@ -259,6 +186,7 @@ def process_file(file_info):
 				print("Done")
 			else:
 				input("ValueError WTF")
+
 		except Exception as e:
 			errod += 1
 			msj = f" +: Exception: {e}\n{os.path.dirname(file_p)}\n\t{os.path.basename(file_p)}\t{hm_sz(file_s)}\nCopied"
@@ -269,27 +197,125 @@ def process_file(file_info):
 				print("Done")
 			else:
 				input("Exception WTF")
+
 		end_t = time.perf_counter()
 		tot_t = end_t - str_t
 		print(f"  -End: {time.strftime('%H:%M:%S')}\tTotal: {hm_time(tot_t)}")
 		print(f"  Total saved: {hm_sz(saved)}")
+
 	else:
 		print(f'Not Found-: {file_p}\t\t{hm_sz(file_s)}')
 		errod += 1
 		time.sleep(1)
+
 	return saved, procs, skipt, errod
 
-def main(multi):
+
+@perf_monitor
+def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: bool = False) -> Optional[List[List]]:
+	"""Scans a directory for files with specified extensions, extracts information
+	in parallel, and returns a sorted list of file information.
+
+	Args:
+		root (str): Path to the root directory.
+		xtnsio (List[str]): List of file extensions (lowercase).
+		sort_order (bool): True for descending, False for ascending sort by size.
+		do_clustering (bool, optional): Enables clustering (implementation not provided). Defaults to False.
+
+	Returns:
+		Optional[List[List]]: A list of lists containing file information (path, size, extension, video length).
+		None on errors.
+	"""
+	msj = sys._getframe().f_code.co_name
+	str_t = time.perf_counter()
+	msj += f" Start: {time.strftime('%H:%M:%S')}"
+	print(f"Scan: {root}\tSize: {hm_sz(get_tree_size(root))}\n{msj}")
+
+	if not root or not isinstance(root, str) or not os.path.isdir(root):
+		print(f"Invalid root directory: {root}")
+		return []
+	if not xtnsio or not isinstance(xtnsio, str):
+		print(f"Invalid extensions list: {xtnsio}")
+		return []
+
+	_lst = []
+	data = []
+
+	def process_files(executor=None):
+		futures = []
+		for dirpath, _, files in os.walk(root):
+			for one_file in files:
+				_, ext = os.path.splitext(one_file.lower())
+				if ext in xtnsio:
+					f_path = os.path.join(dirpath, one_file)
+					try:
+						file_s = os.path.getsize(f_path)
+						if not os.access(f_path, os.W_OK) or not (os.stat(f_path).st_mode & stat.S_IWUSR):
+							print(f"Skip read-only file: {f_path}")
+							input("Yes ?")
+							continue
+						if file_s < 10:
+							print(f"Remove empty file: {f_path}")
+							input("Yes ?")
+							os.remove(f_path)
+						elif file_s > 1000 and len(f_path) < 333:
+							if executor:
+								future = executor.submit(ffprobe_run, f_path)
+								futures.append((f_path, file_s, ext, future))
+							else:
+								result = ffprobe_run(f_path)
+								if result is not None:
+									handle_result((f_path, file_s, ext, result))
+					except Exception as e:
+						print(f"Error getting size of file {f_path}: {e}")
+						continue
+
+		if executor:
+			for f_path, file_s, ext, future in futures:
+				try:
+					jsn_ou = future.result()
+					result = (f_path, file_s, ext, jsn_ou)
+					handle_result(result)
+				except Exception as e:
+					print(f"Error processing future for file {f_path}: {e}")
+
+	def handle_result(result):
+		if result:
+			if de_bug:
+				print(f"{result}")
+			_lst.append(result)
+
+	# XXX: Set to True # XXX:
+	MultiThread = 1
+	if MultiThread:
+		with ThreadPoolExecutor() as executor:
+			process_files(executor)
+	else:
+		process_files()
+
+	end_t = time.perf_counter()
+	print(f" Scan Done : {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}")
+
+	if do_clustering:
+		print(f" Start Clustering : {time.strftime('%H:%M:%S')}")
+		duration = round(float(jsn_ou.get('format', {}).get('duration', 0.0)), 1)
+		print(f"     Duration: {duration}")
+		data.append([file_s, duration])
+		perform_clustering(data, _lst)
+
+	order = "Descending >" if sort_order else "Ascending <"
+	print(f" Sort: {order}")
+
+	return sorted(_lst, key=lambda item: item[1], reverse=sort_order)
+
+def main():
 	str_t = time.perf_counter()
 
 	with Tee(sys.stdout, open(Log_File, 'w', encoding='utf-8')) as qa:
-
 		print(f"{psutil.cpu_count()} CPU's\t ¯\\_(%)_/¯")
 		print(f"Python version: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
 		print(f"Script absolute path: {os.path.abspath(__file__)}")
 		print(f'Main Start: {time.strftime("%Y-%m-%d %H:%M:%S")}')
-
-
 		print("-" * 70)
 
 		if not Root:
@@ -300,41 +326,37 @@ def main(multi):
 			print(f"Creating dir: {Excepto}")
 			os.mkdir(Excepto)
 
-		fl_lst = scan_folder(Root, File_extn, sort_order=Sort_Order, do_clustering=False)
-		fl_nmb = len(fl_lst)
-
 		saved = procs = skipt = errod = total_time = 0
 
-		if multi:
-			with ThreadPoolExecutor(max_workers=4) as executor:
-				future_to_file = {executor.submit(process_file, each): each for each in fl_lst}
-				for future in as_completed(future_to_file):
-					each = future_to_file[future]
+		fl_lst = scan_folder(Root, File_extn, sort_order=Sort_Order, do_clustering=False)
+		fl_nmb = len(fl_lst)
+		counter = itertools.count(1)
 
-					try:
-#					duration = round(float(jsn_ou.get('format', {}).get('duration', 0.0)), 1)
-#					print (f"     Duration: {duration}")
-						s, p, sk, e = future.result()
+		def process_all_files():
+			nonlocal saved, procs, skipt, errod
+			if MultiThread:
+				with ThreadPoolExecutor(max_workers=4) as executor:
+					future_to_file = {executor.submit(process_file, each, next(counter), fl_nmb): each for each in fl_lst}
+					for future in as_completed(future_to_file):
+						each = future_to_file[future]
+						try:
+							s, p, sk, e = future.result()
+							saved += s
+							procs += p
+							skipt += sk
+							errod += e
+						except Exception as exc:
+							print(f"Generated an exception: {exc}")
+			else:
+				for each in fl_lst:
+					cnt = next(counter)
+					s, p, sk, e = process_file(each, cnt, fl_nmb)
+					saved += s
+					procs += p
+					skipt += sk
+					errod += e
 
-						saved += s
-
-
-						procs += p
-
-						skipt += sk
-						errod += e
-
-
-					except Exception as exc:
-
-						print(f"Generated an exception: {exc}")
-		else:
-			for each in fl_lst:
-				s, p, sk, e = process_file(each)
-				saved += s
-				procs += p
-				skipt += sk
-				errod += e
+		process_all_files()
 
 		end_t = time.perf_counter()
 		total_time = end_t - str_t
@@ -344,8 +366,8 @@ def main(multi):
 	input('All Done :)')
 	exit()
 
-if __name__ == '__main__':
-	multi = True # if multiproccesing False if single
-	main( multi )
+# Call main function
+if __name__ == "__main__":
+	main()
 
 ##>>============-------------------<  End  >------------------==============<<##
