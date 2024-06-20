@@ -339,7 +339,8 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 		skip_it = skip_it and d_skip
 		if de_bug : print (f"\nSkip={skip_it}, Dskip = {d_skip}\n" )
 
-	if de_bug or f_skip:
+	if de_bug:
+#	if de_bug or f_skip:
 #		print(f" Skip: {skip_it}\n FFmpeg: {ff_com}\n Nothing to do")
 		return [], f_skip
 
@@ -464,6 +465,7 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 			# XXX: Estimate Average bits_per_pixel
 			glb_totfrms = round(frm_rate * glb_vidolen)
 			avbpp = 100000 * _vi_btrt / (glb_totfrms * vid_width * vid_heigh) +1
+			max_vid_btrt = 5000000
 
 			if pix_fmt.endswith("10le") :
 				msj = f"{pix_fmt} 10 Bit"
@@ -488,7 +490,6 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 			ff_vid = ['-map', f'0:v:{indx}', f'-c:v:{indx}']
 			# Determine if codec copy or conversion is needed, and update ff_vid accordingly
 			if codec_name == 'hevc':
-				max_vid_btrt = 5000000
 #                print ( hm_sz( max_vid_btrt ) )
 				if avbpp < 35 and _vi_btrt < max_vid_btrt :
 					extra += ' => Copy'

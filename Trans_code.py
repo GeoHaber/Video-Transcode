@@ -23,13 +23,7 @@ Sort_Order = True
 
 Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')}_{time.strftime('%Y_%j_%H-%M-%S')}.log"
 
-#Root = r"F:\Media"
-Root = r"F:\Media\TV"
-#Root = r"F:\Media\Movie"
-#Root = r"F:\BackUp\_Adlt"
-#Root = r"F:\Media\MasterClass Collection"
-#Root = r"F:\BackUp\_Movies"
-#Root = r"C:\Users\Geo\Desktop\Video_downloads"
+
 
 ''' Global Variables '''
 glb_totfrms = 0
