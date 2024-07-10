@@ -242,40 +242,40 @@ def temperature ():
 ##>>============-------------------<  End  >------------------==============<<##
 
 class Tee:
-    def __init__(self, *files, error_on=False):
-        self.files = files
-        self.error_on = error_on
-        self.original_stdout = sys.stdout
-        self.original_stderr = sys.stderr
+	def __init__(self, *files, error_on=False):
+		self.files = files
+		self.error_on = error_on
+		self.original_stdout = sys.stdout
+		self.original_stderr = sys.stderr
 
-    def write(self, obj):
-        if not isinstance(obj, str):
-            obj = str(obj)
+	def write(self, obj):
+		if not isinstance(obj, str):
+			obj = str(obj)
 
-        for file in self.files:
-            file.write(obj)
-            file.flush()
+		for file in self.files:
+			file.write(obj)
+			file.flush()
 
-    def flush(self):
-        for file in self.files:
-            file.flush()
+	def flush(self):
+		for file in self.files:
+			file.flush()
 
-    def close(self):
-        for file in self.files:
-            if file not in (self.original_stdout, self.original_stderr):
-                file.close()
+	def close(self):
+		for file in self.files:
+			if file not in (self.original_stdout, self.original_stderr):
+				file.close()
 
-    def __enter__(self):
-        sys.stdout = self
-        if self.error_on:
-            sys.stderr = self
-        return self
+	def __enter__(self):
+		sys.stdout = self
+		if self.error_on:
+			sys.stderr = self
+		return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        sys.stdout = self.original_stdout
-        if self.error_on:
-            sys.stderr = self.original_stderr
-        self.close()
+	def __exit__(self, exc_type, exc_value, traceback):
+		sys.stdout = self.original_stdout
+		if self.error_on:
+			sys.stderr = self.original_stderr
+		self.close()
 ##>>============-------------------<  End  >------------------==============<<##
 
 class RunningAverage:
@@ -540,27 +540,27 @@ def test_filename(filename: str) -> None:
 ##==============-------------------   End   -------------------==============##
 
 
-def stmpd_rad_str(leng=13, head=''):
-	_time = TM.datetime.now()
-	rand_ = f"{_time:%M%S}"
-	for char in random.sample( string.ascii_letters + string.hexdigits, leng):
-		rand_ += char
-	return head +rand_
-##==============-------------------   End   -------------------==============##
+def stmpd_rad_str(length=13, prefix=''):
+	"""
+	Generate a random string + prefix + timestamp.
 
-def get_new_fname(file_name, new_ext='', strip=''):
-	'''
-	Returns new filename derived from file_name by:
-	 add	new_ext
-	 remove	strip
-	'''
-	fnm, ext = os.path.splitext(file_name)
-	if len(strip):
-		fnm = fnm.strip(strip)
-	if new_ext == strip :
-		return fnm +new_ext
-	else:
-		return fnm +ext +new_ext
+	Parameters:
+	length (int): The length of the random string to generate. Default is 13.
+	prefix (str): A prefix to add to the generated string. Default is an empty string.
+
+	Returns:
+	str: The generated string with the timestamp prefix and random characters.
+	"""
+	# Get the current time and format it to include minutes and seconds
+	current_time = TM.datetime.now()
+	timestamp = current_time.strftime("_%M_%S_")
+
+	# Generate random characters from ascii letters and hex digits
+	random_chars = ''.join(random.sample(string.ascii_letters + string.digits, length))
+
+	# Combine the prefix, timestamp, and random characters to form the final string
+	random_string = prefix + timestamp + random_chars
+	return random_string
 ##==============-------------------   End   -------------------==============##
 
 

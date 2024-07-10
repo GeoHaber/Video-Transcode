@@ -58,7 +58,6 @@ def ffprobe_run(input_file: str, execu=ffprob, de_bug=False) -> dict:
 	"""
 	msj = sys._getframe().f_code.co_name
 #	print(f"  +{msj} Start: {TM.datetime.now():%T}")
-
 	if not input_file :
 		raise FileNotFoundError(f"{msj} No input_file provided.")
 	print_spinner (input_file[:90])
@@ -91,10 +90,9 @@ def ffprobe_run(input_file: str, execu=ffprob, de_bug=False) -> dict:
 
 ##>>============-------------------<  End  >------------------==============<<##
 
-
 # XXX:  Returns encoded filename file_name
 @perf_monitor
-def ffmpeg_run(input_file: str, ff_com: list, skip_it: bool, execu: str = "ffmpeg", de_bug: bool = False, max_retries: int = 2, retry_delay: int = 3) -> str:
+def ffmpeg_run(input_file: str, ff_com: list, skip_it: bool, execu: str = "ffmpeg", de_bug: bool = False, max_retries: int = 2, retry_delay: int = 2) -> str:
 	"""
 	Create command line, run ffmpeg with retries, and avoid redundant command building.
 	Args:
@@ -116,8 +114,8 @@ def ffmpeg_run(input_file: str, ff_com: list, skip_it: bool, execu: str = "ffmpe
 	print(f"  +{msj} Start: {TM.datetime.now():%T}")
 
 	file_name, _ = os.path.splitext(os.path.basename(input_file))
-	out_file = os.path.normpath('_' + stmpd_rad_str(7, file_name[0:20]))
-	out_file        = re.sub(r'[^\w\s_-]+', '', out_file).strip().replace(' ', '_') + TmpF_Ex
+	out_file	 = os.path.normpath('_' + stmpd_rad_str(7, file_name[0:27]))
+	out_file	 = re.sub(r'[^\w\s_-]+', '', out_file).strip().replace(' ', '_') + TmpF_Ex
 
 	try:
 		ffmpeg_vers = SP.check_output([execu, "-version"]).decode("utf-8").splitlines()[0].split()[2]
@@ -132,9 +130,9 @@ def ffmpeg_run(input_file: str, ff_com: list, skip_it: bool, execu: str = "ffmpe
 		"-metadata", "author=Encoded by the One and only GeoHab",
 		"-metadata", f"encoder=ffmpeg {ffmpeg_vers}",
 		"-movflags", "+faststart",
-		"-fflags", "+fastseek",
-		"-fflags", "+genpts",
-		"-y", out_file,
+		"-fflags",	 "+fastseek",
+		"-fflags",	 "+genpts",
+		"-y",		 out_file,
 	]
 
 	ff_head = [execu, "-thread_queue_size", "24", "-i", input_file, "-hide_banner"]
@@ -259,6 +257,7 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 		print(f"S: {json.dumps(_Streams, indent=2)}\n ")
 		# Collect all unknown or unrecognized codec_types
 	known_types = {'video', 'audio', 'subtitle', 'data'}
+
 	unknown_streams = {k: v for k, v in streams_by_type.items() if k not in known_types}
 	if unknown_streams:
 		for codec_type, streams in unknown_streams.items():
@@ -293,9 +292,9 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 	f_skip = (f_comment == Skip_key) and (ext == '.mp4')
 
 	if f_skip:
-		summary_msg += f" Key OK"        # {filename}
+		summary_msg += f" Key OK"   # {filename}
 	else:
-		summary_msg += f" Key not OK"    # {filename}
+		summary_msg += f" No Key"   # {filename}
 
 	print(f"\033[96m{summary_msg}\033[0m")
 
@@ -309,7 +308,9 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 	else :
 		msj += f"\nNo Video in: {input_file}\n"
 		print(msj)
-		raise ValueError(msj)
+		time.sleep(2)
+		return [], True
+#		raise ValueError(msj)
 
 	if audio_streams:
 		ff_audio, a_skip = parse_audio(audio_streams, de_bug)
@@ -319,7 +320,9 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 	else :
 		msj += f"\nNo Audio in: {input_file}\n"
 		print(msj)
-		raise ValueError(msj)
+		time.sleep(2)
+		return [], True
+#		raise ValueError(msj)
 
 	if subtl_streams:
 		ff_subtl, s_skip = parse_subtl(subtl_streams, de_bug)
@@ -465,7 +468,7 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 			# XXX: Estimate Average bits_per_pixel
 			glb_totfrms = round(frm_rate * glb_vidolen)
 			avbpp = 100000 * _vi_btrt / (glb_totfrms * vid_width * vid_heigh) +1
-			max_vid_btrt = 5000000
+			max_vid_btrt = 4000000
 
 			if pix_fmt.endswith("10le") :
 				msj = f"{pix_fmt} 10 Bit"
@@ -491,7 +494,7 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 			# Determine if codec copy or conversion is needed, and update ff_vid accordingly
 			if codec_name == 'hevc':
 #                print ( hm_sz( max_vid_btrt ) )
-				if avbpp < 35 and _vi_btrt < max_vid_btrt :
+				if avbpp < 80 and _vi_btrt < max_vid_btrt :
 					extra += ' => Copy'
 					ff_vid.extend(['copy'])
 					skip_it = True

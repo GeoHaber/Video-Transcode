@@ -11,7 +11,7 @@ import itertools
 
 from FFMpeg import *
 from typing import List, Optional
-from My_Utils import get_new_fname, copy_move, hm_sz, hm_time, Tee
+from My_Utils import copy_move, hm_sz, hm_time, Tee
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -195,7 +195,7 @@ def process_file(file_info, cnt, fl_nmb ):
 		end_t = time.perf_counter()
 		tot_t = end_t - str_t
 		print(f"  -End: {time.strftime('%H:%M:%S')}\tTotal: {hm_time(tot_t)}")
-		print(f"  Total saved: {hm_sz(saved)}")
+		print(f"  Saved: {hm_sz(saved)}")
 
 	else:
 		print(f'Not Found-: {file_p}\t\t{hm_sz(file_s)}')
@@ -287,8 +287,6 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 	else:
 		process_files()
 
-	end_t = time.perf_counter()
-	print(f" Scan Done : {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}")
 
 	if do_clustering:
 		print(f" Start Clustering : {time.strftime('%H:%M:%S')}")
@@ -298,6 +296,8 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 		perform_clustering(data, _lst)
 
 	order = "Descending >" if sort_order else "Ascending <"
+	end_t = time.perf_counter()
+	print(f"\n Scan: Done : {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}")
 	print(f" Sort: {order}")
 
 	return sorted(_lst, key=lambda item: item[1], reverse=sort_order)
