@@ -352,17 +352,22 @@ def hm_sz(numb: Union[str, int, float], type: str = "B") -> str:
 	- type (str): Type of file size (default is "B" for bytes).
 
 	Returns:
-	- str: Human-readable file size.
+	- str: Human-readable file size with sign.
 	"""
+	if isinstance(numb, str):
+		numb = float(numb)
+	elif not isinstance(numb, (int, float)):
+		raise ValueError("Invalid type for numb. Must be str, int, or float.")
+	sign = '-' if numb < 0 else ''
+	numb = abs(numb)  # Convert to absolute value for calculations
 	units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB']
-	numb = float(numb)
 
 	for unit in units:
-		if abs(numb) < 1024.0:
-			return f"{numb:.2f} {unit}"
+		if numb < 1024.0:
+			return f"{sign}{numb:.2f} {unit}"
 		numb /= 1024.0
 
-	return f"{numb:.2f} {unit}"
+	return f"{sign}{numb:.2f} {units[-1]}"
 ##==============-------------------   End   -------------------==============##
 
 def hm_time(timez: float) -> str:

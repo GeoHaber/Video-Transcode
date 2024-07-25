@@ -123,19 +123,21 @@ def ffmpeg_run(input_file: str, ff_com: list, skip_it: bool, execu: str = "ffmpe
 		print(f"Error getting ffmpeg version: {e}")
 		return ''
 
+	ff_head = [execu, "-thread_queue_size", "24", "-i", input_file, "-hide_banner"]
 	ff_tail = [
-		"-metadata", f"title={file_name} x256",
+		"-metadata", f"title={file_name}",
 		"-metadata", f"comment={Skip_key}",
-		"-metadata", "copyright=2023 Me",
-		"-metadata", "author=Encoded by the One and only GeoHab",
+		"-metadata", "copyright=2024",
+		"-metadata", "author=Encoded by GeHab",
 		"-metadata", f"encoder=ffmpeg {ffmpeg_vers}",
 		"-movflags", "+faststart",
 		"-fflags",	 "+fastseek",
 		"-fflags",	 "+genpts",
+		"-keyint_min", "25",    	    # Minimum interval between keyframes
+		"-g", "50",         	        # Set the GOP (Group of Pictures) size
 		"-y",		 out_file,
 	]
 
-	ff_head = [execu, "-thread_queue_size", "24", "-i", input_file, "-hide_banner"]
 
 	for attempt in range(1, max_retries + 1):
 		try:
@@ -180,14 +182,14 @@ def run_ffm(args, de_bug=False):
 			msj += f" Done\n"
 			print(msj)
 
-			time.sleep(3)
+			time.sleep(2)
 		else:
 			with SP.Popen( args,
 				universal_newlines=True,
 				encoding=console_encoding,
 				stderr=SP.STDOUT,
 				stdout=SP.PIPE,
-				 ) as process:
+				) as process:
 
 				spin_char = "|/-o+\\"
 				spinner_counter = 0
@@ -204,10 +206,11 @@ def run_ffm(args, de_bug=False):
 				process.stdout.close()
 
 			if process.returncode != 0:
-				zz = ( process.returncode, args, out, err )
-				print ( f" Procces returncode {zz}")
-				raise SP.CalledProcessError(
-					process.returncode, args, output=out, stderr=err )
+				msj = f"ffrun error:\n Cmd:{args}\n Stdout: {out}\n Stderr: {err}\n"
+				print ( f"Procces returncode: {msj}")
+				raise ValueError(msj)
+#				raise SP.CalledProcessError( msj )
+
 
 	except Exception as e:
 		msj += f" Exception: {e}"
@@ -225,36 +228,42 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 	global glb_vidolen  # make it global so we can reuse for fmpeg check ...
 	global glb_bitrate
 
-	_Format = mta_dta.get('format', {})
-	if de_bug: print(f"F: {json.dumps(_Format, indent=2)}\n ")
+	_format = mta_dta.get('format', {})
 
-	if not _Format :
+	if not _format :
 		msj += f" 'format' keyword not in\n{ json.dumps(mta_dta, indent=2) }\n"
 		print ( msj )
 		raise ValueError(msj)
+	if de_bug: print(f"F: {json.dumps(_format, indent=2)}\n ")
 
-	glb_vidolen = int(float(_Format.get('duration',     0.0)) )
-	glb_bitrate = int(      _Format.get('bit_rate',     0) )
+	glb_vidolen = int(float(_format.get('duration',     0.0)) )
+	glb_bitrate = int(      _format.get('bit_rate',     0) )
 
-	nb_streams  = int(      _Format.get('nb_streams',   0) )
-	nb_programs = int(      _Format.get('nb_programs',  0) )
-	size        =           _Format.get('size',         0)
-	filename    =           _Format.get('filename',     'No File Name')
+	nb_streams  = int(      _format.get('nb_streams',   0) )
+	nb_programs = int(      _format.get('nb_programs',  0) )
+	size        =           _format.get('size',         0)
+	filename    =           _format.get('filename',		'No File Name')
 
-	f_comment   =           _Format.get('tags',         {}).get('comment', 'No_comment')
-	title       =           _Format.get('tags',         {}).get('title', 'No_title')
+	tags        =			_format.get('tags', {})
+	f_comment   =           tags.get('comment',			'No_comment')
+	title       =           tags.get('title',			'No_title')
 
-	_Streams = mta_dta.get('streams', [])
+	_streams = mta_dta.get('streams', [])
+	if not _streams :
+		msj += f" 'streams' keyword not in\n{ json.dumps(mta_dta, indent=2) }\n"
+		print ( msj )
+		raise ValueError(msj)
+	if de_bug: print(f"S: {json.dumps(_streams, indent=2)}\n ")
 
 	# Initialize a dictionary to group streams by codec_type
 	streams_by_type = defaultdict(list)
 
-	for i, stream in enumerate(_Streams, start=1):
+	for i, stream in enumerate(_streams, start=1):
 		codec_type = stream.get('codec_type','?')
 		streams_by_type[codec_type].append(stream)
 
 	if debug:
-		print(f"S: {json.dumps(_Streams, indent=2)}\n ")
+		print(f"S: {json.dumps(_streams, indent=2)}\n ")
 		# Collect all unknown or unrecognized codec_types
 	known_types = {'video', 'audio', 'subtitle', 'data'}
 
@@ -449,11 +458,11 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 		codec_name          = this_vid.get('codec_name', 'XXX')
 		pix_fmt             = this_vid.get('pix_fmt', '')
 		vid_width,vid_heigh = this_vid.get('width', 2), this_vid.get('height', 1)
+		_vi_btrt = int(       this_vid.get('bit_rate', glb_bitrate * 0.8))
+		frm_rate = divd_strn( this_vid.get('r_frame_rate'  , '25'))
 
 		tags            = this_vid.get('tags', {})
 		handler_name    = tags.get('handler_name','Unknown')
-		_vi_btrt = int(       this_vid.get('bit_rate', glb_bitrate * 0.8))
-		frm_rate = divd_strn( this_vid.get('r_frame_rate'  , '25'))
 
 		if 'bit_rate' not in this_vid:
 			extra = ' Bit Rate Estimate '
@@ -467,16 +476,15 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 		else :
 			# XXX: Estimate Average bits_per_pixel
 			glb_totfrms = round(frm_rate * glb_vidolen)
-			avbpp = 100000 * _vi_btrt / (glb_totfrms * vid_width * vid_heigh) +1
-			max_vid_btrt = 4000000
+			avbpp = round (100000 * _vi_btrt / (glb_totfrms * vid_width * vid_heigh) +1)
+			max_vid_btrt = 4700000
 
+			msj = " 8"
 			if pix_fmt.endswith("10le") :
-				msj = f"{pix_fmt} 10 Bit"
+				msj = "10"
 				avbpp  *= 1.25
-			else:
-				msj = pix_fmt
+				max_vid_btrt *= 1.25
 
-			avbpp = round ( avbpp, 2 )
 
 			mins,  secs = divmod(glb_vidolen, 60)
 			hours, mins = divmod(mins, 60)
@@ -538,7 +546,7 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 				ff_vid.extend([f"-metadata:s:v:{indx}", "handler_name=VideoHandler x265"])
 				skip_it = False
 
-			message = f"    |<V:{indx:2}>|{codec_name:^8}|{vid_width:<4}x{vid_heigh:<4}|{aspct_r}|Btrt: {hm_sz(_vi_btrt):>6}|Avbpp: {avbpp:>3}|Fps: {frm_rate:>7}|Tfm: {hm_sz(glb_totfrms,'F'):>8}| {extra}"
+			message = f"    |<V:{indx:2}>|{codec_name:^8}|{vid_width:<4}x{vid_heigh:<4}|{aspct_r}|Bit: {msj}|Btrt: {hm_sz(_vi_btrt):>6}|Avbpp: {avbpp:>3}|Fps: {frm_rate:>7}|Tfm: {hm_sz(glb_totfrms,'F'):>8}| {extra}"
 			print(f"\033[91m{message}\033[0m")
 
 		ff_video += ff_vid
@@ -577,16 +585,15 @@ def parse_audio(streams, de_bug=False):
 		index = audio_stream.get('index', -1)
 		codec_name = audio_stream.get('codec_name', None)
 		sample_rate = audio_stream.get('sample_rate', None)
-		bitrate = int(audio_stream.get('bit_rate', 0))
 		channels = audio_stream.get('channels', -100)
-
-		tags = audio_stream.get('tags', {})
-		language = tags.get('language', 'und')
-		handler_name = tags.get('handler_name', 'Unknown')
+		bitrate = int( audio_stream.get('bit_rate', 0))
 
 		disposition = audio_stream.get('disposition', {})
 		dispo_forced = disposition.get('forced', 0)
 		dispo_default = disposition.get('default', 0)
+		tags         = audio_stream.get('tags', {})
+		language      = tags.get('language', 'und')
+		handler_name  = tags.get('handler_name', 'Unknown')
 
 		if dispo_default:
 			previous_default = audio_stream
@@ -604,7 +611,7 @@ def parse_audio(streams, de_bug=False):
 		}.get(channels, f"{channels - 1}.1 Channels" if 2 < channels < 8 else f" {channels} Channels")
 
 		keep_language = language in Keep_langua or only_audio
-		copy_codec = codec_name in ('aac', 'vorbis', 'mp2', 'mp3') and channels <= 8
+		copy_codec = codec_name in ('aac', 'vorbis', 'mp3', 'opus') and channels <= 8
 		reduce_bitrate = bitrate > Max_a_btr
 
 		if language == 'eng':

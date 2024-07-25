@@ -9,21 +9,30 @@ import shutil
 import psutil
 import itertools
 
-from FFMpeg import *
-from typing import List, Optional
+from FFMpeg   import *
+from typing   import List, Optional
 from My_Utils import copy_move, hm_sz, hm_time, Tee
-
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 #from sklearn.cluster import DBSCAN
 
-MultiThread = False
+MultiThread = False		# XXX: It is set to True in the scan_folder # XXX:
 de_bug = False
+
+Sort_Order = False
 Sort_Order = True
 
 Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')}_{time.strftime('%Y_%j_%H-%M-%S')}.log"
 
-
+#Root = r"F:\Media"
+#Root = r"F:\Media\TV"
+#Root = r"F:\video"
+#Root = r"C:\Users\Geo\Desktop\_Python\Except"
+#Root = r"F:\Media\Movie"
+#Root = r"F:\BackUp\_Adlt"
+#Root = r"F:\Media\MasterClass Collection"
+#Root = r"F:\BackUp\_Movies"
+#Root = r"C:\Users\Geo\Desktop\Video_downloads"
 
 ''' Global Variables '''
 glb_totfrms = 0
@@ -78,6 +87,7 @@ def perform_clustering(data: List[List[float]], _lst: List[List]) -> None:
 			else:
 				for info in cluster:
 					print(f'[Size: {hm_sz(info[1])}\t\tLen: {int(info[5])}] - {info[0]}')
+##==============-------------------   End   -------------------==============##
 
 @perf_monitor
 def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> int:
@@ -101,9 +111,9 @@ def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> i
 		output_file_size = os.path.getsize(output_file)
 		os.chmod(output_file, stat.S_IWRITE)
 
-		ratio = round(100 * ((output_file_size - input_file_size) / input_file_size), 2)
-		extra = "+ Gain:" if ratio > 0 else (" Same:" if ratio == 0 else "- Lost:")
-		msg = f"    Size Was: {hm_sz(input_file_size)} Is: {hm_sz(output_file_size)} {extra} {hm_sz(abs(input_file_size - output_file_size))} = {ratio}%"
+		ratio = round (100 * ((output_file_size - input_file_size) / input_file_size), 2)
+		extra = "+Biger" if ratio > 0 else ("=Same" if (input_file_size - output_file_size) == 0 else "-Lost")
+		msg = f"    Size Was: {hm_sz(input_file_size)} Is: {hm_sz(output_file_size)} {extra}: {hm_sz(input_file_size - output_file_size)} = {ratio}%"
 
 		if ratio > 120:
 			msg += " ! Much Bigger !"
@@ -111,15 +121,14 @@ def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> i
 			msg += " ! Much Smaller !"
 
 		final_output_file = input_file if input_file.endswith('.mp4') else input_file.rsplit('.', 1)[0] + '.mp4'
-		temp_file = input_file + "_Delet_.old"
+		temp_file = input_file + "_Delete_.old"
 		os.rename(input_file, temp_file)
 		shutil.move(output_file, final_output_file)
 
-		msg += "  Success"
-		print(msg)
-
 		if not debug:
 			os.remove(temp_file)
+
+		print(msg)
 
 		return input_file_size - output_file_size
 
@@ -152,15 +161,17 @@ def process_file(file_info, cnt, fl_nmb ):
 
 		try:
 			all_good, skip_it = zabrain_run(file_p, jsn_ou, de_bug)
-			if ext != ".mp4":
+			debug = True # DEBUG:
+			if debug or ext != ".mp4":
 				skip_it = False
+#				print (f"\nFile: {file_p}\nFfmpeg: {all_good}\n")
 			if skip_it:
 				print(f"\033[91m   | Skip ffmpeg_run |\033[0m")
 				skipt += 1
 
 			all_good = ffmpeg_run(file_p, all_good, skip_it, ffmpeg, de_bug)
 
-			if not all_good and not skip_it:
+			if not all_good :
 				print("FFMPEG did not create anything good")
 				time.sleep(5)
 
@@ -195,7 +206,6 @@ def process_file(file_info, cnt, fl_nmb ):
 		end_t = time.perf_counter()
 		tot_t = end_t - str_t
 		print(f"  -End: {time.strftime('%H:%M:%S')}\tTotal: {hm_time(tot_t)}")
-		print(f"  Saved: {hm_sz(saved)}")
 
 	else:
 		print(f'Not Found-: {file_p}\t\t{hm_sz(file_s)}')
@@ -203,6 +213,7 @@ def process_file(file_info, cnt, fl_nmb ):
 		time.sleep(1)
 
 	return saved, procs, skipt, errod
+##==============-------------------   End   -------------------==============##
 
 
 @perf_monitor
@@ -287,7 +298,6 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 	else:
 		process_files()
 
-
 	if do_clustering:
 		print(f" Start Clustering : {time.strftime('%H:%M:%S')}")
 		duration = round(float(jsn_ou.get('format', {}).get('duration', 0.0)), 1)
@@ -296,11 +306,13 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 		perform_clustering(data, _lst)
 
 	order = "Descending >" if sort_order else "Ascending <"
+
 	end_t = time.perf_counter()
 	print(f"\n Scan: Done : {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}")
 	print(f" Sort: {order}")
 
 	return sorted(_lst, key=lambda item: item[1], reverse=sort_order)
+##==============-------------------   End   -------------------==============##
 
 def main():
 	str_t = time.perf_counter()
@@ -359,6 +371,7 @@ def main():
 
 	input('All Done :)')
 	exit()
+##==============-------------------   End   -------------------==============##
 
 # Call main function
 if __name__ == "__main__":
