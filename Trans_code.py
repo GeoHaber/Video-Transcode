@@ -24,15 +24,7 @@ Sort_Order = True
 
 Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')}_{time.strftime('%Y_%j_%H-%M-%S')}.log"
 
-#Root = r"F:\Media"
-#Root = r"F:\Media\TV"
-#Root = r"F:\video"
-#Root = r"C:\Users\Geo\Desktop\_Python\Except"
-#Root = r"F:\Media\Movie"
-#Root = r"F:\BackUp\_Adlt"
-#Root = r"F:\Media\MasterClass Collection"
-#Root = r"F:\BackUp\_Movies"
-#Root = r"C:\Users\Geo\Desktop\Video_downloads"
+
 
 ''' Global Variables '''
 glb_totfrms = 0
@@ -161,7 +153,7 @@ def process_file(file_info, cnt, fl_nmb ):
 
 		try:
 			all_good, skip_it = zabrain_run(file_p, jsn_ou, de_bug)
-			debug = True # DEBUG:
+#			debug = True # DEBUG:
 			if debug or ext != ".mp4":
 				skip_it = False
 #				print (f"\nFile: {file_p}\nFfmpeg: {all_good}\n")
@@ -171,7 +163,7 @@ def process_file(file_info, cnt, fl_nmb ):
 
 			all_good = ffmpeg_run(file_p, all_good, skip_it, ffmpeg, de_bug)
 
-			if not all_good :
+			if not all_good and not skip_it:
 				print("FFMPEG did not create anything good")
 				time.sleep(5)
 

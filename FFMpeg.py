@@ -107,8 +107,9 @@ def ffmpeg_run(input_file: str, ff_com: list, skip_it: bool, execu: str = "ffmpe
 	  Path to the output file on success, None on skip or failure.
 	"""
 	msj = sys._getframe().f_code.co_name
+
 	if not input_file or skip_it:
-		msj = f"{msj} Skip={skip_it} = {input_file}"
+		print(f"{msj}\nSkip: {skip_it}\nFile: {input_file}")
 		return None
 
 	print(f"  +{msj} Start: {TM.datetime.now():%T}")
@@ -124,20 +125,22 @@ def ffmpeg_run(input_file: str, ff_com: list, skip_it: bool, execu: str = "ffmpe
 		return ''
 
 	ff_head = [execu, "-thread_queue_size", "24", "-i", input_file, "-hide_banner"]
+
 	ff_tail = [
 		"-metadata", f"title={file_name}",
 		"-metadata", f"comment={Skip_key}",
 		"-metadata", "copyright=2024",
 		"-metadata", "author=Encoded by GeHab",
 		"-metadata", f"encoder=ffmpeg {ffmpeg_vers}",
-		"-movflags", "+faststart",
-		"-fflags",	 "+fastseek",
-		"-fflags",	 "+genpts",
+		"-movflags", "+faststart",		# Place moov atom at the beginning for fast start
+		"-fflags",   "+fastseek",		# Enable fast seeking
+		"-fflags",   "+genpts",			# Generate presentation timestamps
+#		"-level:v",  "5.1",       		# Set the level for better compatibility
+#		"-tag:v",	 "hvc1",    	  	# Use this tag for better compatibility with some players
 		"-keyint_min", "25",    	    # Minimum interval between keyframes
 		"-g", "50",         	        # Set the GOP (Group of Pictures) size
 		"-y",		 out_file,
 	]
-
 
 	for attempt in range(1, max_retries + 1):
 		try:
@@ -152,6 +155,7 @@ def ffmpeg_run(input_file: str, ff_com: list, skip_it: bool, execu: str = "ffmpe
 				return out_file
 		except Exception as e:
 			print(f"Attempt {attempt} failed: {e}")
+
 		if attempt == max_retries:
 			print(f"Failed after {attempt} attempts.")
 			raise Exception(f"Failed after {attempt} attempts.")
@@ -182,7 +186,7 @@ def run_ffm(args, de_bug=False):
 			msj += f" Done\n"
 			print(msj)
 
-			time.sleep(2)
+			time.sleep(1)
 		else:
 			with SP.Popen( args,
 				universal_newlines=True,
@@ -229,7 +233,6 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 	global glb_bitrate
 
 	_format = mta_dta.get('format', {})
-
 	if not _format :
 		msj += f" 'format' keyword not in\n{ json.dumps(mta_dta, indent=2) }\n"
 		print ( msj )
@@ -245,6 +248,7 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 	filename    =           _format.get('filename',		'No File Name')
 
 	tags        =			_format.get('tags', {})
+
 	f_comment   =           tags.get('comment',			'No_comment')
 	title       =           tags.get('title',			'No_title')
 
@@ -461,8 +465,8 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 		_vi_btrt = int(       this_vid.get('bit_rate', glb_bitrate * 0.8))
 		frm_rate = divd_strn( this_vid.get('r_frame_rate'  , '25'))
 
-		tags            = this_vid.get('tags', {})
-		handler_name    = tags.get('handler_name','Unknown')
+		tags                = this_vid.get('tags', {})
+		handler_name        = tags.get('handler_name','Unknown')
 
 		if 'bit_rate' not in this_vid:
 			extra = ' Bit Rate Estimate '
@@ -476,15 +480,17 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 		else :
 			# XXX: Estimate Average bits_per_pixel
 			glb_totfrms = round(frm_rate * glb_vidolen)
+
 			avbpp = round (100000 * _vi_btrt / (glb_totfrms * vid_width * vid_heigh) +1)
+
 			max_vid_btrt = 4700000
 
 			msj = " 8"
+
 			if pix_fmt.endswith("10le") :
 				msj = "10"
-				avbpp  *= 1.25
+				avbpp		 *= 1.25
 				max_vid_btrt *= 1.25
-
 
 			mins,  secs = divmod(glb_vidolen, 60)
 			hours, mins = divmod(mins, 60)
@@ -501,7 +507,6 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 			ff_vid = ['-map', f'0:v:{indx}', f'-c:v:{indx}']
 			# Determine if codec copy or conversion is needed, and update ff_vid accordingly
 			if codec_name == 'hevc':
-#                print ( hm_sz( max_vid_btrt ) )
 				if avbpp < 80 and _vi_btrt < max_vid_btrt :
 					extra += ' => Copy'
 					ff_vid.extend(['copy'])
@@ -582,15 +587,16 @@ def parse_audio(streams, de_bug=False):
 		extra_info = ""
 		skip_current = False
 
-		index = audio_stream.get('index', -1)
-		codec_name = audio_stream.get('codec_name', None)
-		sample_rate = audio_stream.get('sample_rate', None)
-		channels = audio_stream.get('channels', -100)
+		index        = audio_stream.get('index', -1)
+		codec_name   = audio_stream.get('codec_name', None)
+		sample_rate  = audio_stream.get('sample_rate', None)
+		channels     = audio_stream.get('channels', -100)
 		bitrate = int( audio_stream.get('bit_rate', 0))
 
-		disposition = audio_stream.get('disposition', {})
-		dispo_forced = disposition.get('forced', 0)
+		disposition  = audio_stream.get('disposition', {})
+		dispo_forced  = disposition.get('forced', 0)
 		dispo_default = disposition.get('default', 0)
+
 		tags         = audio_stream.get('tags', {})
 		language      = tags.get('language', 'und')
 		handler_name  = tags.get('handler_name', 'Unknown')
@@ -1038,7 +1044,7 @@ def short_ver ( input_file, execu, *other ) :
 	if run_ffm( todo ) and os.path.exists(out_file) :
 		msj+= f'\n{todo}\nNo Output Error'
 		print(msj)
-		time.sleep(3)
+		time.sleep(1)
 		return out_file
 	else :
 		print (" Failed")
