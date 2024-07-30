@@ -1010,7 +1010,7 @@ def video_diff(file1, file2) :
 	todo = (ffmpeg, '-i', file1, '-i', file2, '-filter_complex', "blend=all_mode=difference", '-c:v', 'libx265', '-preset', 'faster', '-c:a', 'copy', '-y', out_f)
 
 	if run_ffm(todo):
-		return out_file
+		return out_f
 	else:
 		msj+= f"   = Failed to Compare Files >\n"
 		raise Exception(msj)
