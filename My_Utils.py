@@ -278,6 +278,22 @@ class Tee:
 		self.close()
 ##>>============-------------------<  End  >------------------==============<<##
 
+class Spinner:
+	def __init__(self, spin_text="|/-o+\\", indent=0):
+		self.spinner_count	= 0
+		self.spin_text		= spin_text
+		self.spin_length	= len(spin_text)
+		self.prefix			= " " * indent  # Indentation string
+	def print_spin(self, extra: str = "") -> None:
+		"""
+		Prints a spinner in the console to indicate progress.
+		Args:
+			extra (str): Additional text to display after the spinner.
+		"""
+		spin_char = self.spin_text[self.spinner_count % self.spin_length]
+		sys.stderr.write(f"\r{self.prefix}| {spin_char} | {extra}")
+		sys.stderr.flush()
+		self.spinner_count += 1
 class RunningAverage:
 	''' Compute the running average of a value '''
 

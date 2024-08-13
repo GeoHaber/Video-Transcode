@@ -105,12 +105,8 @@ def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> i
 
 		ratio = round (100 * ((output_file_size - input_file_size) / input_file_size), 2)
 		extra = "+Biger" if ratio > 0 else ("=Same" if (input_file_size - output_file_size) == 0 else "-Lost")
-		msg = f"    Size Was: {hm_sz(input_file_size)} Is: {hm_sz(output_file_size)} {extra}: {hm_sz(input_file_size - output_file_size)} = {ratio}%"
+		msg = f"    Size Was: {hm_sz(input_file_size)} Is: {hm_sz(output_file_size)} {extra}: {hm_sz(abs(input_file_size - output_file_size))} {ratio}%"
 
-		if ratio > 120:
-			msg += " ! Much Bigger !"
-		elif ratio < -100:
-			msg += " ! Much Smaller !"
 
 		final_output_file = input_file if input_file.endswith('.mp4') else input_file.rsplit('.', 1)[0] + '.mp4'
 		temp_file = input_file + "_Delete_.old"
@@ -223,9 +219,8 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 		Optional[List[List]]: A list of lists containing file information (path, size, extension, video length).
 		None on errors.
 	"""
-	msj = sys._getframe().f_code.co_name
 	str_t = time.perf_counter()
-	msj += f" Start: {time.strftime('%H:%M:%S')}"
+	msj   = f"{sys._getframe().f_code.co_name} Start: {time.strftime('%H:%M:%S')}"
 	print(f"Scan: {root}\tSize: {hm_sz(get_tree_size(root))}\n{msj}")
 
 	if not root or not isinstance(root, str) or not os.path.isdir(root):
@@ -297,10 +292,10 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 		data.append([file_s, duration])
 		perform_clustering(data, _lst)
 
-	order = "Descending >" if sort_order else "Ascending <"
 
 	end_t = time.perf_counter()
 	print(f"\n Scan: Done : {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}")
+	order = "Descending >" if sort_order else "Ascending <"
 	print(f" Sort: {order}")
 
 	return sorted(_lst, key=lambda item: item[1], reverse=sort_order)
@@ -359,7 +354,7 @@ def main():
 		end_t = time.perf_counter()
 		total_time = end_t - str_t
 		print(f"\n Done: {time.strftime('%H:%M:%S')}\t Total Time: {hm_time(total_time)}")
-		print(f" Files: {fl_nmb}\tProces: {procs}\tSkip: {skipt}\tErr: {errod}\n Saved in Total: {hm_sz(saved)}\n")
+		print(f" Files: {fl_nmb}\tProcessed: {procs}\tSkipped : {skipt}\tErrors : {errod}\n Saved in Total: {hm_sz(saved)}\n")
 
 	input('All Done :)')
 	exit()
