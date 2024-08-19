@@ -130,6 +130,7 @@ def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> i
 
 ##>>============-------------------<  End  >------------------==============<<##
 
+@perf_monitor
 def process_file(file_info, cnt, fl_nmb ):
 	saved, procs, skipt, errod = 0, 0, 0, 0
 	str_t = time.perf_counter()
@@ -226,29 +227,37 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 	if not root or not isinstance(root, str) or not os.path.isdir(root):
 		print(f"Invalid root directory: {root}")
 		return []
-	if not xtnsio or not isinstance(xtnsio, str):
+	if not isinstance(xtnsio, (tuple, list)):
 		print(f"Invalid extensions list: {xtnsio}")
 		return []
 
 	_lst = []
 	data = []
 
+	def is_file_accessible(file_path):
+		try:
+			with open(file_path, 'rb') as f:
+				f.read(1)
+			return True
+		except (IOError, OSError):
+			return False
 	def process_files(executor=None):
 		futures = []
 		for dirpath, _, files in os.walk(root):
 			for one_file in files:
+				f_path = os.path.join(dirpath, one_file)
+				if not is_file_accessible(f_path):
+					print(f"Skipping inaccessible file: {f_path}")
+					continue
 				_, ext = os.path.splitext(one_file.lower())
 				if ext in xtnsio:
-					f_path = os.path.join(dirpath, one_file)
 					try:
 						file_s = os.path.getsize(f_path)
 						if not os.access(f_path, os.W_OK) or not (os.stat(f_path).st_mode & stat.S_IWUSR):
 							print(f"Skip read-only file: {f_path}")
-							input("Yes ?")
 							continue
 						if file_s < 10:
 							print(f"Remove empty file: {f_path}")
-							input("Yes ?")
 							os.remove(f_path)
 						elif file_s > 1000 and len(f_path) < 333:
 							if executor:
@@ -278,7 +287,7 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 			_lst.append(result)
 
 	# XXX: Set to True # XXX:
-	MultiThread = 1
+	MultiThread = True
 	if MultiThread:
 		with ThreadPoolExecutor() as executor:
 			process_files(executor)

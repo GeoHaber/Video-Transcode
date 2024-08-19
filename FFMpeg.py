@@ -30,14 +30,6 @@ version = f"Ffmpeg version: {SP.run(['ffmpeg', '-version'], stdout=SP.PIPE).stdo
 print( version )
 
 ##==============-------------------   End   -------------------==============##
-spin_count = 0
-def print_spinner(extra=""):
-	global spin_count
-	rel_path = extra.replace(Root, "").lstrip(os.sep)
-	spin_char = "|/-o+\\"
-	sys.stderr.write(f"\r | {spin_char[spin_count % len(spin_char)]} | {rel_path} \r")
-	sys.stderr.flush()
-	spin_count += 1
 
 @perf_monitor
 def ffprobe_run(input_file: str, execu=ffprob, de_bug=False) -> dict:
@@ -60,7 +52,6 @@ def ffprobe_run(input_file: str, execu=ffprob, de_bug=False) -> dict:
 #	print(f"  +{msj} Start: {TM.datetime.now():%T}")
 	if not input_file :
 		raise FileNotFoundError(f"{msj} No input_file provided.")
-	print_spinner (input_file[:90])
 
 	cmd = [execu, '-hide_banner', '-i', input_file,
 					'-analyzeduration', '100000000',
@@ -109,7 +100,7 @@ def ffmpeg_run(input_file: str, ff_com: list, skip_it: bool, execu: str = "ffmpe
 	msj = sys._getframe().f_code.co_name
 
 	if not input_file or skip_it:
-		print(f"{msj}\nSkip: {skip_it}\nFile: {input_file}")
+		if de_bug: print(f"{msj}\nSkip: {skip_it}\nFile: {input_file}")
 		return None
 
 	print(f"  +{msj} Start: {TM.datetime.now():%T}")
@@ -239,13 +230,13 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 		raise ValueError(msj)
 	if de_bug: print(f"F: {json.dumps(_format, indent=2)}\n ")
 
+	size        =           _format.get('size',			0)
+	filename    =           _format.get('filename',		'No_file_name')
 	glb_vidolen = int(float(_format.get('duration',     0.0)) )
 	glb_bitrate = int(      _format.get('bit_rate',     0) )
 
 	nb_streams  = int(      _format.get('nb_streams',   0) )
 	nb_programs = int(      _format.get('nb_programs',  0) )
-	size        =           _format.get('size',         0)
-	filename    =           _format.get('filename',		'No File Name')
 
 	tags        =			_format.get('tags', {})
 
@@ -296,13 +287,16 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 		'S': len(subtl_streams),
 		'D': len(datax_streams)
 	}
-	summary_msg = f"    |=Title|{title}|\n    |>FRMT<|Size: {hm_sz(size)}|Bitrate: {hm_sz(glb_bitrate)}|Length: {hm_time(glb_vidolen)}|"
-	summary_msg += ''.join([f" {key}: {count}|" for key, count in stream_counts.items() if count != 0])
 
 	# Check for skip condition
 	_, ext = os.path.splitext(input_file)
+	if input_file != filename :
+		print (f"Fn:{filename}\nIn:{input_file} ")
+		time.sleep(5)
 
 	f_skip = (f_comment == Skip_key) and (ext == '.mp4')
+	summary_msg = f"    |=Title|{title}|\n    |>FRMT<|Size: {hm_sz(size)}|Bitrate: {hm_sz(glb_bitrate)}|Length: {hm_time(glb_vidolen)}|"
+	summary_msg += ''.join([f" {key}: {count}|" for key, count in stream_counts.items() if count != 0])
 
 	if f_skip:
 		summary_msg += f" Key OK"   # {filename}
