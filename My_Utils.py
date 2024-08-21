@@ -73,6 +73,11 @@ def debug(func):
 	return wrapper
 
 def perf_monitor(func):
+	debug = False
+	if not debug:
+		# If running in optimized mode, return the original function
+		return func
+	
 	@wraps(func)
 	def wrapper(*args, **kwargs):
 		calling_function = sys._getframe().f_back.f_code.co_name if sys._getframe().f_back is not None else "Top Level"
@@ -279,14 +284,17 @@ class Tee:
 ##>>============-------------------<  End  >------------------==============<<##
 
 class Spinner:
+
 	def __init__(self, spin_text="|/-o+\\", indent=0):
 		self.spinner_count	= 0
 		self.spin_text		= spin_text
 		self.spin_length	= len(spin_text)
 		self.prefix			= " " * indent  # Indentation string
+
 	def print_spin(self, extra: str = "") -> None:
 		"""
 		Prints a spinner in the console to indicate progress.
+
 		Args:
 			extra (str): Additional text to display after the spinner.
 		"""
@@ -294,6 +302,28 @@ class Spinner:
 		sys.stderr.write(f"\r{self.prefix}| {spin_char} | {extra}")
 		sys.stderr.flush()
 		self.spinner_count += 1
+
+'''
+# Example usage:
+	if __name__ == "__main__":
+		# Testing with different indentation values
+		spinner_no_indent = Spinner(indent=0)
+		spinner_with_indent = Spinner(indent=4)
+
+		for _ in range(100):  # Simulate a task with 10 iterations
+			spinner_no_indent.print_spinner(f" {_} Processing without indent...")
+			time.sleep(0.1)  # Simulate work being done
+
+		print("\n")
+
+		for _ in range(100):  # Simulate a task with 10 iterations
+			spinner_with_indent.print_spinner(f" {_} Processing with indent...")
+			time.sleep(0.1)  # Simulate work being done
+
+		print("\nTask completed!")
+'''
+##>>============-------------------<  End  >------------------==============<<##
+
 class RunningAverage:
 	''' Compute the running average of a value '''
 
@@ -357,8 +387,10 @@ class Color:
 #print(f"{Color(Color.RED, bright=True)}This is bright red text!{Color(Color.RESET)}")
 #print(f"{Color(Color.BLUE)}This is normal blue text!{Color(Color.RESET)}")
 
+
 ##	XXX: Functions :XXX
 ##==============-------------------  Start  -------------------==============##
+
 def hm_sz(numb: Union[str, int, float], type: str = "B") -> str:
 	"""
 	Convert a file size to human-readable format.
@@ -370,12 +402,15 @@ def hm_sz(numb: Union[str, int, float], type: str = "B") -> str:
 	Returns:
 	- str: Human-readable file size with sign.
 	"""
+	# Handle different input types for numb
 	if isinstance(numb, str):
 		numb = float(numb)
 	elif not isinstance(numb, (int, float)):
 		raise ValueError("Invalid type for numb. Must be str, int, or float.")
+
 	sign = '-' if numb < 0 else ''
 	numb = abs(numb)  # Convert to absolute value for calculations
+
 	units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB']
 
 	for unit in units:

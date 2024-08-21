@@ -101,12 +101,14 @@ def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> i
 			print(f"Output file '{output_file}' does not exist.")
 			return -1
 		output_file_size = os.path.getsize(output_file)
-		os.chmod(output_file, stat.S_IWRITE)
+		if output_file_size > 100 :
+			os.chmod(output_file, stat.S_IWRITE)
+		else :
+			return 0
 
 		ratio = round (100 * ((output_file_size - input_file_size) / input_file_size), 2)
 		extra = "+Biger" if ratio > 0 else ("=Same" if (input_file_size - output_file_size) == 0 else "-Lost")
 		msg = f"    Size Was: {hm_sz(input_file_size)} Is: {hm_sz(output_file_size)} {extra}: {hm_sz(abs(input_file_size - output_file_size))} {ratio}%"
-
 
 		final_output_file = input_file if input_file.endswith('.mp4') else input_file.rsplit('.', 1)[0] + '.mp4'
 		temp_file = input_file + "_Delete_.old"
@@ -159,13 +161,13 @@ def process_file(file_info, cnt, fl_nmb ):
 				skipt += 1
 
 			all_good = ffmpeg_run(file_p, all_good, skip_it, ffmpeg, de_bug)
-
-			if not all_good and not skip_it:
-				print("FFMPEG did not create anything good")
-				time.sleep(5)
-
-			saved += clean_up(file_p, all_good, skip_it, de_bug) or 0
-			procs += 1
+			if all_good :
+				saved += clean_up(file_p, all_good, skip_it, de_bug) or 0
+				procs += 1
+			elif not skip_it:
+				print(f"FFMPEG failed for {file_p}")
+				if copy_move(file_p, Excepto, True, True):
+					time.sleep(5)
 
 		except ValueError as e:
 			if e.args[0] == "Skip It":
@@ -197,14 +199,12 @@ def process_file(file_info, cnt, fl_nmb ):
 		print(f"  -End: {time.strftime('%H:%M:%S')}\tTotal: {hm_time(tot_t)}")
 
 	else:
-		print(f'Not Found-: {file_p}\t\t{hm_sz(file_s)}')
+		print(f' -Missing: {hm_sz(file_s)}\t{file_p}')
 		errod += 1
 		time.sleep(1)
 
 	return saved, procs, skipt, errod
 ##==============-------------------   End   -------------------==============##
-
-
 @perf_monitor
 def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: bool = False) -> Optional[List[List]]:
 	"""Scans a directory for files with specified extensions, extracts information
@@ -221,8 +221,14 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 		None on errors.
 	"""
 	str_t = time.perf_counter()
-	msj   = f"{sys._getframe().f_code.co_name} Start: {time.strftime('%H:%M:%S')}"
+	msj = f"{sys._getframe().f_code.co_name} Start: {time.strftime('%H:%M:%S')}"
 	print(f"Scan: {root}\tSize: {hm_sz(get_tree_size(root))}\n{msj}")
+
+	# Ensure xtnsio is a tuple
+#	if isinstance(xtnsio, str):
+#		xtnsio = tuple(xtnsio.strip("()").replace("'", "").split(", "))
+
+#	print(f"Extensions to scan: {xtnsio}")
 
 	if not root or not isinstance(root, str) or not os.path.isdir(root):
 		print(f"Invalid root directory: {root}")
@@ -241,6 +247,7 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 			return True
 		except (IOError, OSError):
 			return False
+
 	def process_files(executor=None):
 		futures = []
 		for dirpath, _, files in os.walk(root):
@@ -249,6 +256,7 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 				if not is_file_accessible(f_path):
 					print(f"Skipping inaccessible file: {f_path}")
 					continue
+
 				_, ext = os.path.splitext(one_file.lower())
 				if ext in xtnsio:
 					try:
@@ -260,6 +268,7 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 							print(f"Remove empty file: {f_path}")
 							os.remove(f_path)
 						elif file_s > 1000 and len(f_path) < 333:
+							# Runn ffprobe to extract
 							if executor:
 								future = executor.submit(ffprobe_run, f_path)
 								futures.append((f_path, file_s, ext, future))
@@ -286,13 +295,15 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 				print(f"{result}")
 			_lst.append(result)
 
-	# XXX: Set to True # XXX:
 	MultiThread = True
 	if MultiThread:
 		with ThreadPoolExecutor() as executor:
 			process_files(executor)
 	else:
 		process_files()
+
+	end_t = time.perf_counter()
+	print(f" Scan Done : {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}")
 
 	if do_clustering:
 		print(f" Start Clustering : {time.strftime('%H:%M:%S')}")
@@ -301,13 +312,14 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 		data.append([file_s, duration])
 		perform_clustering(data, _lst)
 
-
 	end_t = time.perf_counter()
 	print(f"\n Scan: Done : {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}")
+
 	order = "Descending >" if sort_order else "Ascending <"
 	print(f" Sort: {order}")
 
 	return sorted(_lst, key=lambda item: item[1], reverse=sort_order)
+
 ##==============-------------------   End   -------------------==============##
 
 def main():
