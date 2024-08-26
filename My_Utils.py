@@ -441,10 +441,10 @@ def hm_sz(numb: Union[str, int, float], type: str = "B") -> str:
 
 	for unit in units:
 		if numb < 1024.0:
-			return f"{sign}{numb:.2f} {unit}"
+			return f"{sign}{numb:.2f}{unit}"
 		numb /= 1024.0
 
-	return f"{sign}{numb:.2f} {units[-1]}"
+	return f"{sign}{numb:.2f}{units[-1]}"
 ##==============-------------------   End   -------------------==============##
 
 def hm_time(timez: float) -> str:

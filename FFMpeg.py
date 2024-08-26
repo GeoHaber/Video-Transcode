@@ -401,20 +401,21 @@ def add_subtl_from_file(input_file: str, de_bug: bool) -> tuple[list, bool]:
 ##>>============-------------------<  End  >------------------==============<<##
 
 # Define a helper function to select the appropriate encoder and options
-def get_encoder_options(codec_name, src_pix_fmt, use_hw_accel=False):
+def get_encoder_options(codec_name, src_pix_fmt, bit_rate, use_hw_accel=False):
 	msj = sys._getframe().f_code.co_name
     # Determine if the source is 10-bit
 	is_10bit = src_pix_fmt.endswith("10le")
     # Set base values
-	target_quality='high'
+	target_quality='as_is'
 	quality_presets = {
-		'low':		{'bitrate': 2000, 'quality': 26},
-		'medium':	{'bitrate': 3000, 'quality': 24},
-		'high':		{'bitrate': 4000, 'quality': 22},
-		'higher':	{'bitrate': 5000, 'quality': 18},
+		'low':		{'bitrate': (bit_rate // (1024 * 3   )), 'quality': 26},
+		'medium':	{'bitrate': (bit_rate // (1024 * 1.5 )), 'quality': 24},
+		'as_is':	{'bitrate': (bit_rate // (1024       )), 'quality': 22},
+		'high':		{'bitrate': (bit_rate // (1024 * 0.75)), 'quality': 20},
+		'higher':	{'bitrate': (bit_rate // (1024 * 0.5 )), 'quality': 18},
 	}
 	preset = quality_presets[target_quality]
-	base_target_bitrate	= preset['bitrate']
+	base_target_bitrate	= int(preset['bitrate'])
 	global_quality		= preset['quality']
     # Adjust for 10-bit content
 	if is_10bit:
@@ -534,11 +535,11 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 					skip_it = True
 				else:
 					extra += f' Reduce BitRate: {hm_sz(max_vid_btrt):>6} '
-					encoder_options = get_encoder_options(codec_name, this_vid['pix_fmt'], use_hw_accel )
+					encoder_options = get_encoder_options(codec_name, this_vid['pix_fmt'], max_vid_btrt, use_hw_accel )
 					ff_vid.extend(encoder_options)
 			else:
 				extra += ' => Convert to Hevc'
-				encoder_options = get_encoder_options(codec_name, this_vid['pix_fmt'], use_hw_accel)
+				encoder_options = get_encoder_options(codec_name, this_vid['pix_fmt'], _vi_btrt, use_hw_accel)
 				ff_vid.extend(encoder_options)
 
 			output = "SD"
