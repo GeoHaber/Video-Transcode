@@ -290,7 +290,19 @@ class Spinner:
 		self.spin_text		= spin_text
 		self.spin_length	= len(spin_text)
 		self.prefix			= " " * indent  # Indentation string
+		self.last_message_length = 0  # To keep track of the length of the last printed message
+		self.cursor_hidden = False
 
+	def hide_cursor(self):
+		if not self.cursor_hidden:
+			sys.stderr.write("\033[?25l")  # Hide cursor
+			sys.stderr.flush()
+			self.cursor_hidden = True
+	def show_cursor(self):
+		if self.cursor_hidden:
+			sys.stderr.write("\033[?25h")  # Show cursor
+			sys.stderr.flush()
+			self.cursor_hidden = False
 	def print_spin(self, extra: str = "") -> None:
 		"""
 		Prints a spinner in the console to indicate progress.
@@ -298,11 +310,25 @@ class Spinner:
 		Args:
 			extra (str): Additional text to display after the spinner.
 		"""
+		self.hide_cursor()
+		terminal_width = shutil.get_terminal_size().columns
 		spin_char = self.spin_text[self.spinner_count % self.spin_length]
-		sys.stderr.write(f"\r{self.prefix}| {spin_char} | {extra}")
+		message = f"\r{self.prefix}| {spin_char} | {extra}"
+		if len(message) > terminal_width:
+			message = message[:terminal_width - 1]  # Truncate to fit the terminal width
+		clear_spaces = max(self.last_message_length - len(message), 0)
+		sys.stderr.write(f"{message}{' ' * clear_spaces}")
 		sys.stderr.flush()
+		self.last_message_length = len(message)
 		self.spinner_count += 1
 
+	def stop(self):
+		"""
+		Stops the spinner and shows the cursor.
+		"""
+		self.show_cursor()
+		sys.stderr.write("\n")  # Move to the next line after stopping
+		sys.stderr.flush()
 '''
 # Example usage:
 	if __name__ == "__main__":
@@ -311,13 +337,13 @@ class Spinner:
 		spinner_with_indent = Spinner(indent=4)
 
 		for _ in range(100):  # Simulate a task with 10 iterations
-			spinner_no_indent.print_spinner(f" {_} Processing without indent...")
+			spinner_no_indent.print_spin(f" {_} Processing without indent...")
 			time.sleep(0.1)  # Simulate work being done
 
 		print("\n")
 
 		for _ in range(100):  # Simulate a task with 10 iterations
-			spinner_with_indent.print_spinner(f" {_} Processing with indent...")
+			spinner_with_indent.print_spin(f" {_} Processing with indent...")
 			time.sleep(0.1)  # Simulate work being done
 
 		print("\nTask completed!")

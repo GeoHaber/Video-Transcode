@@ -126,7 +126,6 @@ def ffmpeg_run(input_file: str, ff_com: list, skip_it: bool, execu: str = "ffmpe
 		"-movflags",    "+faststart",         # Place moov atom at the beginning for fast start
 		"-fflags",      "+fastseek",          # Enable fast seeking
 		"-fflags",      "+genpts",            # Generate presentation timestamps
-#		"-level:v",     "4.1",                # Set the level for better compatibility
 		"-keyint_min",  "30",                 # Minimum interval between keyframes
 		"-g",           "60",                 # Set the GOP (Group of Pictures) size
 		"-y",           out_file,
@@ -209,9 +208,8 @@ def run_ffm(args, de_bug=False):
 				return False
 
 	except Exception as e:
-		msj += f" Exception: {e}"
+		print(f"{msj} Exception: {e}\n{args}\n")
 		return False
-		print( msj )
 
 	return True
 ##==============-------------------   End   -------------------==============##
@@ -400,28 +398,65 @@ def add_subtl_from_file(input_file: str, de_bug: bool) -> tuple[list, bool]:
 		if de_bug:
 			print("    |No External Sub File |")
 	return [], True
-
 ##>>============-------------------<  End  >------------------==============<<##
-
 
 # Define a helper function to select the appropriate encoder and options
-def get_encoder_options(codec_name, src_pix_fmt, use_hw_accel):
-	hw_pix_fmt = "p010le" if src_pix_fmt.endswith("10le") else "nv12"
-	if use_hw_accel:
-		# Use hevc_qsv (HEVC) encoder with QSV options
-		return ['hevc_qsv', '-load_plugin', 'hevc_hw',
-				'-init_hw_device', 'qsv=qsv:MFX_IMPL_hw_any',
-				'-filter_hw_device', 'qsv',
-				'-pix_fmt', hw_pix_fmt,
-				'-look_ahead', '1',            # Enable lookahead
-				'-look_ahead_depth', '50',    # Set lookahead depth to ? 40 frames
-				'-global_quality',   '22',    # Use global_quality instead of CRF for QSV
-				'-preset', 'slower']        # Encoder preset
+def get_encoder_options(codec_name, src_pix_fmt, use_hw_accel=False):
+	msj = sys._getframe().f_code.co_name
+    # Determine if the source is 10-bit
+	is_10bit = src_pix_fmt.endswith("10le")
+    # Set base values
+	target_quality='high'
+	quality_presets = {
+		'low':		{'bitrate': 2000, 'quality': 26},
+		'medium':	{'bitrate': 3000, 'quality': 24},
+		'high':		{'bitrate': 4000, 'quality': 22},
+		'higher':	{'bitrate': 5000, 'quality': 18},
+	}
+	preset = quality_presets[target_quality]
+	base_target_bitrate	= preset['bitrate']
+	global_quality		= preset['quality']
+    # Adjust for 10-bit content
+	if is_10bit:
+		target_bitrate = str(int(base_target_bitrate * 1.25)) + 'k'
 	else:
-		# Use libx265 (HEVC) or libx264 (H.264) encoder with software options and 10Bit
-		return ['libx265', '-pix_fmt', 'yuv420p10le', '-crf', '22', '-preset', 'slow']
-#        return ['libx265', '-pix_fmt', src_pix_fmt, '-crf', '22', '-preset', 'slow']
+		target_bitrate = str(base_target_bitrate) + 'k'
+    # Calculate max_bitrate and bufsize
+	max_bitrate	= str(int(int(target_bitrate.rstrip('k')) * 1.5)) + 'k'
+	bufsize		= str(int(int(max_bitrate.rstrip('k')) * 2)) + 'k'
+	if use_hw_accel:
+		print(f"    {msj} HW accelerated")
+		hw_pix_fmt = "p010le" if is_10bit else "nv12"
+		return [
+			'hevc_qsv',
+			'-load_plugin',			'hevc_hw',
+			'-init_hw_device',		'qsv=qsv:MFX_IMPL_hw_any',
+			'-filter_hw_device', 	'qsv',
+			'-pix_fmt',				hw_pix_fmt,
+			'-b:v',					target_bitrate,
+			'-maxrate',				max_bitrate,
+			'-bufsize',				bufsize,
+			'-look_ahead',			'1',
+			'-look_ahead_depth',	'90',
+			'-global_quality',		str(round(global_quality)),
+			'-rc:v',				'vbr_la',  # Use variable bitrate with lookahead
+			'-preset',				'slow',
+		]
+	else:
+		print(f"    {msj} SW")
+		sw_pix_fmt = "yuv420p10le" if is_10bit else "yuv420p"
+		return [
+			'libx265',
+			'-x265-params',		'bframes=8:psy-rd=1:aq-mode=3:aq-strength=0.8:deblock=1,1',
+			'-pix_fmt',			sw_pix_fmt,
+			'-crf',				str(round(global_quality)),
+			'-b:v',				target_bitrate,
+			'-maxrate',			max_bitrate,
+			'-bufsize',			bufsize,
+			'-preset',			'slow',
+		]
 ##>>============-------------------<  End  >------------------==============<<##
+
 
 @perf_monitor
 def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
@@ -471,15 +506,11 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 			# XXX: Estimate Average bits_per_pixel
 			glb_totfrms = round(frm_rate * glb_vidolen)
 
-			avbpp = round (100000 * _vi_btrt / (glb_totfrms * vid_width * vid_heigh) +1)
-
-			max_vid_btrt = 4700000
+			max_vid_btrt = 5000000
 
 			msj = " 8"
-
 			if pix_fmt.endswith("10le") :
 				msj = "10"
-				avbpp         *= 1.25
 				max_vid_btrt *= 1.25
 
 			mins,  secs = divmod(glb_vidolen, 60)
@@ -497,13 +528,13 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 			ff_vid = ['-map', f'0:v:{indx}', f'-c:v:{indx}']
 			# Determine if codec copy or conversion is needed, and update ff_vid accordingly
 			if codec_name == 'hevc':
-				if avbpp < 80 and _vi_btrt < max_vid_btrt :
+				if _vi_btrt < max_vid_btrt :
 					extra += ' => Copy'
 					ff_vid.extend(['copy'])
 					skip_it = True
 				else:
 					extra += f' Reduce BitRate: {hm_sz(max_vid_btrt):>6} '
-					encoder_options = get_encoder_options(codec_name, this_vid['pix_fmt'], use_hw_accel)
+					encoder_options = get_encoder_options(codec_name, this_vid['pix_fmt'], use_hw_accel )
 					ff_vid.extend(encoder_options)
 			else:
 				extra += ' => Convert to Hevc'
@@ -525,11 +556,13 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 				nw = 1920
 				nh = round( (nw / vid_width) * vid_heigh / 2) * 2  # Ensure nh is always even
 				ff_vid = [
-					'-map', f'0:v:{indx}',
-					f'-c:v:{indx}', 'libx265',  # Specify the H.265 codec here
-					'-pix_fmt', f"{this_vid['pix_fmt']}",
-					'-crf', '22','-preset', 'slow',
-					'-vf', f'scale={nw}:{nh}',
+					'-map',			f'0:v:{indx}',
+					f'-c:v:{indx}',	'libx265',				# Specify H.265 codec here
+					'-vf',			f'scale={nw}:{nh}',
+					'-pix_fmt',		"yuv420p10le",
+					'-crf',			'22',
+					'-b:v',			"3500k",
+					'-preset',		'slow',
 				]
 				extra = f' {output} Scale {vid_width}x{vid_heigh} to {nw}x{nh}'
 				skip_it = False
@@ -541,7 +574,7 @@ def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
 				ff_vid.extend([f"-metadata:s:v:{indx}", "handler_name=VideoHandler x265"])
 				skip_it = False
 
-			message = f"    |<V:{indx:2}>|{codec_name:^8}|{vid_width:<4}x{vid_heigh:<4}|{aspct_r}|Bit: {msj}|Btrt: {hm_sz(_vi_btrt):>6}|Avbpp: {avbpp:>3}|Fps: {frm_rate:>7}|Tfm: {hm_sz(glb_totfrms,'F'):>8}|{extra}|"
+			message = f"    |<V:{indx:2}>|{codec_name:^8}|{vid_width:<4}x{vid_heigh:<4}|{aspct_r}|Bit: {msj}|Btrt: {hm_sz(_vi_btrt):>6}|Fps: {frm_rate:>7}|Tfm: {hm_sz(glb_totfrms,'F'):>8}|{extra}|"
 			print(f"\033[91m{message}\033[0m")
 
 		ff_video += ff_vid

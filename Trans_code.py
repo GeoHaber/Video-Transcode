@@ -223,6 +223,7 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 	str_t = time.perf_counter()
 	msj = f"{sys._getframe().f_code.co_name} Start: {time.strftime('%H:%M:%S')}"
 	print(f"Scan: {root}\tSize: {hm_sz(get_tree_size(root))}\n{msj}")
+	spinner = Spinner(indent=0)
 
 	# Ensure xtnsio is a tuple
 #	if isinstance(xtnsio, str):
@@ -257,8 +258,9 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 					print(f"Skipping inaccessible file: {f_path}")
 					continue
 
-				_, ext = os.path.splitext(one_file.lower())
-				if ext in xtnsio:
+				_, ext = os.path.splitext(one_file)
+				if ext.lower() in xtnsio:
+					spinner.print_spin(f" {one_file} ")
 					try:
 						file_s = os.path.getsize(f_path)
 						if not os.access(f_path, os.W_OK) or not (os.stat(f_path).st_mode & stat.S_IWUSR):
@@ -302,8 +304,6 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 	else:
 		process_files()
 
-	end_t = time.perf_counter()
-	print(f" Scan Done : {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}")
 
 	if do_clustering:
 		print(f" Start Clustering : {time.strftime('%H:%M:%S')}")
@@ -312,11 +312,10 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 		data.append([file_s, duration])
 		perform_clustering(data, _lst)
 
-	end_t = time.perf_counter()
-	print(f"\n Scan: Done : {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}")
-
 	order = "Descending >" if sort_order else "Ascending <"
-	print(f" Sort: {order}")
+	end_t = time.perf_counter()
+	print(f"\n Sort: {order}\n Scan: Done : {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}\n")
+
 
 	return sorted(_lst, key=lambda item: item[1], reverse=sort_order)
 
