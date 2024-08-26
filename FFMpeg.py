@@ -853,7 +853,7 @@ def parse_extrd(streams_in, de_bug=False):
 	if de_bug:
 		print(f"D:= {ff_data}")
 
-	return ff_data, skip_it
+	return ff_data, True
 
 ##>>============-------------------<  End  >------------------==============<<##
 
@@ -875,7 +875,7 @@ def zabrain_run(input_file: str, mta_dta: Dict[str, any], de_bug: bool= False ) 
 			print(f"Go on: {e}")
 			return False , True
 	end_t = time.perf_counter()
-#    print(f'  -End: {TM.datetime.now():%T}\tTotal: {hm_time(end_t - str_t)}')
+	if de_bug: print(f'  -End: {TM.datetime.now():%T}\tTotal: {hm_time(end_t - str_t)}')
 
 	return ff_run_cmnd, skip_it
 ##>>============-------------------<  End  >------------------==============<<##

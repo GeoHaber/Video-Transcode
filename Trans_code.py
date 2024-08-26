@@ -151,8 +151,8 @@ def process_file(file_info, cnt, fl_nmb ):
 			input("File name too long > 333")
 
 		try:
-			all_good, skip_it = zabrain_run(file_p, jsn_ou, de_bug)
 #			debug = True # DEBUG:
+			all_good, skip_it = zabrain_run(file_p, jsn_ou, debug)
 			if debug or ext != ".mp4":
 				skip_it = False
 #				print (f"\nFile: {file_p}\nFfmpeg: {all_good}\n")
