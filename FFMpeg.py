@@ -410,7 +410,7 @@ def get_encoder_options(codec_name, src_pix_fmt, bit_rate, use_hw_accel=False):
 	quality_presets = {
 		'low':		{'bitrate': (bit_rate // (1024 * 3   )), 'quality': 26},
 		'medium':	{'bitrate': (bit_rate // (1024 * 1.5 )), 'quality': 24},
-		'as_is':	{'bitrate': (bit_rate // (1024       )), 'quality': 22},
+		'as_is':	{'bitrate': (bit_rate // (1024 * 0.95)), 'quality': 22},
 		'high':		{'bitrate': (bit_rate // (1024 * 0.75)), 'quality': 20},
 		'higher':	{'bitrate': (bit_rate // (1024 * 0.5 )), 'quality': 18},
 	}
@@ -426,7 +426,7 @@ def get_encoder_options(codec_name, src_pix_fmt, bit_rate, use_hw_accel=False):
 	max_bitrate	= str(int(int(target_bitrate.rstrip('k')) * 1.5)) + 'k'
 	bufsize		= str(int(int(max_bitrate.rstrip('k')) * 2)) + 'k'
 	if use_hw_accel:
-		print(f"    {msj} HW accelerated")
+#		print(f"    {msj} HW accelerated")
 		hw_pix_fmt = "p010le" if is_10bit else "nv12"
 		return [
 			'hevc_qsv',
@@ -444,7 +444,7 @@ def get_encoder_options(codec_name, src_pix_fmt, bit_rate, use_hw_accel=False):
 			'-preset',				'slow',
 		]
 	else:
-		print(f"    {msj} SW")
+#		print(f"    {msj} SW")
 		sw_pix_fmt = "yuv420p10le" if is_10bit else "yuv420p"
 		return [
 			'libx265',
