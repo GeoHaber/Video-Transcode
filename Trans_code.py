@@ -290,6 +290,7 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 					handle_result(result)
 				except Exception as e:
 					print(f"Error processing future for file {f_path}: {e}")
+		spinner.stop()  # Ensure the spinner stops
 
 	def handle_result(result):
 		if result:

@@ -57,13 +57,13 @@ def ffprobe_run(input_file: str, execu=ffprob, de_bug=False) -> dict:
 					'-analyzeduration', '100000000',
 					'-probesize',        '50000000',
 					'-v', 'fatal',       # XXX quiet, panic, fatal, error, warning, info, verbose, de_bug, trace
+					'-show_programs',
+					'-show_format',
+					'-show_streams',
+					'-show_error',
+					'-show_data',
+					'-show_private_data',
 					'-of','json',        # XXX default, csv, xml, flat, ini
-						'-show_programs',
-						'-show_format',
-						'-show_streams',
-						'-show_error',
-						'-show_data',
-						'-show_private_data',
 					]
 	try:
 		out = SP.run(cmd, stdout=SP.PIPE, check=True)
@@ -338,7 +338,6 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 
 	if datax_streams:
 		ff_datat, d_skip = parse_extrd(datax_streams, de_bug)
-	#    ff_com.extend(ff_datat)
 		d_skip = True    # XXX: Avoid reencode
 		skip_it = skip_it and d_skip
 		if de_bug : print (f"\nSkip={skip_it}, Dskip = {d_skip}\n" )
@@ -400,12 +399,11 @@ def add_subtl_from_file(input_file: str, de_bug: bool) -> tuple[list, bool]:
 	return [], True
 ##>>============-------------------<  End  >------------------==============<<##
 
-# Define a helper function to select the appropriate encoder and options
 def get_encoder_options(codec_name, src_pix_fmt, bit_rate, use_hw_accel=False):
 	msj = sys._getframe().f_code.co_name
-    # Determine if the source is 10-bit
 	is_10bit = src_pix_fmt.endswith("10le")
-    # Set base values
+
+	# Quality presets
 	target_quality='as_is'
 	quality_presets = {
 		'low':		{'bitrate': (bit_rate // (1024 * 3   )), 'quality': 26},
@@ -414,17 +412,22 @@ def get_encoder_options(codec_name, src_pix_fmt, bit_rate, use_hw_accel=False):
 		'high':		{'bitrate': (bit_rate // (1024 * 0.75)), 'quality': 20},
 		'higher':	{'bitrate': (bit_rate // (1024 * 0.5 )), 'quality': 18},
 	}
+
+#	print (f"Cod:{codec_name} Pix: {src_pix_fmt} Btr: {bit_rate // 1024} HWA: {use_hw_accel} ")
 	preset = quality_presets[target_quality]
 	base_target_bitrate	= int(preset['bitrate'])
 	global_quality		= preset['quality']
-    # Adjust for 10-bit content
+
+	# Adjust for 10-bit content
 	if is_10bit:
 		target_bitrate = str(int(base_target_bitrate * 1.25)) + 'k'
 	else:
 		target_bitrate = str(base_target_bitrate) + 'k'
-    # Calculate max_bitrate and bufsize
+
+	# Calculate max_bitrate and bufsize
 	max_bitrate	= str(int(int(target_bitrate.rstrip('k')) * 1.5)) + 'k'
 	bufsize		= str(int(int(max_bitrate.rstrip('k')) * 2)) + 'k'
+
 	if use_hw_accel:
 #		print(f"    {msj} HW accelerated")
 		hw_pix_fmt = "p010le" if is_10bit else "nv12"
@@ -457,7 +460,6 @@ def get_encoder_options(codec_name, src_pix_fmt, bit_rate, use_hw_accel=False):
 			'-preset',			'slow',
 		]
 ##>>============-------------------<  End  >------------------==============<<##
-
 
 @perf_monitor
 def parse_video(strm_in, de_bug=False, use_hw_accel=True ):

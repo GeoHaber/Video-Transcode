@@ -77,7 +77,7 @@ def perf_monitor(func):
 	if not debug:
 		# If running in optimized mode, return the original function
 		return func
-	
+
 	@wraps(func)
 	def wrapper(*args, **kwargs):
 		calling_function = sys._getframe().f_back.f_code.co_name if sys._getframe().f_back is not None else "Top Level"
@@ -286,10 +286,10 @@ class Tee:
 class Spinner:
 
 	def __init__(self, spin_text="|/-o+\\", indent=0):
-		self.spinner_count	= 0
-		self.spin_text		= spin_text
-		self.spin_length	= len(spin_text)
-		self.prefix			= " " * indent  # Indentation string
+		self.spinner_count = 0
+		self.spin_text = spin_text
+		self.spin_length = len(spin_text)
+		self.prefix = " " * indent  # Indentation string
 		self.last_message_length = 0  # To keep track of the length of the last printed message
 		self.cursor_hidden = False
 
@@ -298,11 +298,13 @@ class Spinner:
 			sys.stderr.write("\033[?25l")  # Hide cursor
 			sys.stderr.flush()
 			self.cursor_hidden = True
+
 	def show_cursor(self):
 		if self.cursor_hidden:
 			sys.stderr.write("\033[?25h")  # Show cursor
 			sys.stderr.flush()
 			self.cursor_hidden = False
+
 	def print_spin(self, extra: str = "") -> None:
 		"""
 		Prints a spinner in the console to indicate progress.
@@ -310,25 +312,40 @@ class Spinner:
 		Args:
 			extra (str): Additional text to display after the spinner.
 		"""
+		# Hide the cursor
 		self.hide_cursor()
+
+		# Get terminal width
 		terminal_width = shutil.get_terminal_size().columns
+
 		spin_char = self.spin_text[self.spinner_count % self.spin_length]
 		message = f"\r{self.prefix}| {spin_char} | {extra}"
+
+		# Truncate the message if it's too long for the terminal
 		if len(message) > terminal_width:
 			message = message[:terminal_width - 1]  # Truncate to fit the terminal width
+
+		# Calculate the number of spaces needed to clear the previous message
 		clear_spaces = max(self.last_message_length - len(message), 0)
+
+		# Print the spinner and the extra text, followed by enough spaces to clear any leftover characters
 		sys.stderr.write(f"{message}{' ' * clear_spaces}")
 		sys.stderr.flush()
+
+		# Update the length of the last message
 		self.last_message_length = len(message)
+
 		self.spinner_count += 1
 
 	def stop(self):
 		"""
 		Stops the spinner and shows the cursor.
 		"""
+		# Show the cursor
 		self.show_cursor()
 		sys.stderr.write("\n")  # Move to the next line after stopping
 		sys.stderr.flush()
+
 '''
 # Example usage:
 	if __name__ == "__main__":
@@ -448,33 +465,42 @@ def hm_sz(numb: Union[str, int, float], type: str = "B") -> str:
 ##==============-------------------   End   -------------------==============##
 
 def hm_time(timez: float) -> str:
-	'''Print time as years, months, weeks, days, hours, min, sec'''
-	units = {
-		'year': 31536000,
-		'month': 2592000,
-		'week': 604800,
-		'day': 86400,
-		'hour': 3600,
-		'min': 60,
-		'sec': 1,
-	}
+	"""Converts time in seconds to a human-readable format."""
 
-	if timez < 0.0:
+	units = [
+		('year', 31536000),
+		('month', 2592000),
+		('week',   604800),
+		('day',     86400),
+		('hour',     3600),
+		('minute',     60),
+		('second',      1)
+	]
+
+	# Handle edge cases
+	if timez < 0:
 		return "Error: time cannot be negative."
-	elif timez == 0.0:
+	if timez == 0:
 		return "Zero time."
-	elif timez < 0.001:
+	if timez < 0.001:
 		return f"{timez * 1000:.3f} ms"
-	elif timez < 60:
-		return f"{timez:>5.3f} sec{'s' if timez != 1 else ''}"
+	if timez < 60:
+		return f"{timez:.3f} second{'s' if timez != 1 else ''}"
+
+	result = []
+
+	# Convert time into larger units
+	for unit, seconds_in_unit in units:
+		value = int(timez // seconds_in_unit)
+		if value > 0:
+			result.append(f"{value} {unit}{'s' if value > 1 else ''}")
+			timez %= seconds_in_unit
+
+	# Join the result with 'and' for the last unit
+	if len(result) > 1:
+		return ", ".join(result[:-1]) + " and " + result[-1]
 	else:
-		frmt = []
-		for unit, unit_of_time in units.items():
-			value = timez // unit_of_time
-			if value != 0:
-				frmt.append(f"{int(value)} {unit}{'s' if value > 1 else ''}")
-			timez %= unit_of_time
-		return ", ".join(frmt[:-1]) + " and " + frmt[-1] if len(frmt) > 1 else frmt[0] if frmt else "0 sec"
+		return result[0]
 
 ##>>============-------------------<  End  >------------------==============<<##
 
@@ -502,7 +528,7 @@ def copy_move(src: str, dst: str, keep_original: bool = False, verbose: bool = F
 		return True
 
 	try:
-		(action, transfer_func) = ("_Copied", shutil.copy2) if keep_original else ("_Moved", shutil.move)
+		(action, transfer_func) = ("_Copy", shutil.copy2) if keep_original else ("_Move", shutil.move)
 		transfer_func(src, dst)
 		if verbose:
 			print(f"{action}: {src}\nTo    : {dst}")
