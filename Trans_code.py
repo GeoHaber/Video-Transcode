@@ -19,7 +19,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 MultiThread = False		# XXX: It is set to True in the scan_folder # XXX:
 de_bug = False
 
-Sort_Order = False
 Sort_Order = True
 
 Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')}_{time.strftime('%Y_%j_%H-%M-%S')}.log"
@@ -225,6 +224,7 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 	print(f"Scan: {root}\tSize: {hm_sz(get_tree_size(root))}\n{msj}")
 	spinner = Spinner(indent=0)
 
+
 	# Ensure xtnsio is a tuple
 #	if isinstance(xtnsio, str):
 #		xtnsio = tuple(xtnsio.strip("()").replace("'", "").split(", "))
@@ -257,7 +257,6 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 				if not is_file_accessible(f_path):
 					print(f"Skipping inaccessible file: {f_path}")
 					continue
-
 				_, ext = os.path.splitext(one_file)
 				if ext.lower() in xtnsio:
 					spinner.print_spin(f" {one_file} ")
@@ -305,7 +304,6 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 	else:
 		process_files()
 
-
 	if do_clustering:
 		print(f" Start Clustering : {time.strftime('%H:%M:%S')}")
 		duration = round(float(jsn_ou.get('format', {}).get('duration', 0.0)), 1)
@@ -314,9 +312,9 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 		perform_clustering(data, _lst)
 
 	order = "Descending >" if sort_order else "Ascending <"
+
 	end_t = time.perf_counter()
 	print(f"\n Sort: {order}\n Scan: Done : {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}\n")
-
 
 	return sorted(_lst, key=lambda item: item[1], reverse=sort_order)
 

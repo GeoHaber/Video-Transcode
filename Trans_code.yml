@@ -23,11 +23,10 @@ Video:
   Bl_and_Wh :   No
 # File extensions to procces
   Extensi:  ['.avchd', '.avi', '.divx', '.dv', '.flic', '.flv', '.flx', '.h264',
-             '.m4v', '.mkv','.moov', '.mov', '.movhd', '.movie', '.movx', '.mts',
-             '.mp4', '.mpe', '.mpeg', '.mpg', '.mpv', '.mpv2', '.ogv', '.ram', '.rmvb', '.ts',
-             '.vfw', '.vid', '.video', '.viv', '.vivo', '.vro', '.wm', '.wmv', '.wmx',
+               '.m4v', '.mkv', '.moov', '.mov', '.movhd', '.movie', '.movx', '.mts',
+               '.mp4', '.mpe', '.mpeg', '.mpg', '.mpv', '.mpv2', '.ogv', '.ram', '.rmvb', '.ts',
+               '.vfw', '.vid', '.video', '.viv', '.vivo', '.vro', '.wm', '.wmv', '.wmx',
                '.wrap', '.wvx', '.webm', '.x264', '.xvid']
-
 Audio:
   codec_name :      'libvorbis'
   Max_a_btr:        3300000

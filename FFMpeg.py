@@ -53,17 +53,18 @@ def ffprobe_run(input_file: str, execu=ffprob, de_bug=False) -> dict:
 	if not input_file :
 		raise FileNotFoundError(f"{msj} No input_file provided.")
 
-	cmd = [execu, '-hide_banner', '-i', input_file,
+	cmd = [execu, '-i', input_file,
+					'-hide_banner',
 					'-analyzeduration', '100000000',
 					'-probesize',        '50000000',
-					'-v', 'fatal',       # XXX quiet, panic, fatal, error, warning, info, verbose, de_bug, trace
+					'-v', 'fatal',      # XXX quiet, panic, fatal, error, warning, info, verbose, de_bug, trace
 					'-show_programs',
 					'-show_format',
 					'-show_streams',
 					'-show_error',
 					'-show_data',
 					'-show_private_data',
-					'-of','json',        # XXX default, csv, xml, flat, ini
+					'-of','json'        # XXX default, csv, xml, flat, ini
 					]
 	try:
 		out = SP.run(cmd, stdout=SP.PIPE, check=True)
@@ -106,7 +107,7 @@ def ffmpeg_run(input_file: str, ff_com: list, skip_it: bool, execu: str = "ffmpe
 	print(f"  +{msj} Start: {TM.datetime.now():%T}")
 
 	file_name, _ = os.path.splitext(os.path.basename(input_file))
-	out_file     = os.path.normpath('_' + stmpd_rad_str(7, file_name[0:27]))
+	out_file     = os.path.normpath('_' + stmpd_rad_str(7, file_name[0:25]))
 	out_file     = re.sub(r'[^\w\s_-]+', '', out_file).strip().replace(' ', '_') + TmpF_Ex
 
 	try:
@@ -120,9 +121,9 @@ def ffmpeg_run(input_file: str, ff_com: list, skip_it: bool, execu: str = "ffmpe
 	ff_tail = [
 		"-metadata",    f"title={file_name}",
 		"-metadata",    f"comment={Skip_key}",
-		"-metadata",    f"encoder=ffmpeg {ffmpeg_vers}",
-		"-metadata",    "copyright=2024",
-		"-metadata",    "author=Encoded by GeHab",
+#		"-metadata",    f"encoder=ffmpeg {ffmpeg_vers}",
+#		"-metadata",    "copyright=2024",
+		"-metadata",    "author=Encoded by GeoHab",
 		"-movflags",    "+faststart",         # Place moov atom at the beginning for fast start
 		"-fflags",      "+fastseek",          # Enable fast seeking
 		"-fflags",      "+genpts",            # Generate presentation timestamps
@@ -288,21 +289,22 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 	# XXX: Check for skip condition # XXX:
 	fnam, ext = os.path.splitext(os.path.basename(input_file))
 	name_good = fnam == title and ext == '.mp4'
-	if not name_good:
-		print(f"  Ext:{ext}\n  Fname:{fnam}\n  Title:{title}")
+#	if not name_good:
+#		print(f"  Ext:{ext}\t Fname:{fnam}\n  Title:{title}")
 
 	summary_msg = f"    |=Title|{title}|\n    |>FRMT<|Size: {hm_sz(size)}|Bitrate: {hm_sz(glb_bitrate)}|Length: {hm_time(glb_vidolen)}|"
 	summary_msg += ''.join([f" {key}: {count}|" for key, count in stream_counts.items() if count != 0])
 	print(f"\033[96m{summary_msg}\033[0m")
 
-	f_skip = f_comment == Skip_key and name_good
+	f_skip = name_good and f_comment == Skip_key
+#	de_bug = True
 	if f_skip:
 		print("   .Skip: Format")
 
-# Call parse functions for streams if they exist
+	# Call parse functions for streams if they exist
 	ff_com = []
 	if video_streams:
-		ff_video, v_skip = parse_video(video_streams, de_bug)
+		ff_video, v_skip = parse_video(video_streams, de_bug, f_skip )
 		ff_com.extend(ff_video)
 		skip_it = f_skip and v_skip
 		if de_bug : print (f"\nSkip={skip_it}, Fskip ={f_skip}, Vskip ={v_skip}\n" )
@@ -343,9 +345,9 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 		if de_bug : print (f"\nSkip={skip_it}, Dskip = {d_skip}\n" )
 
 	if de_bug:
-#    if de_bug or f_skip:
-#        print(f" Skip: {skip_it}\n FFmpeg: {ff_com}\n Nothing to do")
 		return [], f_skip
+	if de_bug or skip_it:
+		print(f" Skip: {skip_it}\n FFmpeg: {ff_com}\n Nothing to do")
 
 	return ff_com, skip_it
 
@@ -462,134 +464,124 @@ def get_encoder_options(codec_name, src_pix_fmt, bit_rate, use_hw_accel=False):
 ##>>============-------------------<  End  >------------------==============<<##
 
 @perf_monitor
-def parse_video(strm_in, de_bug=False, use_hw_accel=True ):
+def parse_video(strm_in, de_bug=False, skip_it=False):
 	''' Parse and extract data from video streams '''
+	use_hw_accel=True
 	msj = sys._getframe().f_code.co_name
-
 	if de_bug:
 		print(f"    +{msj} Start: {TM.datetime.now():%T}")
-	#    print(f" {json.dumps(strm_in, indent=2)}")
 
 	global glb_vidolen  # make it global so we can reuse for fmpeg check ...
 	global vid_width    # NOTE used by matrix_it
 	global glb_totfrms
 
 	ff_video = []
+	skip_all = True  # New flag to track if all streams can be skipped
 
 	for indx, this_vid in enumerate(strm_in):
 		ff_vid = []
-		skip_it = False
 		extra = ''
 
-		if 'codec_name' not in this_vid :
+		if 'codec_name' not in this_vid:
 			msj += f"   No codec_name |<V:{this_vid}\n"
-			print ( msj )
+			print(msj)
 			raise Exception(msj)
 
-		index               = this_vid.get('index', -1)
-		codec_name          = this_vid.get('codec_name', 'XXX')
-		pix_fmt             = this_vid.get('pix_fmt', '')
-		vid_width,vid_heigh = this_vid.get('width', 2), this_vid.get('height', 1)
-		_vi_btrt = int(       this_vid.get('bit_rate', glb_bitrate * 0.8))
-		frm_rate = divd_strn( this_vid.get('r_frame_rate'  , '25'))
+		index = this_vid.get('index', -1)
+		codec_name = this_vid.get('codec_name', 'XXX')
+		pix_fmt = this_vid.get('pix_fmt', '')
+		vid_width, vid_heigh = this_vid.get('width', 2), this_vid.get('height', 1)
+		_vi_btrt = int(this_vid.get('bit_rate', glb_bitrate * 0.9))
+		frm_rate = divd_strn(this_vid.get('r_frame_rate', '25'))
 
-		tags                = this_vid.get('tags', {})
-		handler_name        = tags.get('handler_name','Unknown')
+		tags = this_vid.get('tags', {})
+		handler_name = tags.get('handler_name', 'Unknown')
 
 		if 'bit_rate' not in this_vid:
 			extra = ' Bit Rate Estimate '
 
-		# If it's mjpeg or other unsupported just and delete
+		# If it's an unsupported format (e.g., mjpeg or png), skip and remove
 		if codec_name.lower() in ['mjpeg', 'png', 'XXX']:
 			ff_vid = ['-map', f'-0:v:{indx}']
-			msj = f"    |<V:{indx:2}>|{codec_name:^8}| Remouve it |"
+			msj = f"    |<V:{indx:2}>|{codec_name:^8}| Remove it |"
 			print(msj)
 			continue
-		else :
+		else:
 			# XXX: Estimate Average bits_per_pixel
 			glb_totfrms = round(frm_rate * glb_vidolen)
 
-			max_vid_btrt = 5000000
-
+			max_vid_btrt = 4500000
 			msj = " 8"
-			if pix_fmt.endswith("10le") :
+			if pix_fmt.endswith("10le"):
 				msj = "10"
-				max_vid_btrt *= 1.25
+				max_vid_btrt *= 1.25  # Adjust for 10-bit formats
 
-			mins,  secs = divmod(glb_vidolen, 60)
-			hours, mins = divmod(mins, 60)
-
+			# Aspect Ratio Calculation
 			original_ratio = vid_width / vid_heigh
 			standard_ratios = {
-				"4:3":     4 / 3,
-				"16:9":    16 / 9,
-				"3:2":     3 / 2,
-				"1:1":     1,
-				}
+				"4:3": 4 / 3,
+				"16:9": 16 / 9,
+				"3:2": 3 / 2,
+				"1:1": 1,
+			}
 			aspct_r = min(standard_ratios, key=lambda k: abs(standard_ratios[k] - original_ratio))
 
 			ff_vid = ['-map', f'0:v:{indx}', f'-c:v:{indx}']
-			# Determine if codec copy or conversion is needed, and update ff_vid accordingly
-			if codec_name == 'hevc':
-				if _vi_btrt < max_vid_btrt :
-					extra += ' => Copy'
-					ff_vid.extend(['copy'])
-					skip_it = True
-				else:
-					extra += f' Reduce BitRate: {hm_sz(max_vid_btrt):>6} '
-					encoder_options = get_encoder_options(codec_name, this_vid['pix_fmt'], max_vid_btrt, use_hw_accel )
-					ff_vid.extend(encoder_options)
+			btrt = min( _vi_btrt * 1.1 , max_vid_btrt )
+
+			# Handle HEVC codec and bitrate adjustments
+			if codec_name == 'hevc' and _vi_btrt < max_vid_btrt and skip_it:
+				# Skip re-encoding if conditions are met
+				extra += ' => Copy'
+				ff_vid.append('copy')
 			else:
-				extra += ' => Convert to Hevc'
-				encoder_options = get_encoder_options(codec_name, this_vid['pix_fmt'], _vi_btrt, use_hw_accel)
+				# Re-encode if required (e.g., non-HEVC codec or bitrate exceeds max)
+				bitrate_action = 'Reduce BitRate' if _vi_btrt > max_vid_btrt else 'Reencode'
+				extra += f' {bitrate_action}: {hm_sz(btrt):>6} '
+				encoder_options = get_encoder_options(codec_name, this_vid['pix_fmt'], btrt, use_hw_accel)
 				ff_vid.extend(encoder_options)
+				skip_all = False  # Processing required, don't skip everything
 
+			# Determine output resolution (SD, HD, 2K, 4K, 8K)
+			output_resolutions = [(7600, 4300, '8K'), (3800, 2100, '4K'), (2100, 1920, '2K'), (1280, 720, 'HD')]
 			output = "SD"
-			if   vid_width >= 7600 or vid_heigh >= 4300:
-				output = "8K"
-			elif vid_width >= 3800 or vid_heigh >= 2100:
-				output = "4K"
-			elif vid_width >= 2100 or vid_heigh > 1920:
-				output = "2K"
-			elif vid_width >= 1280 or vid_heigh >=  720:
-				output = "HD"
+			for w, h, label in output_resolutions:
+				if vid_width >= w or vid_heigh >= h:
+					output = label
+					break
 
-			# Apply scaling for anything larger than HD
+			# Apply scaling for resolutions larger than HD
 			if output in ["2K", "4K", "8K"]:
-				nw = 1920
-				nh = round( (nw / vid_width) * vid_heigh / 2) * 2  # Ensure nh is always even
+				nw, nh = 1920, round((1920 / vid_width) * vid_heigh / 2) * 2  # Ensure height is even
 				ff_vid = [
-					'-map',			f'0:v:{indx}',
-					f'-c:v:{indx}',	'libx265',				# Specify H.265 codec here
-					'-vf',			f'scale={nw}:{nh}',
-					'-pix_fmt',		"yuv420p10le",
-					'-crf',			'22',
-					'-b:v',			"3500k",
-					'-preset',		'slow',
+					'-map', f'0:v:{indx}', '-c:v:{indx}', 'libx265',  # H.265 codec
+					'-vf', f'scale={nw}:{nh}', '-pix_fmt', 'yuv420p10le', '-crf', '21',
+					'-b:v', '4300k', '-preset', 'slow'
 				]
 				extra = f' {output} Scale {vid_width}x{vid_heigh} to {nw}x{nh}'
-				skip_it = False
+				skip_all = False  # Scaling means processing is needed
 
-			if handler_name == 'VideoHandler x265':
-				extra += f"  {handler_name}"
-			else :
-				extra += f" {handler_name} => Change to: VideoHandler x265"
-				ff_vid.extend([f"-metadata:s:v:{indx}", "handler_name=VideoHandler x265"])
-				skip_it = False
+			# Update handler name to x265 if necessary
+			desired_handler_name = "VideoHandler x265"
+			if handler_name != desired_handler_name:
+				extra += f" {handler_name} => Change to: {desired_handler_name}"
+				ff_vid.extend([f"-metadata:s:v:{indx}", f"handler_name={desired_handler_name}"])
+				skip_all = False  # Metadata change required
 
 			message = f"    |<V:{indx:2}>|{codec_name:^8}|{vid_width:<4}x{vid_heigh:<4}|{aspct_r}|Bit: {msj}|Btrt: {hm_sz(_vi_btrt):>6}|Fps: {frm_rate:>7}|Tfm: {hm_sz(glb_totfrms,'F'):>8}|{extra}|"
 			print(f"\033[91m{message}\033[0m")
 
 		ff_video += ff_vid
-		skip_it  &= skip_it
 
-	if de_bug :
-		print (f"V:= {ff_video} Skip = {skip_it}")
+	if de_bug:
+		print(f"V:= {ff_video} Skip = {skip_all}")
 
-	if skip_it :
-		print ("   .Skip: Video")
+	# Only skip if skip_all is True and skip_it is True
+	if skip_all and skip_it:
+		print("   .Skip: Video")
 
-	return ff_video, skip_it
+	return ff_video, skip_all
+
 
 ##>>============-------------------<  End  >------------------==============<<##
 # XXX: Audio
@@ -611,7 +603,7 @@ def parse_audio(streams, de_bug=False):
 	for indx, audio_stream in enumerate(streams):
 		stream_options = []
 		extra_info = ""
-		skip_current = False
+		skip_it = False
 
 		index        = audio_stream.get('index', -1)
 		codec_name   = audio_stream.get('codec_name', None)
@@ -655,18 +647,18 @@ def parse_audio(streams, de_bug=False):
 			audio_kept = True
 			if copy_codec:
 				stream_options = ['-map', f'0:a:{indx}', '-c:a', 'copy']
-				skip_current = True
+				skip_it = True
 			else:
 				extra_info += ' Convert to vorbis'
 				stream_options = ['-map', f'0:a:{indx}', '-c:a', 'libvorbis', f'-q:a', '8']
 		elif not only_audio and not audio_kept:
 			stream_options = ['-map', f'0:a:{indx}', '-c:a', 'copy']
-			skip_current = True
+			skip_it = True
 			audio_kept = True
 		elif not only_audio:
 			stream_options = ['-map', f'-0:a:{indx}']
 			extra_info = f" Del: {language} | Remove it"
-			skip_current = False
+			skip_it = False
 		else:
 			stream_options = ['-map', f'0:a:{indx}']
 
@@ -677,7 +669,7 @@ def parse_audio(streams, de_bug=False):
 				else:
 					extra_info += ' Copy'
 					stream_options.extend([f'-c:a:{indx}', 'copy'])
-					skip_current = True
+					skip_it = True
 			else:
 				extra_info += f" Convert {codec_name} to vorbis "
 				stream_options.extend([f'-c:a:{indx}', 'libvorbis', f'-q:a', '8'])
@@ -689,14 +681,14 @@ def parse_audio(streams, de_bug=False):
 			else:
 				extra_info += f" handler_name: {handler_name} Change to: SoundHandler"
 				stream_options.extend([f"-metadata:s:a:{indx}", "handler_name=SoundHandler"])
-				skip_current = False
+				skip_it = False
 
 		message = (f"    |<A:{indx:2}>|{codec_name:^8}|Br:{hm_sz(bitrate):>9}|{language}"
 				   f"|Frq: {hm_sz(sample_rate, 'Hz'):>8}|Ch: {channels}|Dis: {dispo_default} Fr:{dispo_forced}| {extra_info}")
 		print(f'\033[92m{message}\033[0m')
 
 		ffmpeg_audio_options += stream_options
-		all_skippable &= skip_current
+		all_skippable &= skip_it
 
 	# Select the best English stream based on highest bitrate
 	if english_streams:
@@ -752,14 +744,14 @@ def parse_subtl(streams_in, de_bug=False):
 	"""Parse and extract data from subtitle streams."""
 	msj = sys._getframe().f_code.co_name
 
-	all_skippable = True  # Initialize variable to keep track of whether all audio streams can be skipped
-	skip_it = False
+	all_skippable = True  # Initialize variable to keep track of whether all subtitle streams can be skipped
 	ff_subttl = []
 	default_eng_set = False  # Track if default English subtitle has been set
 
 	for indx, this_sub in enumerate(streams_in):
 		ff_sub = []
 		extra = ''
+		metadata_changed = False  # New flag to track metadata changes only
 
 		index        = this_sub.get('index', -1)
 		codec_name   = this_sub.get('codec_name', 'unknown?')
@@ -773,48 +765,44 @@ def parse_subtl(streams_in, de_bug=False):
 		if codec_name in ('hdmv_pgs_subtitle', 'dvd_subtitle', 'ass', 'unknown?'):
 			ff_sub = [f'-map', f'-0:s:{indx}']
 			extra += f" Delete: {codec_name} {language} |"
+			all_skippable = False  # Metadata change means this stream isn't fully skippable
+
 		elif codec_name in ('subrip', 'mov_text'):
 			ff_sub = [f'-map', f'0:s:{indx}']
 			if language == 'eng':
 				if not default_eng_set:
-					default_eng_set = True  # Now we have a default English subtitle
+					default_eng_set = True  # Set the first English subtitle as default
 					extra += f" Keep: {codec_name} {language} | Set to Default"
 					ff_sub.extend([f'-c:s:{indx}', 'mov_text', f'-metadata:s:s:{indx}', f'language={language}', f'-disposition:s:s:{indx}', 'default'])
 				else:
-					skip_it = True
-					# Another English subtitle, but we've already set the default
 					extra += f" Keep: {codec_name} {language} | Not Default"
 			elif language in Keep_langua:
 				extra += f" Keep: {codec_name} {language}"
-				skip_it = True
-#                ff_sub.extend([f'-c:s:{indx}', 'mov_text', f'-metadata:s:s:{indx}', f'language={language}'])
 			else:
 				ff_sub = [f'-map', f'-0:s:{indx}']
 				extra += f" Delete: {codec_name} {language} X"
-
-			if ff_sub != [f'-map', f'-0:s:{indx}'] :
-				if handler_name == "SubtitlHandle":
-					extra += f"  {handler_name}"
-					skip_it = True
-				else :
-					extra += f" handler_name: {handler_name} Change to: SubtitlHandle"
-					ff_sub.extend([f"-metadata:s:s:{indx}", "handler_name=SubtitlHandle"])
-					skip_it = False
+			if handler_name != "mov_text":  # Use the correct subtitle handler for MP4
+				extra += f" handler_name: {handler_name} Change to: mov_text"
+				ff_sub.extend([f"-metadata:s:s:{indx}", "handler_name=mov_text"])
+				metadata_changed = True
 
 		# Print message for this subtitle stream
 		message = f"    |<S:{indx:2}>|{codec_name[:8]:^8}|{codec_type[:8]}|{language:3}|Disp: default={disposition['default']}, forced={disposition['forced']}|{extra}"
 		print(f"\033[94m{message}\033[0m")
 
 		ff_subttl += ff_sub  # Only add if the list is not empty
-		all_skippable &= skip_it
+		if not metadata_changed:  # Only mark as skippable if no content or metadata changes occurred
+			all_skippable &= True
+		else:
+			all_skippable = False  # Metadata change means this stream isn't fully skippable
 
 	ff_subttl.extend([f'-c:s', 'mov_text'])
 
-	if de_bug :
+	if de_bug:
 		print(f"S:= {ff_subttl}")
 
 	if all_skippable:
-		print ("   .Skip: Subtitle")
+		print("   .Skip: Subtitle")
 
 	return ff_subttl, all_skippable
 
