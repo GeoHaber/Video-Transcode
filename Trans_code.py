@@ -20,6 +20,7 @@ MultiThread = False		# XXX: It is set to True in the scan_folder # XXX:
 de_bug = False
 
 Sort_Order = True
+Sort_Key = "size"
 
 Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')}_{time.strftime('%Y_%j_%H-%M-%S')}.log"
 
@@ -223,12 +224,6 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 	msj = f"{sys._getframe().f_code.co_name} Start: {time.strftime('%H:%M:%S')}"
 	print(f"Scan: {root}\tSize: {hm_sz(get_tree_size(root))}\n{msj}")
 	spinner = Spinner(indent=0)
-
-
-	# Ensure xtnsio is a tuple
-#	if isinstance(xtnsio, str):
-#		xtnsio = tuple(xtnsio.strip("()").replace("'", "").split(", "))
-
 #	print(f"Extensions to scan: {xtnsio}")
 
 	if not root or not isinstance(root, str) or not os.path.isdir(root):
@@ -239,7 +234,6 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 		return []
 
 	_lst = []
-	data = []
 
 	def is_file_accessible(file_path):
 		try:
@@ -311,12 +305,20 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 		data.append([file_s, duration])
 		perform_clustering(data, _lst)
 
+	# Sorting based on the provided key # XXX: TBD
+	sort_map = {
+		'name':		 0,
+		'size':		 1,
+		'extension': 2,
+		'date':		 3  # Sort by file modification date
+	}
+
 	order = "Descending >" if sort_order else "Ascending <"
+	sortedfi = sorted(_lst, key=lambda item: item[1], reverse=sort_order)
 
 	end_t = time.perf_counter()
 	print(f"\n Sort: {order}\n Scan: Done : {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}\n")
-
-	return sorted(_lst, key=lambda item: item[1], reverse=sort_order)
+	return sortedfi
 
 ##==============-------------------   End   -------------------==============##
 

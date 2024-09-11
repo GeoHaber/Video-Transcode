@@ -258,7 +258,7 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 		print(f" i: {i} != nb_streams: {nb_streams}")
 		input ("WTF")
 
-	if debug:
+	if de_bug:
 		print(f"S: {json.dumps(_streams, indent=2)}\n ")
 
 	# Collect all unknown or unrecognized codec_types
@@ -313,7 +313,6 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 		print(msj)
 		time.sleep(2)
 		return [], True
-#        raise ValueError(msj)
 
 	if audio_streams:
 		ff_audio, a_skip = parse_audio(audio_streams, de_bug)
@@ -325,7 +324,6 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 		print(msj)
 		time.sleep(2)
 		return [], True
-#        raise ValueError(msj)
 
 	if subtl_streams:
 		ff_subtl, s_skip = parse_subtl(subtl_streams, de_bug)
@@ -346,8 +344,8 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 
 	if de_bug:
 		return [], f_skip
-	if de_bug or skip_it:
-		print(f" Skip: {skip_it}\n FFmpeg: {ff_com}\n Nothing to do")
+#	if de_bug or skip_it:
+#		print(f" Skip: {skip_it}\n FFmpeg: {ff_com}\n Nothing to do")
 
 	return ff_com, skip_it
 
@@ -401,22 +399,21 @@ def add_subtl_from_file(input_file: str, de_bug: bool) -> tuple[list, bool]:
 	return [], True
 ##>>============-------------------<  End  >------------------==============<<##
 
-def get_encoder_options(codec_name, src_pix_fmt, bit_rate, use_hw_accel=False):
+def get_encoder_options(codec_name, is_10bit, bit_rate, use_hw_accel=False):
 	msj = sys._getframe().f_code.co_name
-	is_10bit = src_pix_fmt.endswith("10le")
 
 	# Quality presets
 	target_quality='as_is'
 	quality_presets = {
 		'low':		{'bitrate': (bit_rate // (1024 * 3   )), 'quality': 26},
 		'medium':	{'bitrate': (bit_rate // (1024 * 1.5 )), 'quality': 24},
-		'as_is':	{'bitrate': (bit_rate // (1024 * 0.95)), 'quality': 22},
+		'as_is':	{'bitrate': (bit_rate // (1024       )), 'quality': 22},
 		'high':		{'bitrate': (bit_rate // (1024 * 0.75)), 'quality': 20},
 		'higher':	{'bitrate': (bit_rate // (1024 * 0.5 )), 'quality': 18},
 	}
 
-#	print (f"Cod:{codec_name} Pix: {src_pix_fmt} Btr: {bit_rate // 1024} HWA: {use_hw_accel} ")
 	preset = quality_presets[target_quality]
+
 	base_target_bitrate	= int(preset['bitrate'])
 	global_quality		= preset['quality']
 
@@ -466,7 +463,7 @@ def get_encoder_options(codec_name, src_pix_fmt, bit_rate, use_hw_accel=False):
 @perf_monitor
 def parse_video(strm_in, de_bug=False, skip_it=False):
 	''' Parse and extract data from video streams '''
-	use_hw_accel=True
+
 	msj = sys._getframe().f_code.co_name
 	if de_bug:
 		print(f"    +{msj} Start: {TM.datetime.now():%T}")
@@ -475,8 +472,10 @@ def parse_video(strm_in, de_bug=False, skip_it=False):
 	global vid_width    # NOTE used by matrix_it
 	global glb_totfrms
 
-	ff_video = []
+	use_hw_accel=True
 	skip_all = True  # New flag to track if all streams can be skipped
+
+	ff_video = []
 
 	for indx, this_vid in enumerate(strm_in):
 		ff_vid = []
@@ -487,16 +486,17 @@ def parse_video(strm_in, de_bug=False, skip_it=False):
 			print(msj)
 			raise Exception(msj)
 
-		index = this_vid.get('index', -1)
-		codec_name = this_vid.get('codec_name', 'XXX')
-		pix_fmt = this_vid.get('pix_fmt', '')
-		vid_width, vid_heigh = this_vid.get('width', 2), this_vid.get('height', 1)
-		_vi_btrt = int(this_vid.get('bit_rate', glb_bitrate * 0.9))
+		codec_name	= this_vid.get('codec_name', 'XXX')
+		pix_fmt		= this_vid.get('pix_fmt', '')
+		vid_width	= this_vid.get('width',  2)
+		vid_heigh	= this_vid.get('height', 1)
+		tags		= this_vid.get('tags', {})
+		handler_name = tags.get('handler_name', 'Unknown')
 		frm_rate = divd_strn(this_vid.get('r_frame_rate', '25'))
 
-		tags = this_vid.get('tags', {})
-		handler_name = tags.get('handler_name', 'Unknown')
+		_vi_btrt = int(this_vid.get('bit_rate', glb_bitrate * 0.9))
 
+		encoder_options ="No Encoder"
 		if 'bit_rate' not in this_vid:
 			extra = ' Bit Rate Estimate '
 
@@ -509,36 +509,35 @@ def parse_video(strm_in, de_bug=False, skip_it=False):
 		else:
 			# XXX: Estimate Average bits_per_pixel
 			glb_totfrms = round(frm_rate * glb_vidolen)
-
 			max_vid_btrt = 4500000
+			btrt = min( _vi_btrt, max_vid_btrt )
+
 			msj = " 8"
-			if pix_fmt.endswith("10le"):
+			if (is_10bit := pix_fmt.endswith("10le")):
 				msj = "10"
-				max_vid_btrt *= 1.25  # Adjust for 10-bit formats
 
 			# Aspect Ratio Calculation
 			original_ratio = vid_width / vid_heigh
 			standard_ratios = {
-				"4:3": 4 / 3,
+				"4:3":	 4 / 3,
 				"16:9": 16 / 9,
-				"3:2": 3 / 2,
-				"1:1": 1,
+				"3:2":	 3 / 2,
+				"1:1":	 1,
 			}
 			aspct_r = min(standard_ratios, key=lambda k: abs(standard_ratios[k] - original_ratio))
-
 			ff_vid = ['-map', f'0:v:{indx}', f'-c:v:{indx}']
-			btrt = min( _vi_btrt * 1.1 , max_vid_btrt )
 
 			# Handle HEVC codec and bitrate adjustments
-			if codec_name == 'hevc' and _vi_btrt < max_vid_btrt and skip_it:
+			if codec_name == 'hevc' and _vi_btrt < max_vid_btrt:
 				# Skip re-encoding if conditions are met
 				extra += ' => Copy'
-				ff_vid.append('copy')
+				ff_vid.extend(['copy'])
+				#				ff_vid.append('copy')
 			else:
 				# Re-encode if required (e.g., non-HEVC codec or bitrate exceeds max)
 				bitrate_action = 'Reduce BitRate' if _vi_btrt > max_vid_btrt else 'Reencode'
 				extra += f' {bitrate_action}: {hm_sz(btrt):>6} '
-				encoder_options = get_encoder_options(codec_name, this_vid['pix_fmt'], btrt, use_hw_accel)
+				encoder_options = get_encoder_options(codec_name, is_10bit, btrt, use_hw_accel)
 				ff_vid.extend(encoder_options)
 				skip_all = False  # Processing required, don't skip everything
 
@@ -572,9 +571,9 @@ def parse_video(strm_in, de_bug=False, skip_it=False):
 			print(f"\033[91m{message}\033[0m")
 
 		ff_video += ff_vid
-
-	if de_bug:
-		print(f"V:= {ff_video} Skip = {skip_all}")
+#		de_bug = True
+		if de_bug:
+			print(f"\n{json.dumps(this_vid, indent=2)}\nEncop: {encoder_options}\nV:= {ff_vid} Skip = {skip_all}")
 
 	# Only skip if skip_all is True and skip_it is True
 	if skip_all and skip_it:
@@ -588,7 +587,6 @@ def parse_video(strm_in, de_bug=False, skip_it=False):
 @perf_monitor
 def parse_audio(streams, de_bug=False):
 	"""Parse and extract data from audio streams."""
-	msj = sys._getframe().f_code.co_name
 
 	only_audio = len(streams) == 1
 	ffmpeg_audio_options = []
@@ -742,7 +740,6 @@ def parse_audio(streams, de_bug=False):
 @perf_monitor
 def parse_subtl(streams_in, de_bug=False):
 	"""Parse and extract data from subtitle streams."""
-	msj = sys._getframe().f_code.co_name
 
 	all_skippable = True  # Initialize variable to keep track of whether all subtitle streams can be skipped
 	ff_subttl = []
@@ -753,7 +750,6 @@ def parse_subtl(streams_in, de_bug=False):
 		extra = ''
 		metadata_changed = False  # New flag to track metadata changes only
 
-		index        = this_sub.get('index', -1)
 		codec_name   = this_sub.get('codec_name', 'unknown?')
 		codec_type   = this_sub.get('codec_type', 'unknown?')
 		disposition  = this_sub.get('disposition', {'forced': 0, 'default': 0})
@@ -812,11 +808,8 @@ def parse_subtl(streams_in, de_bug=False):
 @perf_monitor
 def parse_extrd(streams_in, de_bug=False):
 	"""Parse and extract data from data streams."""
-	msj = sys._getframe().f_code.co_name
 
 	ff_data = []
-	all_skippable = True
-
 	for indx, this_dat in enumerate(streams_in):
 #        if de_bug:    print(f"    +{msj} Start: {TM.datetime.now():%T}\n {json.dumps(this_dat, indent=2)}")
 		ff_dd = []
@@ -873,13 +866,13 @@ def zabrain_run(input_file: str, mta_dta: Dict[str, any], de_bug: bool= False ) 
 
 # Precompile regular expressions
 regex_dict = {
-	"bitrate":    re.compile(r"bitrate=\s*([0-9\.]+)"),
-	"frame":    re.compile(r"frame=\s*([0-9]+)"),
-	"speed":    re.compile(r"speed=\s*([0-9\.]+)"),
-	"size":        re.compile(r"size=\s*([0-9]+)"),
-	"time":        re.compile(r"time=\S([0-9:]+)"),
-	"fps":        re.compile(r"fps=\s*([0-9]+)"),
-}
+		"bitrate":	re.compile(r"bitrate=\s*([0-9\.]+)"),
+		"frame":	re.compile(r"frame=\s*([0-9]+)"),
+		"speed":	re.compile(r"speed=\s*([0-9\.]+)"),
+		"size":		re.compile(r"size=\s*([0-9]+)"),
+		"time":		re.compile(r"time=\S([0-9:]+)"),
+		"fps":		re.compile(r"fps=\s*([0-9]+)"),
+		}
 
 def show_progrs(line_to, sy, de_bug=False):
 	msj = sys._getframe().f_code.co_name
