@@ -463,7 +463,6 @@ def get_encoder_options(codec_name, is_10bit, bit_rate, use_hw_accel=False):
 @perf_monitor
 def parse_video(strm_in, de_bug=False, skip_it=False):
 	''' Parse and extract data from video streams '''
-
 	msj = sys._getframe().f_code.co_name
 	if de_bug:
 		print(f"    +{msj} Start: {TM.datetime.now():%T}")
@@ -509,12 +508,13 @@ def parse_video(strm_in, de_bug=False, skip_it=False):
 		else:
 			# XXX: Estimate Average bits_per_pixel
 			glb_totfrms = round(frm_rate * glb_vidolen)
-			max_vid_btrt = 4500000
-			btrt = min( _vi_btrt, max_vid_btrt )
 
+			max_vid_btrt = 4500000
 			msj = " 8"
 			if (is_10bit := pix_fmt.endswith("10le")):
 				msj = "10"
+				max_vid_btrt *= 1.25
+			btrt = min( _vi_btrt, max_vid_btrt )
 
 			# Aspect Ratio Calculation
 			original_ratio = vid_width / vid_heigh
@@ -528,14 +528,13 @@ def parse_video(strm_in, de_bug=False, skip_it=False):
 			ff_vid = ['-map', f'0:v:{indx}', f'-c:v:{indx}']
 
 			# Handle HEVC codec and bitrate adjustments
-			if codec_name == 'hevc' and _vi_btrt < max_vid_btrt:
+			if codec_name == 'hevc' and _vi_btrt <= max_vid_btrt:
 				# Skip re-encoding if conditions are met
 				extra += ' => Copy'
-				ff_vid.extend(['copy'])
-				#				ff_vid.append('copy')
+				ff_vid.append('copy')
 			else:
 				# Re-encode if required (e.g., non-HEVC codec or bitrate exceeds max)
-				bitrate_action = 'Reduce BitRate' if _vi_btrt > max_vid_btrt else 'Reencode'
+				bitrate_action = 'Reduce BitRate' if _vi_btrt > max_vid_btrt else 'Reencode Hevc'
 				extra += f' {bitrate_action}: {hm_sz(btrt):>6} '
 				encoder_options = get_encoder_options(codec_name, is_10bit, btrt, use_hw_accel)
 				ff_vid.extend(encoder_options)
@@ -842,7 +841,7 @@ def parse_extrd(streams_in, de_bug=False):
 ##>>============-------------------<  End  >------------------==============<<##
 
 @perf_monitor
-def zabrain_run(input_file: str, mta_dta: Dict[str, any], de_bug: bool= False ) -> Tuple[bool, bool]:
+def parse_finfo(input_file: str, mta_dta: Dict[str, any], de_bug: bool= False ) -> Tuple[bool, bool]:
 	''' Decide what based on streams info '''
 	msj = sys._getframe().f_code.co_name
 	print(f"  +{msj} Start: {TM.datetime.now():%T}")

@@ -285,66 +285,73 @@ class Tee:
 
 class Spinner:
 
-	def __init__(self, spin_text="|/-o+\\", indent=0):
-		self.spinner_count = 0
-		self.spin_text = spin_text
-		self.spin_length = len(spin_text)
-		self.prefix = " " * indent  # Indentation string
-		self.last_message_length = 0  # To keep track of the length of the last printed message
-		self.cursor_hidden = False
+    def __init__(self, spin_text="|/-o+\\", indent=0, delay=0.1):
+        self.spinner_count = 0
+        self.spin_text = spin_text
+        self.spin_length = len(spin_text)
+        self.prefix = " " * indent  # Indentation string
+        self.last_message_length = 0  # To keep track of the length of the last printed message
+        self.cursor_hidden = False
+        self.delay = delay  # Delay between spinner updates
+        self.last_update_time = 0
 
-	def hide_cursor(self):
-		if not self.cursor_hidden:
-			sys.stderr.write("\033[?25l")  # Hide cursor
-			sys.stderr.flush()
-			self.cursor_hidden = True
+    def hide_cursor(self):
+        if not self.cursor_hidden:
+            sys.stderr.write("\033[?25l")  # Hide cursor
+            sys.stderr.flush()
+            self.cursor_hidden = True
 
-	def show_cursor(self):
-		if self.cursor_hidden:
-			sys.stderr.write("\033[?25h")  # Show cursor
-			sys.stderr.flush()
-			self.cursor_hidden = False
+    def show_cursor(self):
+        if self.cursor_hidden:
+            sys.stderr.write("\033[?25h")  # Show cursor
+            sys.stderr.flush()
+            self.cursor_hidden = False
 
-	def print_spin(self, extra: str = "") -> None:
-		"""
-		Prints a spinner in the console to indicate progress.
+    def abbreviate_path(self, path: str, max_length: int) -> str:
+        """Abbreviates a path to fit within the terminal width."""
+        if len(path) <= max_length:
+            return path
+        else:
+            return f"{path[:max_length//2]}...{path[-max_length//2:]}"
 
-		Args:
-			extra (str): Additional text to display after the spinner.
-		"""
-		# Hide the cursor
-		self.hide_cursor()
+    def print_spin(self, extra: str = "") -> None:
+        """Prints a spinner with optional extra text."""
+        current_time = time.time()
+        if current_time - self.last_update_time < self.delay:
+            return  # Skip updating the spinner if it's too soon
 
-		# Get terminal width
-		terminal_width = shutil.get_terminal_size().columns
+        self.last_update_time = current_time  # Update the last update time
 
-		spin_char = self.spin_text[self.spinner_count % self.spin_length]
-		message = f"\r{self.prefix}| {spin_char} | {extra}"
+        # Hide the cursor
+        self.hide_cursor()
 
-		# Truncate the message if it's too long for the terminal
-		if len(message) > terminal_width:
-			message = message[:terminal_width - 1]  # Truncate to fit the terminal width
+        # Get terminal width
+        terminal_width = shutil.get_terminal_size().columns
 
-		# Calculate the number of spaces needed to clear the previous message
-		clear_spaces = max(self.last_message_length - len(message), 0)
+        # Abbreviate the extra text to fit the terminal
+        extra = self.abbreviate_path(extra, terminal_width - 10)
 
-		# Print the spinner and the extra text, followed by enough spaces to clear any leftover characters
-		sys.stderr.write(f"{message}{' ' * clear_spaces}")
-		sys.stderr.flush()
+        spin_char = self.spin_text[self.spinner_count % self.spin_length]
+        message = f"\r{self.prefix}| {spin_char} | {extra}"
 
-		# Update the length of the last message
-		self.last_message_length = len(message)
+        # Calculate the number of spaces needed to clear the previous message
+        clear_spaces = max(self.last_message_length - len(message), 0)
 
-		self.spinner_count += 1
+        # Print the spinner and the extra text, followed by enough spaces to clear any leftover characters
+        sys.stderr.write(f"{message}{' ' * clear_spaces}")
+        sys.stderr.flush()
 
-	def stop(self):
-		"""
-		Stops the spinner and shows the cursor.
-		"""
-		# Show the cursor
-		self.show_cursor()
-		sys.stderr.write("\n")  # Move to the next line after stopping
-		sys.stderr.flush()
+        # Update the length of the last message
+        self.last_message_length = len(message)
+
+        self.spinner_count += 1
+
+    def stop(self):
+        """Stops the spinner and shows the cursor."""
+        # Show the cursor
+        self.show_cursor()
+        sys.stderr.write("\n")  # Move to the next line after stopping
+        sys.stderr.flush()
 
 '''
 # Example usage:
@@ -514,8 +521,8 @@ def copy_move(src: str, dst: str, keep_original: bool = False, verbose: bool = F
 	- keep_original (bool, optional): If True, keep the original file. Defaults to False.
 	- verbose (bool optional): If True print message. Defaults to False.
 	"""
-	if verbose:
-		print(f"\ncopy_move called with src: {src}, dst: {dst}, keep_original: {keep_original}\n")
+#	if verbose:
+#		print(f"\ncopy_move called with src: {src}, dst: {dst}, keep_original: {keep_original}\n")
 
 	if os.path.exists(dst) and os.path.samefile(src, dst):
 		if not keep_original:
@@ -531,7 +538,7 @@ def copy_move(src: str, dst: str, keep_original: bool = False, verbose: bool = F
 		(action, transfer_func) = ("_Copy", shutil.copy2) if keep_original else ("_Move", shutil.move)
 		transfer_func(src, dst)
 		if verbose:
-			print(f"{action}: {src}\nTo    : {dst}")
+			print(f"{action}: {src}\nTo:    {dst}")
 		return True
 	except (PermissionError, IOError, OSError) as err:
 		print(f"\ncopy_move Error: {err}\n{action}: {src} to {dst}")

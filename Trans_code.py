@@ -134,6 +134,8 @@ def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> i
 
 @perf_monitor
 def process_file(file_info, cnt, fl_nmb ):
+	msj = sys._getframe().f_code.co_name
+
 	saved, procs, skipt, errod = 0, 0, 0, 0
 	str_t = time.perf_counter()
 	file_p, file_s, ext, jsn_ou = file_info
@@ -152,12 +154,12 @@ def process_file(file_info, cnt, fl_nmb ):
 
 		try:
 #			debug = True # DEBUG:
-			all_good, skip_it = zabrain_run(file_p, jsn_ou, debug)
+			all_good, skip_it = parse_finfo(file_p, jsn_ou, debug)
 			if debug or ext != ".mp4":
 				skip_it = False
 #				print (f"\nFile: {file_p}\nFfmpeg: {all_good}\n")
 			if skip_it:
-				print(f"\033[91m   | Skip ffmpeg_run |\033[0m")
+				print(f"\033[91m   >| {msj} |<\033[0m")
 				skipt += 1
 
 			all_good = ffmpeg_run(file_p, all_good, skip_it, ffmpeg, de_bug)
@@ -312,13 +314,16 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 		'extension': 2,
 		'date':		 3  # Sort by file modification date
 	}
+	# Sorting by the key specified (name, size, extension, date)
+	sort_idx = sort_map.get(Sort_Key, 1)  # Default to 'size' if Sort_Key is invalid
+#	sorted_list = sorted(_lst, key=lambda item: item[1],        reverse=sort_order)
+	sorted_list = sorted(_lst, key=lambda item: item[sort_idx], reverse=sort_order)
 
 	order = "Descending >" if sort_order else "Ascending <"
-	sortedfi = sorted(_lst, key=lambda item: item[1], reverse=sort_order)
 
 	end_t = time.perf_counter()
-	print(f"\n Sort: {order}\n Scan: Done : {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}\n")
-	return sortedfi
+	print(f"\n Sort: {order} Index: {Sort_Key}\n Scan: Done : {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}\n")
+	return sorted_list
 
 ##==============-------------------   End   -------------------==============##
 
