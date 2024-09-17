@@ -83,12 +83,12 @@ def perform_clustering(data: List[List[float]], _lst: List[List]) -> None:
 
 @perf_monitor
 def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> int:
-	function_name = sys._getframe().f_code.co_name
+	msj = sys._getframe().f_code.co_name
 
 	if skip_it:
 		return 0
 
-	print(f"  +{function_name} Start: {time.strftime('%H:%M:%S')}")
+	print(f"  +{msj} Start: {time.strftime('%H:%M:%S')}")
 
 	try:
 		if not os.path.exists(input_file):
@@ -108,25 +108,29 @@ def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> i
 
 		ratio = round (100 * ((output_file_size - input_file_size) / input_file_size), 2)
 		extra = "+Biger" if ratio > 0 else ("=Same" if (input_file_size - output_file_size) == 0 else "-Lost")
-		msg = f"    Size Was: {hm_sz(input_file_size)} Is: {hm_sz(output_file_size)} {extra}: {hm_sz(abs(input_file_size - output_file_size))} {ratio}%"
+		sv_ms = f"    Size Was: {hm_sz(input_file_size)} Is: {hm_sz(output_file_size)} {extra}: {hm_sz(abs(input_file_size - output_file_size))} {ratio}%"
 
 		final_output_file = input_file if input_file.endswith('.mp4') else input_file.rsplit('.', 1)[0] + '.mp4'
 		temp_file = input_file + "_Delete_.old"
 		os.rename(input_file, temp_file)
 		shutil.move(output_file, final_output_file)
 
-		if not debug:
-			os.remove(temp_file)
+#		debug = True
+		if debug:
+			confirm = input(f"  Are you sure you want to delete {temp_file}? (y/n): ")
+			if confirm.lower() != "y":
+				print("  Deletion canceled.")
+				return  input_file_size - output_file_size # Return here to stop further execution
 
-		print(msg)
-
+		print(sv_ms)
+		os.remove(temp_file)
 		return input_file_size - output_file_size
 
 	except (FileNotFoundError, PermissionError) as e:
-		print(f"Error accessing file: {e}")
+		print(f"  {msj} Error accessing file: {e}")
 	except Exception as e:
-		print(f"An error occurred: {e}")
-		input ("WTF")
+		print(f"  {msj} An error occurred: {e}")
+		input(f"? {msj} WTF ?")
 
 	return -1
 

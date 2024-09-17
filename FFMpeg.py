@@ -288,15 +288,15 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 
 	# XXX: Check for skip condition # XXX:
 	fnam, ext = os.path.splitext(os.path.basename(input_file))
-	name_good = fnam == title and ext == '.mp4'
-#	if not name_good:
+	good_fname = fnam == title and ext == '.mp4'
+#	if not good_fname:
 #		print(f"  Ext:{ext}\t Fname:{fnam}\n  Title:{title}")
 
 	summary_msg = f"    |=Title|{title}|\n    |>FRMT<|Size: {hm_sz(size)}|Bitrate: {hm_sz(glb_bitrate)}|Length: {hm_time(glb_vidolen)}|"
 	summary_msg += ''.join([f" {key}: {count}|" for key, count in stream_counts.items() if count != 0])
 	print(f"\033[96m{summary_msg}\033[0m")
 
-	f_skip = name_good and f_comment == Skip_key
+	f_skip = good_fname and f_comment == Skip_key
 #	de_bug = True
 	if f_skip:
 		print("   .Skip: Format")
@@ -880,10 +880,10 @@ def show_progrs(line_to, sy, de_bug=False):
 	if "N/A" in line_to:
 		return False
 
-	elif all(substr in line_to for substr in ["speed=", "fps=", "time="]):
+	elif all(substr in line_to for substr in ["fps=", "speed=", "size="]):
+		regx_val = {}
 		try:
 			# Use compiled regular expressions
-			regx_val = {}
 			for key, regex in regex_dict.items():
 				regx_val[key] = regex.search(line_to).group(1)
 
@@ -899,15 +899,17 @@ def show_progrs(line_to, sy, de_bug=False):
 				mints, secs = divmod(int(eta), 60)
 				hours, mints = divmod(mints, 60)
 				_eta = f"{hours:02d}:{mints:02d}:{secs:02d}"
-				_P = f"\r    | {sy} |Size: {hm_sz(regx_val['size']):>7}|Frames: {int(regx_val['frame']):>6}|Fps: {fp_int:>3}|BitRate: {hm_sz(regx_val['bitrate']):>6}|Speed: {sp_float:>5}|ETA: {_eta:>8}|  "
+				_P = f"    | {sy} |Size: {hm_sz(regx_val['size']):>7}|Frames: {int(regx_val['frame']):>6}|Fps: {fp_int:>3}|BitRate: {hm_sz(regx_val['bitrate']):>6}|Speed: {sp_float:>5}|ETA: {_eta:>8}|    \r"
 				if de_bug:
 					print(f"\n {line_to}\n | {sy} |Size: {hm_sz(regx_val['size']):>7}|Frames: {int(regx_val['frame']):>6}|Fps: {fp_int:>3}|BitRate: {hm_sz(regx_val['bitrate']):>6}|Speed: {sp_float:>5}|ETA: {_eta:>8}|")
+
 		except Exception as e:
-			msj = f"Exception in {msj}: {e} {line_to}"
+			msj = f"    {msj} Exeption: {e} in {line_to}"
 			print(msj)
 
-	elif any(substr in line_to for substr in ["muxing overhead:", "global headers:", "encoded"]):
-		_P = f"\r    |<+>| Done: {line_to}"
+	elif any(substr in line_to for substr in ["muxing overhead:", "global headers:"]):
+		print(f"\n     |<+>|Done: {line_to}")
+		return -1
 
 	sys.stderr.write(_P)
 	sys.stderr.flush()

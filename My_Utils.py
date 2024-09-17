@@ -183,10 +183,8 @@ def measure_cpu_utilization(func):
 	@wraps(func)
 	def wrapper(*args, **kwargs):
 		cpu_count = psutil.cpu_count(logical=True)
-		strt_time = time.monotonic()
 		cpu_prcnt = psutil.cpu_percent(interval=0.1, percpu=True)
 		result = func(*args, **kwargs)
-		end_time = time.monotonic()
 		cpu_percnt = sum(cpu_prcnt) / cpu_count
 		return result, cpu_percnt, cpu_prcnt
 	return wrapper
@@ -590,7 +588,7 @@ def divd_strn(val: str ) -> float:
 
 def vis_compr(string1, string2, no_match_c='|', match_c='='):
 	''' Visualy show diferences between sting1 graphx string2  '''
-	str_t = datetime.datetime.now()
+	str_t = TM.datetime.now()
 	message = sys._getframe().f_code.co_name + ':'
 	print(f"     +{message}=: Start: {str_t:%T}")
 
@@ -613,19 +611,6 @@ def vis_compr(string1, string2, no_match_c='|', match_c='='):
 		print(f"{n_diff} Differences \n1: {string1}\n {graphx}\nMove: {string2}\n")
 	return graphx, n_diff
 #>=-------------------------------------------------------------------------=<#
-
-
-def file_size(path):
-	# Return file/dir size (MB)
-	mb = 1 << 20  # bytes to MiB (1024 ** 2)
-	path = Path(path)
-	if path.is_file():
-		return path.stat().st_size / mb
-	elif path.is_dir():
-		return sum(f.stat().st_size for f in path.glob('**/*') if f.is_file()) / mb
-	else:
-		return 0.0
-##>>============-------------------<  End  >------------------==============<<##
 
 
 def print_alighned(list: str) -> None :
@@ -711,30 +696,6 @@ def safe_options(strm, opts ):
 	return safe
 ##==============-------------------   End   -------------------==============##
 
-def parse_from_to(strm, dictio, de_bug=True):
-	msj = sys._getframe().f_code.co_name
-	resul = {}
-	try:
-		resul = {k: (int(strm[k])	if type(dictio[k]) == int else
-					float(strm[k])	if type(dictio[k]) == float else
-					dict(strm[k])	if type(dictio[k]) == dict else
-					strm[k])
-				for k in dictio.keys() if k in strm}
-	except Exception as e:
-		logging.exception(f"Error {e}", exc_info=True, stack_info=True, extra=msj)
-		msj = f'\n{len(strm)}\n{strm}\n{len(resul)}\n{resul}'
-		print(msj)
-		Traceback.print_exc()
-		input("An error occurred.")
-
-	if len(resul) > 1:
-		return tuple(resul.values())
-	elif len(resul) == 1:
-		return next(iter(resul.values()))
-	else:
-		return None
-##==============-------------------   End   -------------------==============##
-
 def Trace(message: str, exception: Exception, debug: bool = False) -> None:
 	"""Prints a traceback and debug info for a given exception"""
 	max_chars = 42
@@ -779,7 +740,7 @@ def Trace(message: str, exception: Exception, debug: bool = False) -> None:
 def res_chk(folder='.'):
 	msj = sys._getframe().f_code.co_name
 	print("=" * 60)
-	print(datetime.datetime.now().strftime('\n%a:%b:%Y %T %p'))
+	print(TM.datetime.now().strftime('\n%a:%b:%Y %T %p'))
 	print('\n:>', msj)
 	print(os.getcwd())
 
@@ -854,33 +815,3 @@ def calculate_total_bits(width, height, pixel_format):
 	total_bits = width * height * bpp
 	print(f"Total bits for a frame with pixel format '{pixel_format}': {total_bits}")
 	return total_bits
-'''
-import numpy as np
-import matplotlib.pyplot as plt
-
-# Define the x values (base) ranging from 1 to 10
-x_values = np.linspace(1, 10, 500)
-
-# Calculate the corresponding y values for each exponent (0.7, 0.5, 0.3)
-y_values_07 = x_values ** 0.7
-y_values_05 = x_values ** 0.5
-y_values_03 = x_values ** 0.3
-
-# Plot the graphs
-plt.figure(figsize=(10, 6))
-plt.plot(x_values, y_values_07, label='y = x^0.7', color='b')
-plt.plot(x_values, y_values_05, label='y = x^0.5', color='g')
-plt.plot(x_values, y_values_03, label='y = x^0.3', color='r')
-plt.xlabel('x (Base)')
-plt.ylabel('y (Result)')
-plt.title('Graphs of y = x^0.7, y = x^0.5, and y = x^0.3')
-plt.legend()
-plt.grid(True)
-plt.show()
-
-# Evaluate which number is bigger
-result_07 = 10 ** 0.7
-result_05 = 10 ** 0.5
-result_03 = 10 ** 0.3
-(result_07, result_05, result_03)
-'''
