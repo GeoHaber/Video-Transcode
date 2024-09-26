@@ -283,73 +283,73 @@ class Tee:
 
 class Spinner:
 
-    def __init__(self, spin_text="|/-o+\\", indent=0, delay=0.1):
-        self.spinner_count = 0
-        self.spin_text = spin_text
-        self.spin_length = len(spin_text)
-        self.prefix = " " * indent  # Indentation string
-        self.last_message_length = 0  # To keep track of the length of the last printed message
-        self.cursor_hidden = False
-        self.delay = delay  # Delay between spinner updates
-        self.last_update_time = 0
+	def __init__(self, spin_text="|/-o+\\", indent=0, delay=0.1):
+		self.spinner_count = 0
+		self.spin_text = spin_text
+		self.spin_length = len(spin_text)
+		self.prefix = " " * indent  # Indentation string
+		self.last_message_length = 0  # To keep track of the length of the last printed message
+		self.cursor_hidden = False
+		self.delay = delay  # Delay between spinner updates
+		self.last_update_time = 0
 
-    def hide_cursor(self):
-        if not self.cursor_hidden:
-            sys.stderr.write("\033[?25l")  # Hide cursor
-            sys.stderr.flush()
-            self.cursor_hidden = True
+	def hide_cursor(self):
+		if not self.cursor_hidden:
+			sys.stderr.write("\033[?25l")  # Hide cursor
+			sys.stderr.flush()
+			self.cursor_hidden = True
 
-    def show_cursor(self):
-        if self.cursor_hidden:
-            sys.stderr.write("\033[?25h")  # Show cursor
-            sys.stderr.flush()
-            self.cursor_hidden = False
+	def show_cursor(self):
+		if self.cursor_hidden:
+			sys.stderr.write("\033[?25h")  # Show cursor
+			sys.stderr.flush()
+			self.cursor_hidden = False
 
-    def abbreviate_path(self, path: str, max_length: int) -> str:
-        """Abbreviates a path to fit within the terminal width."""
-        if len(path) <= max_length:
-            return path
-        else:
-            return f"{path[:max_length//2]}...{path[-max_length//2:]}"
+	def abbreviate_path(self, path: str, max_length: int) -> str:
+		"""Abbreviates a path to fit within the terminal width."""
+		if len(path) <= max_length:
+			return path
+		else:
+			return f"{path[:max_length//2]}...{path[-max_length//2:]}"
 
-    def print_spin(self, extra: str = "") -> None:
-        """Prints a spinner with optional extra text."""
-        current_time = time.time()
-        if current_time - self.last_update_time < self.delay:
-            return  # Skip updating the spinner if it's too soon
+	def print_spin(self, extra: str = "") -> None:
+		"""Prints a spinner with optional extra text."""
+		current_time = time.time()
+		if current_time - self.last_update_time < self.delay:
+			return  # Skip updating the spinner if it's too soon
 
-        self.last_update_time = current_time  # Update the last update time
+		self.last_update_time = current_time  # Update the last update time
 
-        # Hide the cursor
-        self.hide_cursor()
+		# Hide the cursor
+		self.hide_cursor()
 
-        # Get terminal width
-        terminal_width = shutil.get_terminal_size().columns
+		# Get terminal width
+		terminal_width = shutil.get_terminal_size().columns
 
-        # Abbreviate the extra text to fit the terminal
-        extra = self.abbreviate_path(extra, terminal_width - 10)
+		# Abbreviate the extra text to fit the terminal
+		extra = self.abbreviate_path(extra, terminal_width - 10)
 
-        spin_char = self.spin_text[self.spinner_count % self.spin_length]
-        message = f"\r{self.prefix}| {spin_char} | {extra}"
+		spin_char = self.spin_text[self.spinner_count % self.spin_length]
+		message = f"\r{self.prefix}| {spin_char} | {extra}"
 
-        # Calculate the number of spaces needed to clear the previous message
-        clear_spaces = max(self.last_message_length - len(message), 0)
+		# Calculate the number of spaces needed to clear the previous message
+		clear_spaces = max(self.last_message_length - len(message), 0)
 
-        # Print the spinner and the extra text, followed by enough spaces to clear any leftover characters
-        sys.stderr.write(f"{message}{' ' * clear_spaces}")
-        sys.stderr.flush()
+		# Print the spinner and the extra text, followed by enough spaces to clear any leftover characters
+		sys.stderr.write(f"{message}{' ' * clear_spaces}")
+		sys.stderr.flush()
 
-        # Update the length of the last message
-        self.last_message_length = len(message)
+		# Update the length of the last message
+		self.last_message_length = len(message)
 
-        self.spinner_count += 1
+		self.spinner_count += 1
 
-    def stop(self):
-        """Stops the spinner and shows the cursor."""
-        # Show the cursor
-        self.show_cursor()
-        sys.stderr.write("\n")  # Move to the next line after stopping
-        sys.stderr.flush()
+	def stop(self):
+		"""Stops the spinner and shows the cursor."""
+		# Show the cursor
+		self.show_cursor()
+		sys.stderr.write("\n")  # Move to the next line after stopping
+		sys.stderr.flush()
 
 '''
 # Example usage:

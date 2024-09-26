@@ -2,6 +2,7 @@
 import os
 import re
 import sys
+import stat
 import time
 import math
 import stat
@@ -24,7 +25,17 @@ Sort_Key = "size"
 
 Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')}_{time.strftime('%Y_%j_%H-%M-%S')}.log"
 
+#Root = r"\Your Videos Location\"
 
+#Root: str = r"F:\Media"
+Root: str = r"F:\Media\TV"
+#Root: str = r"F:\Media\Movie"
+#Root: str = r"F:\Media\MasterClass Collection"
+#Root: str = r"F:\BackUp\_Adlt"
+#Root: str = r"F:\video"
+#Root: str = r"C:\Users\Geo\Desktop\Except"
+#Root: str = r"F:\BackUp\_Movies"
+#Root: str = r"C:\Users\Geo\Desktop\Video_downloads"
 
 ''' Global Variables '''
 glb_totfrms = 0
@@ -84,68 +95,76 @@ def perform_clustering(data: List[List[float]], _lst: List[List]) -> None:
 @perf_monitor
 def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> int:
 	msj = sys._getframe().f_code.co_name
-
 	if skip_it:
 		return 0
 
-	print(f"  +{msj} Start: {time.strftime('%H:%M:%S')}")
+	print(f"  +{msj} Start: {time.strftime('%H:%M:%S')}")
 
 	try:
+		# Check if input file exists and is writable
 		if not os.path.exists(input_file):
 			print(f"Input file '{input_file}' does not exist.")
 			return -1
 		input_file_size = os.path.getsize(input_file)
 		os.chmod(input_file, stat.S_IWRITE)
 
+		# Check if output file exists and is writable
 		if not os.path.exists(output_file):
 			print(f"Output file '{output_file}' does not exist.")
 			return -1
 		output_file_size = os.path.getsize(output_file)
-		if output_file_size > 100 :
+		if output_file_size > 100:
 			os.chmod(output_file, stat.S_IWRITE)
-		else :
+		else:
 			return 0
 
-		ratio = round (100 * ((output_file_size - input_file_size) / input_file_size), 2)
+		# Calculate size difference and print summary
+		ratio = round(100 * ((output_file_size - input_file_size) / input_file_size), 2)
 		extra = "+Biger" if ratio > 0 else ("=Same" if (input_file_size - output_file_size) == 0 else "-Lost")
-		sv_ms = f"    Size Was: {hm_sz(input_file_size)} Is: {hm_sz(output_file_size)} {extra}: {hm_sz(abs(input_file_size - output_file_size))} {ratio}%"
+		sv_ms = f"    Size Was: {hm_sz(input_file_size)} Is: {hm_sz(output_file_size)} {extra}: {hm_sz(abs(input_file_size - output_file_size))} {ratio}%"
 
+		# Rename input file and move output file
 		final_output_file = input_file if input_file.endswith('.mp4') else input_file.rsplit('.', 1)[0] + '.mp4'
 		temp_file = input_file + "_Delete_.old"
 		os.rename(input_file, temp_file)
 		shutil.move(output_file, final_output_file)
 
-#		debug = True
+		# Debug mode: Prompt for confirmation before deleting temp file
 		if debug:
-			confirm = input(f"  Are you sure you want to delete {temp_file}? (y/n): ")
+			confirm = input(f"  Are you sure you want to delete {temp_file}? (y/n): ")
 			if confirm.lower() != "y":
-				print("  Deletion canceled.")
-				return  input_file_size - output_file_size # Return here to stop further execution
+				print("   Not Deleted.")
+				return input_file_size - output_file_size  # Return here to stop further execution
+			print(f"   File {temp_file} Deleted.")
 
+		# Print summary and delete temp file
 		print(sv_ms)
 		os.remove(temp_file)
 		return input_file_size - output_file_size
 
-	except (FileNotFoundError, PermissionError) as e:
-		print(f"  {msj} Error accessing file: {e}")
+	except FileNotFoundError as e:
+		print(f"  {msj} File not found: {e}")
+	except PermissionError as e:
+		print(f"  {msj} Permission denied: {e}")
 	except Exception as e:
-		print(f"  {msj} An error occurred: {e}")
+		print(f"  {msj} An error occurred: {e}")
 		input(f"? {msj} WTF ?")
 
 	return -1
-
 ##>>============-------------------<  End  >------------------==============<<##
 
 @perf_monitor
-def process_file(file_info, cnt, fl_nmb ):
+def process_file(file_info, cnt, fl_nmb):
 	msj = sys._getframe().f_code.co_name
 
 	saved, procs, skipt, errod = 0, 0, 0, 0
 	str_t = time.perf_counter()
-	file_p, file_s, ext, jsn_ou = file_info
+	file_p = file_info['path']
+	file_s = file_info['size']
+	ext = file_info['extension']
+	jsn_ou = file_info['metadata']
 	skip_it = False
 	if os.path.isfile(file_p):
-#		print(f'\n{file_p}\n{hm_sz(file_s)}')
 		print(f'\n{file_p}\n {ordinal(cnt)} of {fl_nmb}, {ext}, {hm_sz(file_s)}')
 		if len(file_p) < 333:
 			free_disk_space = shutil.disk_usage(Root).free
@@ -157,17 +176,16 @@ def process_file(file_info, cnt, fl_nmb ):
 			input("File name too long > 333")
 
 		try:
-#			debug = True # DEBUG:
-			all_good, skip_it = parse_finfo(file_p, jsn_ou, debug)
-			if debug or ext != ".mp4":
+			# de_bug = True # DEBUG:
+			all_good, skip_it, two_pass_needed = parse_finfo(file_p, jsn_ou, de_bug)
+			if de_bug or ext != ".mp4":
 				skip_it = False
-#				print (f"\nFile: {file_p}\nFfmpeg: {all_good}\n")
 			if skip_it:
 				print(f"\033[91m   >| {msj} |<\033[0m")
 				skipt += 1
 
-			all_good = ffmpeg_run(file_p, all_good, skip_it, ffmpeg, de_bug)
-			if all_good :
+			all_good = ffmpeg_run(file_p, all_good, skip_it, two_pass=two_pass_needed, execu=ffmpeg, de_bug=de_bug)
+			if all_good:
 				saved += clean_up(file_p, all_good, skip_it, de_bug) or 0
 				procs += 1
 			elif not skip_it:
@@ -210,27 +228,31 @@ def process_file(file_info, cnt, fl_nmb ):
 		time.sleep(1)
 
 	return saved, procs, skipt, errod
-##==============-------------------   End   -------------------==============##
+
 @perf_monitor
-def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: bool = False) -> Optional[List[List]]:
+def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str, bool]]] = None, do_clustering: bool = False) -> Optional[List[Dict]]:
 	"""Scans a directory for files with specified extensions, extracts information
 	in parallel, and returns a sorted list of file information.
 
 	Args:
 		root (str): Path to the root directory.
 		xtnsio (List[str]): List of file extensions (lowercase).
-		sort_order (bool): True for descending, False for ascending sort by size.
+		sort_keys (Optional[List[Tuple[str, bool]]]): List of tuples containing sorting keys and their orders.
+			Each tuple is in the form (key_name, descending_order), where descending_order is a boolean.
+			Valid keys are 'name', 'size', 'extension', 'date', 'duration'.
 		do_clustering (bool, optional): Enables clustering (implementation not provided). Defaults to False.
 
 	Returns:
-		Optional[List[List]]: A list of lists containing file information (path, size, extension, video length).
+		Optional[List[Dict]]: A list of dictionaries containing file information.
 		None on errors.
 	"""
+	import datetime
+	from functools import cmp_to_key
+
 	str_t = time.perf_counter()
 	msj = f"{sys._getframe().f_code.co_name} Start: {time.strftime('%H:%M:%S')}"
 	print(f"Scan: {root}\tSize: {hm_sz(get_tree_size(root))}\n{msj}")
 	spinner = Spinner(indent=0)
-#	print(f"Extensions to scan: {xtnsio}")
 
 	if not root or not isinstance(root, str) or not os.path.isdir(root):
 		print(f"Invalid root directory: {root}")
@@ -239,7 +261,7 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 		print(f"Invalid extensions list: {xtnsio}")
 		return []
 
-	_lst = []
+	file_list = []
 
 	def is_file_accessible(file_path):
 		try:
@@ -269,14 +291,14 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 							print(f"Remove empty file: {f_path}")
 							os.remove(f_path)
 						elif file_s > 1000 and len(f_path) < 333:
-							# Runn ffprobe to extract
+							# Run ffprobe to extract metadata
 							if executor:
 								future = executor.submit(ffprobe_run, f_path)
 								futures.append((f_path, file_s, ext, future))
 							else:
 								result = ffprobe_run(f_path)
 								if result is not None:
-									handle_result((f_path, file_s, ext, result))
+									handle_result(f_path, file_s, ext, result)
 					except Exception as e:
 						print(f"Error getting size of file {f_path}: {e}")
 						continue
@@ -285,17 +307,33 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 			for f_path, file_s, ext, future in futures:
 				try:
 					jsn_ou = future.result()
-					result = (f_path, file_s, ext, jsn_ou)
-					handle_result(result)
+					handle_result(f_path, file_s, ext, jsn_ou)
 				except Exception as e:
 					print(f"Error processing future for file {f_path}: {e}")
 		spinner.stop()  # Ensure the spinner stops
 
-	def handle_result(result):
-		if result:
+	def handle_result(f_path, file_s, ext, jsn_ou):
+		if jsn_ou:
+			# Extract additional attributes for sorting
+			# File modification time
+			mod_time = os.path.getmtime(f_path)
+			# Convert to datetime object
+			mod_datetime = datetime.datetime.fromtimestamp(mod_time)
+			# Duration from ffprobe output
+			duration = float(jsn_ou.get('format', {}).get('duration', 0.0))
+			# Collect all needed information into a dictionary
+			file_info = {
+					'path':		f_path,
+					'name':		os.path.basename(f_path),
+					'size':		file_s,
+					'extension': ext.lower(),
+					'date':		mod_datetime,
+					'duration': duration,
+					'metadata': jsn_ou,
+				}
+			file_list.append(file_info)
 			if de_bug:
-				print(f"{result}")
-			_lst.append(result)
+				print(f"Collected file info: {file_info}")
 
 	MultiThread = True
 	if MultiThread:
@@ -305,28 +343,55 @@ def scan_folder(root: str, xtnsio: List[str], sort_order: bool, do_clustering: b
 		process_files()
 
 	if do_clustering:
-		print(f" Start Clustering : {time.strftime('%H:%M:%S')}")
-		duration = round(float(jsn_ou.get('format', {}).get('duration', 0.0)), 1)
-		print(f"     Duration: {duration}")
-		data.append([file_s, duration])
-		perform_clustering(data, _lst)
+		# Clustering code (not implemented)
+		pass
 
-	# Sorting based on the provided key # XXX: TBD
-	sort_map = {
-		'name':		 0,
-		'size':		 1,
-		'extension': 2,
-		'date':		 3  # Sort by file modification date
+	# Define valid sorting keys and their corresponding lambda functions
+	valid_sort_keys = {
+		'name': lambda x: x['name'],
+		'size': lambda x: x['size'],
+		'extension': lambda x: x['extension'],
+		'date': lambda x: x['date'],
+		'duration': lambda x: x['duration'],
 	}
-	# Sorting by the key specified (name, size, extension, date)
-	sort_idx = sort_map.get(Sort_Key, 1)  # Default to 'size' if Sort_Key is invalid
-#	sorted_list = sorted(_lst, key=lambda item: item[1],        reverse=sort_order)
-	sorted_list = sorted(_lst, key=lambda item: item[sort_idx], reverse=sort_order)
 
-	order = "Descending >" if sort_order else "Ascending <"
+	# Prepare the sorting key functions and orders
+	if sort_keys:
+		# Filter out invalid sort keys
+		sort_keys = [(key, descending) for key, descending in sort_keys if key in valid_sort_keys]
+		if not sort_keys:
+			# Default to sorting by size if no valid keys are provided
+			sort_keys = [('size', True)]
+	else:
+		# Default sorting by size in descending order
+		sort_keys = [('size', True)]
+
+	# Build the list of key functions and their respective orders
+	key_funcs = [valid_sort_keys[key] for key, _ in sort_keys]
+	sort_orders = [descending for _, descending in sort_keys]
+
+	# Sort the file list using multiple criteria
+	# We will sort using functools.cmp_to_key to handle individual sort orders
+	from functools import cmp_to_key
+
+	def compare_items(a, b):
+		for key_func, descending in zip(key_funcs, sort_orders):
+			a_key = key_func(a)
+			b_key = key_func(b)
+			if a_key != b_key:
+				if descending:
+					return -1 if a_key > b_key else 1
+				else:
+					return -1 if a_key < b_key else 1
+		return 0  # All keys are equal
+
+	sorted_list = sorted(file_list, key=cmp_to_key(compare_items))
+
+	# Prepare sorting order string for display
+	order_str = ', '.join([f"{key} ({'Desc' if desc else 'Asc'})" for key, desc in sort_keys])
 
 	end_t = time.perf_counter()
-	print(f"\n Sort: {order} Index: {Sort_Key}\n Scan: Done : {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}\n")
+	print(f"\nSort by: {order_str}\nScan Done: {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}\n")
 	return sorted_list
 
 ##==============-------------------   End   -------------------==============##
@@ -351,7 +416,14 @@ def main():
 
 		saved = procs = skipt = errod = total_time = 0
 
-		fl_lst = scan_folder(Root, File_extn, sort_order=Sort_Order, do_clustering=False)
+		# Specify sorting keys and orders
+		sort_keys = [
+			('size', False),   # Then by size ascending
+			('date', True),    # Sort by date descending
+#			('name', False),   # Then by name ascending
+		]
+
+		fl_lst = scan_folder(Root, File_extn, sort_keys=sort_keys, do_clustering=False)
 		fl_nmb = len(fl_lst)
 		counter = itertools.count(1)
 
@@ -388,6 +460,7 @@ def main():
 
 	input('All Done :)')
 	exit()
+
 ##==============-------------------   End   -------------------==============##
 
 # Call main function
