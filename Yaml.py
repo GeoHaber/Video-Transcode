@@ -41,6 +41,8 @@ MinF_sz = Path.get('Min_fsize', None)
 Skip_typ = Action.get('Skip_typ', None)
 Skip_key = Action.get('Skip_key', None)
 
+#extensions = list(config.get('Extensi', ()))
+
 File_extn = Video.get('Extensi', None)
 Max_v_btr = Video.get('Max_v_btr', None)
 Max_frm_r = Video.get('Max_frm_r', None)

@@ -20,22 +20,17 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 MultiThread = False		# XXX: It is set to True in the scan_folder # XXX:
 de_bug = False
 
-Sort_Order = True
-Sort_Key = "size"
+# Specify sorting keys and orders
+sort_keys = [
+			('size', True),	# Sort by size True=descending False=ascending
+			('date', True),		# Then by date descending
+			]
 
 Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')}_{time.strftime('%Y_%j_%H-%M-%S')}.log"
 
 #Root = r"\Your Videos Location\"
 
-#Root: str = r"F:\Media"
-Root: str = r"F:\Media\TV"
-#Root: str = r"F:\Media\Movie"
-#Root: str = r"F:\Media\MasterClass Collection"
-#Root: str = r"F:\BackUp\_Adlt"
-#Root: str = r"F:\video"
-#Root: str = r"C:\Users\Geo\Desktop\Except"
-#Root: str = r"F:\BackUp\_Movies"
-#Root: str = r"C:\Users\Geo\Desktop\Video_downloads"
+#
 
 ''' Global Variables '''
 glb_totfrms = 0
@@ -98,7 +93,7 @@ def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> i
 	if skip_it:
 		return 0
 
-	print(f"  +{msj} Start: {time.strftime('%H:%M:%S')}")
+	print(f"\r  +{msj} Start: {time.strftime('%H:%M:%S')}")
 
 	try:
 		# Check if input file exists and is writable
@@ -121,7 +116,7 @@ def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> i
 		# Calculate size difference and print summary
 		ratio = round(100 * ((output_file_size - input_file_size) / input_file_size), 2)
 		extra = "+Biger" if ratio > 0 else ("=Same" if (input_file_size - output_file_size) == 0 else "-Lost")
-		sv_ms = f"    Size Was: {hm_sz(input_file_size)} Is: {hm_sz(output_file_size)} {extra}: {hm_sz(abs(input_file_size - output_file_size))} {ratio}%"
+		sv_ms = f"    Size Was: {hm_sz(input_file_size)} Is: {hm_sz(output_file_size)} {extra}: {hm_sz(abs(input_file_size - output_file_size))} {ratio}%"
 
 		# Rename input file and move output file
 		final_output_file = input_file if input_file.endswith('.mp4') else input_file.rsplit('.', 1)[0] + '.mp4'
@@ -177,14 +172,14 @@ def process_file(file_info, cnt, fl_nmb):
 
 		try:
 			# de_bug = True # DEBUG:
-			all_good, skip_it, two_pass_needed = parse_finfo(file_p, jsn_ou, de_bug)
-			if de_bug or ext != ".mp4":
+			all_good, skip_it = parse_finfo(file_p, jsn_ou, debug)
+			if debug or ext != ".mp4":
 				skip_it = False
 			if skip_it:
 				print(f"\033[91m   >| {msj} |<\033[0m")
 				skipt += 1
 
-			all_good = ffmpeg_run(file_p, all_good, skip_it, two_pass=two_pass_needed, execu=ffmpeg, de_bug=de_bug)
+			all_good = ffmpeg_run(file_p, all_good, skip_it, ffmpeg, de_bug)
 			if all_good:
 				saved += clean_up(file_p, all_good, skip_it, de_bug) or 0
 				procs += 1
@@ -323,14 +318,14 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 			duration = float(jsn_ou.get('format', {}).get('duration', 0.0))
 			# Collect all needed information into a dictionary
 			file_info = {
-					'path':		f_path,
-					'name':		os.path.basename(f_path),
-					'size':		file_s,
-					'extension': ext.lower(),
-					'date':		mod_datetime,
-					'duration': duration,
-					'metadata': jsn_ou,
-				}
+				'path':		f_path,
+				'name':		os.path.basename(f_path),
+				'size':		file_s,
+				'extension':ext.lower(),
+				'date':		mod_datetime,
+				'duration':	duration,
+				'metadata':	jsn_ou,
+			}
 			file_list.append(file_info)
 			if de_bug:
 				print(f"Collected file info: {file_info}")
@@ -343,8 +338,11 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 		process_files()
 
 	if do_clustering:
-		# Clustering code (not implemented)
-		pass
+		print(f" Start Clustering : {time.strftime('%H:%M:%S')}")
+		duration = round(float(jsn_ou.get('format', {}).get('duration', 0.0)), 1)
+		print(f"     Duration: {duration}")
+		data.append([file_s, duration])
+		perform_clustering(data, _lst)
 
 	# Define valid sorting keys and their corresponding lambda functions
 	valid_sort_keys = {
@@ -417,11 +415,7 @@ def main():
 		saved = procs = skipt = errod = total_time = 0
 
 		# Specify sorting keys and orders
-		sort_keys = [
-			('size', False),   # Then by size ascending
-			('date', True),    # Sort by date descending
 #			('name', False),   # Then by name ascending
-		]
 
 		fl_lst = scan_folder(Root, File_extn, sort_keys=sort_keys, do_clustering=False)
 		fl_nmb = len(fl_lst)
