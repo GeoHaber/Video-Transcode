@@ -26,7 +26,7 @@ if not os.path.exists(ffmpeg) or not os.path.exists(ffprob) :
 	raise OSError
 
 #SP.run( [ffmpeg, '-version'] )
-ffmpeg_vers = f"Ffmpeg version: {SP.run(['ffmpeg', '-version'], stdout=SP.PIPE).stdout.decode('utf-8')[30:33]} (:)"
+ffmpeg_vers = f"Ffmpeg version: {SP.run(['ffmpeg', '-version'], stdout=SP.PIPE).stdout.decode('utf-8')[15:20]} (:)"
 print( ffmpeg_vers )
 
 ##==============-------------------   End   -------------------==============##
@@ -297,17 +297,17 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 	print(f"\033[96m{summary_msg}\033[0m")
 
 	f_skip = good_fname and f_comment == Skip_key
-#	de_bug = True
 	if f_skip:
 		print("   .Skip: Format")
 
+#	de_bug = True
 	# Call parse functions for streams if they exist
 	ff_com = []
 	if video_streams:
 		ff_video, v_skip = parse_video(video_streams, de_bug, f_skip )
 		ff_com.extend(ff_video)
 		skip_it = f_skip and v_skip
-		if de_bug : print (f"\nSkip={skip_it}, Fskip ={f_skip}, Vskip ={v_skip}\n" )
+		if de_bug : print (f"\nVideo ffmpg = {ff_com}\nSkip={skip_it}, Fskip ={f_skip}, Vskip ={v_skip}\n" )
 	else :
 		msj += f"\nNo Video in: {input_file}\n"
 		print(msj)
@@ -318,7 +318,7 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 		ff_audio, a_skip = parse_audio(audio_streams, de_bug)
 		ff_com.extend(ff_audio)
 		skip_it = skip_it and a_skip
-		if de_bug : print (f"\nSkip={skip_it}, Askip = {a_skip}\n" )
+		if de_bug : print (f"\nAudio ffmpg = {ff_com}\nSkip={skip_it}, Askip = {a_skip}\n" )
 	else :
 		msj += f"\nNo Audio in: {input_file}\n"
 		print(msj)
@@ -329,7 +329,7 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 		ff_subtl, s_skip = parse_subtl(subtl_streams, de_bug)
 		ff_com.extend(ff_subtl)
 		skip_it = skip_it and s_skip
-		if de_bug : print (f"\nSkip={skip_it}, Sskip = {s_skip}\n" )
+		if de_bug : print (f"\nSubtit ffmpg = {ff_com}\nSkip={skip_it}, Sskip = {s_skip}\n" )
 	else :
 		ff_subtl, s_skip  = add_subtl_from_file(input_file, de_bug=True)
 		ff_com.extend(ff_subtl)
@@ -340,12 +340,9 @@ def parse_frmat(input_file: str, mta_dta: Dict[str, any], de_bug: bool) -> Tuple
 		ff_datat, d_skip = parse_extrd(datax_streams, de_bug)
 		d_skip = True    # XXX: Avoid reencode
 		skip_it = skip_it and d_skip
-		if de_bug : print (f"\nSkip={skip_it}, Dskip = {d_skip}\n" )
+		if de_bug : print (f"\nData ffmpg = {ff_com}\nSkip={skip_it}, Dskip = {d_skip}\n" )
 
-	if de_bug:
-		return [], f_skip
-#	if de_bug or skip_it:
-#		print(f" Skip: {skip_it}\n FFmpeg: {ff_com}\n Nothing to do")
+	if de_bug: input (f"\n{msj}\n Redy to do it ?")
 
 	return ff_com, skip_it
 
@@ -462,12 +459,14 @@ def get_encoder_options(codec_name, is_10bit, bit_rate, use_hw_accel=False):
 
 @perf_monitor
 def parse_video(strm_in, de_bug=False, skip_it=False):
-	'''Parse and extract data from video streams.'''
+	''' Parse and extract data from video streams '''
 	msj = sys._getframe().f_code.co_name
 	if de_bug:
 		print(f"    +{msj} Start: {TM.datetime.now():%T}")
 
-	global glb_vidolen, vid_width, glb_totfrms
+	global glb_vidolen  # make it global so we can reuse for fmpeg check ...
+	global vid_width    # NOTE used by matrix_it
+	global glb_totfrms
 
 	use_hw_accel = True
 	skip_all = True  # Track if all streams can be skipped
@@ -485,14 +484,14 @@ def parse_video(strm_in, de_bug=False, skip_it=False):
 			raise Exception(msj)
 
 		# Extract necessary video information
-		codec_name = this_vid.get('codec_name', 'XXX')
-		pix_fmt = this_vid.get('pix_fmt', '')
-		vid_width = this_vid.get('width', 2)
-		vid_heigh = this_vid.get('height', 1)
-		tags = this_vid.get('tags', {})
+		codec_name	= this_vid.get('codec_name', 'XXX')
+		pix_fmt		= this_vid.get('pix_fmt', '')
+		vid_width	= this_vid.get('width', 2)
+		vid_heigh	= this_vid.get('height', 1)
+		tags		= this_vid.get('tags', {})
 		handler_name = tags.get('handler_name', 'Unknown')
-		frm_rate = divd_strn(this_vid.get('r_frame_rate', '25'))
-		_vi_btrt = int(this_vid.get('bit_rate', glb_bitrate * 0.9))
+		frm_rate	= divd_strn(this_vid.get('r_frame_rate', '25'))
+		_vi_btrt	= int(this_vid.get('bit_rate', glb_bitrate * 0.9))
 
 		encoder_options = "No Encoder"
 		if 'bit_rate' not in this_vid:
@@ -508,7 +507,7 @@ def parse_video(strm_in, de_bug=False, skip_it=False):
 		glb_totfrms = round(frm_rate * glb_vidolen)
 
 		# Determine maximum bitrate
-		max_vid_btrt = 3300000
+		max_vid_btrt = 3700000
 		msj = " 8-bit"
 		if pix_fmt.endswith("10le"):
 			msj = "10-bit"
@@ -536,7 +535,7 @@ def parse_video(strm_in, de_bug=False, skip_it=False):
 		else:
 			encoder_options = get_encoder_options(codec_name, pix_fmt.endswith("10le"), btrt, use_hw_accel)
 			ff_vid.extend(encoder_options)
-			extra += f'|Re-encode with bitrate: {hm_sz(btrt)}'
+			extra += f'| Re-encode bitrate: {hm_sz(btrt)}'
 			skip_all = False
 
 		# Determine output resolution
@@ -566,7 +565,7 @@ def parse_video(strm_in, de_bug=False, skip_it=False):
 		desired_handler_name = "VideoHandler x265"
 		if handler_name != desired_handler_name:
 			ff_vid.extend([f"-metadata:s:v:{indx}", f"handler_name={desired_handler_name}"])
-			extra += f'|Change handler to: {desired_handler_name}'
+			extra += f'| Change to: {desired_handler_name}'
 			skip_all = False
 
 		# Print detailed log message
@@ -595,154 +594,97 @@ def parse_video(strm_in, de_bug=False, skip_it=False):
 # XXX: Audio
 @perf_monitor
 def parse_audio(streams, de_bug=False):
-	"""Parse and extract data from audio streams."""
+	"""Parse and extract data from audio streams, ensuring the best English audio stream is set as default if available."""
 
-	only_audio = len(streams) == 1
 	ffmpeg_audio_options = []
 	all_skippable = True
-	audio_kept = False
 
-	english_streams = []
-	non_english_streams = []
-	previous_default = None
-	best_audio_stream = None
+	best_stream = None
+	previous_default_index = None
 
+	# Single loop to identify the best stream
 	for indx, audio_stream in enumerate(streams):
-		stream_options = []
-		extra_info = ""
-		skip_it = False
+		language = audio_stream.get('tags', {}).get('language', 'und')
+		channels = int(audio_stream.get('channels', -100))
+		bitrate = int(audio_stream.get('bit_rate', 0))
+		dispo_default = int(audio_stream.get('disposition', {}).get('default', 0))
 
-		index        = audio_stream.get('index', -1)
-		codec_name   = audio_stream.get('codec_name', None)
-		sample_rate  = audio_stream.get('sample_rate', None)
-		channels     = audio_stream.get('channels', -100)
-		bitrate = int( audio_stream.get('bit_rate', 0))
-
-		disposition  = audio_stream.get('disposition', {})
-		dispo_forced  = disposition.get('forced', 0)
-		dispo_default = disposition.get('default', 0)
-
-		tags         = audio_stream.get('tags', {})
-		language      = tags.get('language', 'und')
-		handler_name  = tags.get('handler_name', 'Unknown')
-
+		# Track the previous default stream index
 		if dispo_default:
-			previous_default = audio_stream
-			extra_info += f"Previous default: {language} {channels}ch "
+			previous_default_index = indx
 
-		# Estimate bitrate if missing
-		if bitrate == 0:
-			extra_info = 'BitRate Estimate'
-			bitrate = int(glb_bitrate * 0.2)  # estimate 20% of total
+		# Determine the best English stream if available
+		if language == 'eng' and (best_stream is None or (channels > int(best_stream.get('channels', -100))) or (channels == int(best_stream.get('channels', -100)) and bitrate > int(best_stream.get('bit_rate', 0)))):
+			best_stream = audio_stream
 
-		# Get channel info
-		extra_info += {
-			1: " Mono",
-			2: " Stereo"
-		}.get(channels, f"{channels - 1}.1 Channels" if 2 < channels < 8 else f" {channels} Channels")
+	# Second loop to generate ffmpeg options and set dispositions
+	for indx, audio_stream in enumerate(streams):
+		codec_name = audio_stream.get('codec_name', None)
+		channels = int(audio_stream.get('channels', -100))
+		bitrate = int(audio_stream.get('bit_rate', 0))
+		language = audio_stream.get('tags', {}).get('language', 'und')
+		disposition = audio_stream.get('disposition', {})
+		dispo_default = int(disposition.get('default', 0))
+		handler_name = audio_stream.get('tags', {}).get('handler_name', 'Unknown')
+		sample_rate = audio_stream.get('sample_rate', None)
 
-		keep_language = language in Keep_langua or only_audio
+		# Generate ffmpeg options for the current stream
 		copy_codec = codec_name in ('aac', 'vorbis', 'mp3', 'opus') and channels <= 8
-		reduce_bitrate = bitrate > Max_a_btr
+		stream_options = ['-map', f'0:a:{indx}']
 
-		if language == 'eng':
-			english_streams.append((index, bitrate, channels, audio_stream))
+		if copy_codec:
+			stream_options.extend([f'-c:a:{indx}', 'copy'])
 		else:
-			non_english_streams.append((index, bitrate, channels, audio_stream))
+			stream_options.extend([f'-c:a:{indx}', 'libvorbis', '-q:a', '8'])
 
-		if keep_language:
-			audio_kept = True
-			if copy_codec:
-				stream_options = ['-map', f'0:a:{indx}', '-c:a', 'copy']
-				skip_it = True
-			else:
-				extra_info += ' Convert to vorbis'
-				stream_options = ['-map', f'0:a:{indx}', '-c:a', 'libvorbis', f'-q:a', '8']
-		elif not only_audio and not audio_kept:
-			stream_options = ['-map', f'0:a:{indx}', '-c:a', 'copy']
-			skip_it = True
-			audio_kept = True
-		elif not only_audio:
-			stream_options = ['-map', f'-0:a:{indx}']
-			extra_info = f" Del: {language} | Remove it"
-			skip_it = False
+		# Metadata handling
+		if handler_name != "SoundHandler":
+			stream_options.extend([f"-metadata:s:a:{indx}", "handler_name=SoundHandler"])
+
+		ffmpeg_audio_options.extend(stream_options)
+
+		# Set the disposition for each stream, ensuring only the best stream is set to default
+		if audio_stream == best_stream:
+			ffmpeg_audio_options.extend([f'-disposition:a:{indx}', 'default'])
+			if previous_default_index is None or best_stream != streams[previous_default_index]:
+				all_skippable = False
 		else:
-			stream_options = ['-map', f'0:a:{indx}']
+			ffmpeg_audio_options.extend([f'-disposition:a:{indx}', 'none'])
 
-			if copy_codec:
-				if reduce_bitrate:
-					extra_info += ' Reduce BitRate '
-					stream_options.extend([f'-c:a:{indx}', 'libvorbis', f'-q:a', '8'])
-				else:
-					extra_info += ' Copy'
-					stream_options.extend([f'-c:a:{indx}', 'copy'])
-					skip_it = True
-			else:
-				extra_info += f" Convert {codec_name} to vorbis "
-				stream_options.extend([f'-c:a:{indx}', 'libvorbis', f'-q:a', '8'])
-
-		# Metadata and disposition
-		if stream_options != ['-map', f'-0:a:{indx}']:  # Stream is not marked for deletion
-			if handler_name == "SoundHandler":
-				extra_info += f" handler_name: {handler_name}"
-			else:
-				extra_info += f" handler_name: {handler_name} Change to: SoundHandler"
-				stream_options.extend([f"-metadata:s:a:{indx}", "handler_name=SoundHandler"])
-				skip_it = False
-
-		message = (f"    |<A:{indx:2}>|{codec_name:^8}|Br:{hm_sz(bitrate):>9}|{language}"
-				   f"|Frq: {hm_sz(sample_rate, 'Hz'):>8}|Ch: {channels}|Dis: {dispo_default} Fr:{dispo_forced}| {extra_info}")
+		# Print audio stream details after setting disposition
+		message = (f"    |<A:{indx:2}>|{codec_name:^8}|Br:{bitrate:>9}|{language}"
+				   f"|Frq: {sample_rate or 'N/A':>8}|Ch: {channels}|Dis: {dispo_default}|Handler_name: {handler_name}")
+		if dispo_default:
+			message += " |Was default audio"
+		if audio_stream == best_stream:
+			message += " |Is new default audio"
 		print(f'\033[92m{message}\033[0m')
 
-		ffmpeg_audio_options += stream_options
-		all_skippable &= skip_it
+	# Ensure -disposition commands are correctly assigned
+	if not any('-disposition' in opt for opt in ffmpeg_audio_options):
+		print("Warning: No -disposition commands were added to the audio streams.")
 
-	# Select the best English stream based on highest bitrate
-	if english_streams:
-		best_english_stream = max(english_streams, key=lambda s: s[1])  # Prefer higher bitrate
-	else:
-		best_english_stream = None
+	# Set skip_audio flag:
+	# - If there's only one audio stream
+	# - Or if there are multiple streams, but the best stream is the same as the previous default
+	skip_audio = len(streams) == 1 or (best_stream and previous_default_index is not None and best_stream == streams[previous_default_index])
 
-	# If no English streams, select the previous default or the best non-English stream based on highest bitrate
-	if best_english_stream:
-		best_stream = best_english_stream
-	elif previous_default:
-		best_stream = (previous_default.get('index', -1),
-					   int(previous_default.get('bit_rate', 0)),
-					   previous_default.get('channels', -100),
-					   previous_default)
-	else:
-		best_stream = max(non_english_streams, key=lambda s: s[1]) if non_english_streams else None
-
-	# Set the best stream as default and ensure only one stream is default
-	if best_stream:
-		index = best_stream[0]
-		best_audio_stream = best_stream[3]
-		language = best_audio_stream.get('tags', {}).get('language', 'und')
-		ffmpeg_audio_options.extend([f'-metadata:s:a:{index}', f'language={language}', f'-disposition:s:a:{index}', '+default'])
-		audio_kept = True
-		extra_info = f" {language} {best_stream[2]}ch {hm_sz(best_stream[1])}"
-#        print(f'\033[92m    New audio default: {extra_info} \033[0m')
-
-	# Ensure only one default stream is set
-	for indx, audio_stream in enumerate(streams):
-		if audio_stream != best_audio_stream:
-			index = audio_stream.get('index', -1)
-			ffmpeg_audio_options.extend([f'-disposition:s:a:{index}', '0'])
-
-	# Only if no audio stream was marked to be kept and there are streams available,
-	# do we default to copying the first audio stream.
-	if not audio_kept and streams:
-		ffmpeg_audio_options = ['-map', '0:a:0', '-c:a:0', 'copy']
-		all_skippable = False
-
-	if de_bug:
-		print(f"A:= {ffmpeg_audio_options}")
-
-	if all_skippable:
+	if skip_audio:
+		all_skippable = True
 		print("   .Skip: Audio")
+	else:
+		all_skippable = False
+#		print("   .Do not skip: Audio - Default stream changed.")
+		print(f"   =A: {ffmpeg_audio_options}")
+
+	# Debug output of the ffmpeg options
+	if de_bug:  # Ensure debug output is printed
+		print(f"   =A: {ffmpeg_audio_options}")
 
 	return ffmpeg_audio_options, all_skippable
+
+
+##>>============-------------------<  End  >------------------==============<<##
 
 
 # XXX: Subtitle
@@ -777,7 +719,7 @@ def parse_subtl(streams_in, de_bug=False):
 			if language == 'eng':
 				if not default_eng_set:
 					default_eng_set = True  # Set the first English subtitle as default
-					extra += f"Keep: {codec_name} {language}|Set to Default"
+					extra += f" Keep  : {codec_name} {language}|Set to Default"
 					ff_sub.extend([f'-c:s:{indx}', 'mov_text', f'-metadata:s:s:{indx}', f'language={language}', f'-disposition:s:s:{indx}', 'default'])
 				else:
 					extra += f"Keep: {codec_name} {language}|Not Default"
@@ -829,7 +771,7 @@ def parse_extrd(streams_in, de_bug=False):
 		codec_type      = this_dat.get('codec_type', '')
 
 		tags            = this_dat.get('tags', {})
-		handler_name = tags.get('handler_name', 'Unknown')
+		handler_name	= tags.get('handler_name', 'Unknown')
 
 		msj = f"    |<D:{index:2}>|{codec_name:^8}| {codec_lng_nam:<9}| {codec_type:^11} | {handler_name}"
 		if handler_name == 'SubtitleHandler':
@@ -919,7 +861,11 @@ def show_progrs(line_to, sy, de_bug=False):
 			print(msj)
 
 	elif any(substr in line_to for substr in ["muxing overhead:", "global headers:"]):
-		print(f"\n    |<+>|Done: {line_to}")
+		match = re.search(r"\[out#0\/mp4 @ \w+\]\s*(.*)", line_to)
+		if match:
+			print(f"\n    |<+>|Done: {match.group(1)}")
+		else:
+			print(f"\n    |<+>|Done: {line_to}")
 		return -1
 
 	sys.stderr.write(_P)

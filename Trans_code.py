@@ -120,7 +120,8 @@ def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> i
 
 		# Rename input file and move output file
 		final_output_file = input_file if input_file.endswith('.mp4') else input_file.rsplit('.', 1)[0] + '.mp4'
-		temp_file = input_file + "_Delete_.old"
+		random_chars = ''.join(random.sample(string.ascii_letters + string.digits, 4))
+		temp_file = input_file + random_chars + "_Delete_.old"
 		os.rename(input_file, temp_file)
 		shutil.move(output_file, final_output_file)
 
@@ -151,14 +152,15 @@ def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> i
 @perf_monitor
 def process_file(file_info, cnt, fl_nmb):
 	msj = sys._getframe().f_code.co_name
+	str_t = time.perf_counter()
 
 	saved, procs, skipt, errod = 0, 0, 0, 0
-	str_t = time.perf_counter()
+	skip_it = False
 	file_p = file_info['path']
 	file_s = file_info['size']
 	ext = file_info['extension']
 	jsn_ou = file_info['metadata']
-	skip_it = False
+	# Is it a file ?
 	if os.path.isfile(file_p):
 		print(f'\n{file_p}\n {ordinal(cnt)} of {fl_nmb}, {ext}, {hm_sz(file_s)}')
 		if len(file_p) < 333:

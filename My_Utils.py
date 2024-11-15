@@ -544,6 +544,15 @@ def copy_move(src: str, dst: str, keep_original: bool = False, verbose: bool = F
 ##==============-------------------   End   -------------------==============##
 
 
+def ordinal(n: int ) -> str :
+	if 10 <= n % 100 <= 20:
+		suffix = 'th'
+	else:
+		suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
+	return f"{n}'{suffix}"
+##==============-------------------   End   -------------------==============##
+
+
 def flatten_list_of_lists(lst):
 	"""Flatten a list of lists (or a mix of lists and other elements) into a single list."""
 	result = []
@@ -557,14 +566,6 @@ def flatten_list_of_lists(lst):
 			result.append(item)
 	return result
 
-##==============-------------------   End   -------------------==============##
-
-def ordinal(n: int ) -> str :
-	if 10 <= n % 100 <= 20:
-		suffix = 'th'
-	else:
-		suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
-	return f"{n}'{suffix}"
 ##==============-------------------   End   -------------------==============##
 
 
@@ -761,7 +762,7 @@ def res_chk(folder='.'):
 	elif os.path.ismount(folder):
 		print('\n', folder, " is a Mountpoint")
 	else:
-		print('\n', folder, " is WTF?")
+		print('\n', folder, " is a WTF?")
 
 	try:
 		sys_is = platform.uname()
