@@ -469,8 +469,10 @@ def hm_sz(numb: Union[str, int, float], type: str = "B") -> str:
 	return f"{sign}{numb:.2f} {units[-1]}"
 ##==============-------------------   End   -------------------==============##
 
-def hm_time(timez: float) -> str:
+def hm_time(timez) -> str:
 	"""Converts time in seconds to a human-readable format."""
+	if not isinstance(timez, (int, float)):
+		return f"Invalid input: {type(timez).__name__}"
 
 	units = [
 		('year', 31536000),
