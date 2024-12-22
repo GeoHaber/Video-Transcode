@@ -537,7 +537,7 @@ def parse_video(strm_in, de_bug=False, skip_it=False):
 			msj = "10-bit"
 			max_vid_btrt = int(max_vid_btrt * 1.25)
 
-		btrt = min(_vi_btrt, max_vid_btrt)
+		btrt = min(_vi_btrt * 1.1, max_vid_btrt)
 
 		# Calculate aspect ratio
 		original_ratio = vid_width / vid_heigh
