@@ -11,12 +11,12 @@ import psutil
 import datetime
 import itertools
 
-from FFMpeg		import *
-from My_Utils	import copy_move, hm_sz, hm_time, Tee
 
 from functools	import cmp_to_key
 from typing		import List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from FFMpeg		import *
+from My_Utils	import copy_move, hm_sz, hm_time, Tee
 
 #from sklearn.cluster import DBSCAN
 
@@ -176,8 +176,8 @@ def process_file(file_info, cnt, fl_nmb ):
 
 		try:
 #			debug = True # DEBUG:
-			all_good, skip_it = parse_finfo(file_p, jsn_ou, debug)
-			if debug or ext != ".mp4":
+			all_good, skip_it = parse_finfo(file_p, jsn_ou, de_bug)
+			if de_bug or ext != ".mp4":
 				skip_it = False
 #				print (f"\nFile: {file_p}\nFfmpeg: {all_good}\n")
 			if skip_it:
