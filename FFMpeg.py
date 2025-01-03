@@ -353,6 +353,12 @@ def parse_video(
 		frm_rate     = divd_strn(stream.get("r_frame_rate", "25"))
 		this_bitrate = int(stream.get("bit_rate", context.vid_bitrate * 0.8))
 
+		if codec_name.lower() == 'mjpeg':
+			print (f"    |<V:{idx:2}>| > Skip {codec_name:6} |" )
+#			ff_video.extend (['-map', '0:' + str(idx) + '?'])
+			skip_all = False
+			continue
+
 		# Compute total frames
 		context.total_frames = round(frm_rate * context.vid_length)
 
@@ -380,20 +386,14 @@ def parse_video(
 				break
 		needs_scaling = (output_label in ["2K", "4K", "8K"])
 
-		# Check metadata for "encoded_for_streaming=Yes"
-		tags = stream.get("tags", {})
-		encoded_for_streaming = tags.get("encoded_for_streaming", "No") # XXX: Not working
-
 		# The combined condition:
 		#  - Must be HEVC
 		#  - Must have bitrate <= max
 		#  - Must not need scaling
-		#  - Must have 'encoded_for_streaming=Yes' (our "already validated" flag)
 		already_streaming_friendly = (
 			codec_name.lower() == "hevc"
 			and this_bitrate <= max_vid_btrt
 			and not needs_scaling
-#			and encoded_for_streaming.lower() == "yes"
 		)
 
 		# Build ffmpeg args
@@ -413,12 +413,6 @@ def parse_video(
 				True  # use_hw_accel = True
 			)
 			ff_vid.extend(encoder_opts)
-
-			# Mark it as streaming-friendly after we re-encode
-#			ff_vid.extend([
-#				f"-metadata:s:v:{idx}",
-#				"encoded_for_streaming=Yes"
-#			])
 
 			skip_all = False
 			extra_msg = f"| Re-encode: {hm_sz(btrt)}"
@@ -918,7 +912,7 @@ def show_progrs(line_to: str, sy: str, de_bug: bool = False) -> bool:
 				hours, mints = divmod(mints, 60)
 				_eta = f"{hours:02d}:{mints:02d}:{secs:02d}"
 				disp_str = (
-					f"    | {sy} |Size: {hm_sz(regx_val['size']):>9}"
+					f"    | {sy} |Size: {hm_sz(regx_val['size']):>10}"
 					f"|Frames: {int(regx_val['frame']):>7}"
 					f"|Fps: {fp_int:>4}"
 					f"|BitRate: {hm_sz(regx_val['bitrate']):>6}"

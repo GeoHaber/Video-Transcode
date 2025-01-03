@@ -11,10 +11,11 @@ import psutil
 import datetime
 import itertools
 
-
 from functools	import cmp_to_key
 from typing		import List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# External references from your code
 from FFMpeg		import *
 from My_Utils	import copy_move, hm_sz, hm_time, Tee
 
@@ -95,7 +96,8 @@ def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> i
 	if skip_it:
 		return 0
 
-	print(f"\r  +{msj} Start: {time.strftime('%H:%M:%S')}")
+	if debug:
+		print(f"  +{msj} Start: {time.strftime('%H:%M:%S')}" + " " * 80)
 
 	try:
 		if not os.path.exists(input_file):
@@ -175,10 +177,11 @@ def process_file(file_info, cnt, fl_nmb ):
 			input("File name too long > 333")
 
 		try:
-#			debug = True # DEBUG:
+#			de_bug = True # DEBUG:
 			all_good, skip_it = parse_finfo(file_p, jsn_ou, de_bug)
 			if de_bug or ext != ".mp4":
 				skip_it = False
+#				print (f"\nDebug: {de_bug}  Ext: {ext}\n")
 #				print (f"\nFile: {file_p}\nFfmpeg: {all_good}\n")
 			if skip_it:
 				print(f"\033[91m   .Skip: >|  {msj} |<\033[0m")
@@ -211,7 +214,7 @@ def process_file(file_info, cnt, fl_nmb ):
 			errod += 1
 			msj = f" +: Exception: {e}\n{os.path.dirname(file_p)}\n\t{os.path.basename(file_p)}\t{hm_sz(file_s)}\nCopied"
 			print(msj)
-			if de_bug:
+			if de_bug :
 				input('Next')
 			if copy_move(file_p, Excepto, True, True):
 				print("Done")
