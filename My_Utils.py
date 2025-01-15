@@ -471,6 +471,8 @@ def hm_sz(numb: Union[str, int, float], type: str = "B") -> str:
 
 def hm_time(timez) -> str:
 	"""Converts time in seconds to a human-readable format."""
+
+	# Handle invalid input types
 	if not isinstance(timez, (int, float)):
 		return f"Invalid input: {type(timez).__name__}"
 
@@ -508,17 +510,17 @@ def hm_time(timez) -> str:
 		return ", ".join(result[:-1]) + " and " + result[-1]
 	else:
 		return result[0]
+##==============-------------------   End   -------------------==============##
 
-##>>============-------------------<  End  >------------------==============<<##
 
-def copy_move(src: str, dst: str, keep_original: bool = False, verbose: bool = False) -> bool:
+def copy_move(src: str, dst: str, keep_original: bool = True, verbose: bool = False) -> bool:
 	"""
 	Copy or move a file.
 
 	Parameters:
 	- src (str): Source file path.
 	- dst (str): Destination file path.
-	- keep_original (bool, optional): If True, keep the original file. Defaults to False.
+	- keep_original (bool, optional): If True, keep the original file.
 	- verbose (bool optional): If True print message. Defaults to False.
 	"""
 #	if verbose:

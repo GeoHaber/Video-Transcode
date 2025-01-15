@@ -110,6 +110,7 @@ def run_ffm(args: List[str], de_bug: bool = False) -> bool:
 	Returns True if command succeeds, False otherwise.
 	"""
 	logger.debug("run_ffm: %s", " ".join(args))
+
 	if de_bug:
 		print("run_ffm: %s", " ".join(args))
 
@@ -120,35 +121,36 @@ def run_ffm(args: List[str], de_bug: bool = False) -> bool:
 	try:
 		if de_bug:
 			# Debug mode: Capture stdout/stderr and print them
-			logger.debug("Running ffmpeg in debug mode.\n%s", " ".join(args))
+			print ("Running ffmpeg in debug mode.\n%s", " ".join(args))
 			process = SP.run(args, stdout=SP.PIPE, stderr=SP.STDOUT)
-			logger.debug("Stdout:\n%s", process.stdout.decode("utf-8", errors="replace"))
+			print ("Stdout:\n%s", process.stdout.decode("utf-8", errors="replace"))
 			if process.returncode != 0:
-				logger.error("FFmpeg failed with return code %d", process.returncode)
+				print ("FFmpeg failed with return code %d", process.returncode)
 				return False
 			time.sleep(1)
 			return True
 		else:
-			# Normal mode: Show a progress spinner
-			with SP.Popen (	args,
+			spin_char = "|/-o+\\"
+			spinner_counter = 0
+			with SP.Popen (    args,
 							stdout=SP.PIPE,
 							stderr=SP.STDOUT,
-							text=True, 			# same as universal_newlines=True in modern Python
+							text=True,             # same as universal_newlines=True in modern Python
 							encoding="utf-8",   # or "cp437", "cp65001",
 							errors="replace"
 						) as process:
-				spin_char = "|/-o+\\"
-				spinner_counter = 0
 				for line in process.stdout:
 					# show_progrs is your custom function that parses ffmpeg progress
 					if show_progrs(line, spin_char[spinner_counter % len(spin_char)], de_bug=False):
 						spinner_counter += 1
+#                    print ( SP.PIPE )
 				_, _ = process.communicate()
 
 			if process.returncode != 0:
-				logger.error("FFmpeg failed with return code %d", process.returncode)
+				print ("FFmpeg failed with return code %d", process.returncode)
 				return False
 		return True
+
 	except Exception as e:
 		logger.exception("run_ffm exception: %s", e)
 		return False
@@ -168,10 +170,10 @@ def ffmpeg_run(
 	name on success or None on skip/failure.
 	"""
 	if not input_file or skip_it:
-#		print("Skipping ffmpeg_run: skip_it=%s, input_file=%s", skip_it, input_file)
+#        print("Skipping ffmpeg_run: skip_it=%s, input_file=%s", skip_it, input_file)
 		return None
 
-#	logger.info("ffmpeg_run start: %s", input_file)
+#    logger.info("ffmpeg_run start: %s", input_file)
 
 	file_name, _ = os.path.splitext(os.path.basename(input_file))
 	out_file = os.path.normpath("_" + stmpd_rad_str(7, file_name[0:25]))
@@ -191,11 +193,11 @@ def ffmpeg_run(
 		"-hide_banner"
 	]
 	ff_tail = [
-		"-metadata",	f"title={file_name}",
-		"-metadata",	f"comment={Skip_key}",
-		"-metadata",	f"encoder=ffmpeg {ffmpeg_vers}",
-		"-metadata",	"copyright=2024",
-		"-metadata",	"author=Encoded by GeoHab",
+		"-metadata",    f"title={file_name}",
+		"-metadata",    f"comment={Skip_key}",
+		"-metadata",    f"encoder=ffmpeg {ffmpeg_vers}",
+		"-metadata",    "copyright=2024",
+		"-metadata",    "author=Encoded by GeoHab",
 		"-movflags",    "+faststart",         # Place moov atom at the beginning for fast start
 		"-fflags",      "+fastseek",          # Enable fast seeking
 		"-fflags",      "+genpts",            # Generate presentation timestamps
@@ -355,7 +357,7 @@ def parse_video(
 
 		if codec_name.lower() == 'mjpeg':
 			print (f"    |<V:{idx:2}>| > Skip {codec_name:6} |" )
-#			ff_video.extend (['-map', '0:' + str(idx) + '?'])
+#            ff_video.extend (['-map', '0:' + str(idx) + '?'])
 			skip_all = False
 			continue
 
@@ -403,7 +405,7 @@ def parse_video(
 		if already_streaming_friendly:
 			# Just copy
 			ff_vid.append("copy")
-			extra_msg = f"=> Copy (HEVC < {max_vid_btrt}, streaming-friendly)"
+			extra_msg = f"=> Copy (x265 < {hm_sz(max_vid_btrt)}, stream OK)"
 		else:
 			# Re-encode with streaming-friendly logic
 			encoder_opts = get_encoder_options(
@@ -415,7 +417,7 @@ def parse_video(
 			ff_vid.extend(encoder_opts)
 
 			skip_all = False
-			extra_msg = f"| Re-encode: {hm_sz(btrt)}"
+			extra_msg = f" Re-encode: {hm_sz(btrt)}"
 
 		# If scaling is needed, we must re-encode
 		if needs_scaling:
@@ -453,7 +455,7 @@ def parse_video(
 		if de_bug:
 			logger.debug("Stream %s => %s", idx, ff_vid)
 
-	if skip_all and skip_it:
+	if skip_all :
 		logger.info("Skipping video because skip_all=%s and skip_it=%s", skip_all, skip_it)
 		print("   .Skip: Video")
 
@@ -547,9 +549,9 @@ def parse_audio(
 		)
 		# Additional notes
 		if data["dispo_default"]:
-			msg += " |Was default"
+			msg += "|Was default"
 		if data == best_stream:
-			msg += " |Is new default"
+			msg += "|Is new default"
 		print(f"\033[92m    {msg}\033[0m")
 
 	# Decide skip
@@ -570,84 +572,161 @@ def parse_audio(
 ###############################################################################
 #                           PARSE SUBTITLES
 ###############################################################################
-@perf_monitor
+# Example: Some global or previously defined variable
+#Keep_langua = ["eng", "spa", "fre"]  # Adjust to your needs
+
+def _score_english_sub(codec_name: str, disposition: Dict[str, int], handler_name: str) -> int:
+    """
+    Assign a 'score' to an English subtitle. Higher means more preferred.
+    You can customize these rules as you see fit.
+    """
+    score = 0
+    # Prefer mov_text over subrip
+    if codec_name == "mov_text":
+        score += 3
+    elif codec_name == "subrip":
+        score += 2
+
+    # Bonus points if it's forced or default in the source
+    if disposition.get("forced", 0) == 1:
+        score += 2
+    if disposition.get("default", 0) == 1:
+        score += 1
+
+    # Bonus if the handler_name is mov_text
+    if handler_name.lower() == "mov_text":
+        score += 1
+
+    return score
+
+
 def parse_subtl(
-	streams_in: List[Dict[str, Any]],
-	de_bug: bool = False
+    streams_in: List[Dict[str, Any]],
+    de_bug: bool = False
 ) -> Tuple[List[str], bool]:
-	"""
-	Parse and extract data from subtitle streams, removing some, keeping others.
-	"""
-	ff_subttl = []
-	all_skippable = True
-	default_eng_set = False
+    """
+    Parse and extract data from subtitle streams, removing some, keeping others.
+    Enhanced so that the "best" English subtitle is forced to be default.
+    """
 
-	for idx, this_sub in enumerate(streams_in):
-		ff_sub = []
-		extra = ""
-		metadata_changed = False
+    ff_subttl = []
+    all_skippable = True
 
-		codec_name = this_sub.get("codec_name", "unknown?")
-		codec_type = this_sub.get("codec_type", "unknown?")
-		disposition = this_sub.get("disposition", {"forced": 0, "default": 0})
+    # First, find the "best" English subtitle (highest score).
+    best_eng_idx = -1
+    best_eng_score = float("-inf")
 
-		tags = this_sub.get("tags", {})
-		handler_name = tags.get("handler_name", "Unknown")
-		language = tags.get("language", "und")
+    for idx, this_sub in enumerate(streams_in):
+        # Extract fields we'll need for scoring
+        codec_name =	this_sub.get("codec_name", "unknown?")
+        disposition =	this_sub.get("disposition", {"forced": 0, "default": 0})
+        tags =			this_sub.get("tags", {})
+        handler_name =	tags.get("handler_name", "Unknown")
+        language =		tags.get("language", "und")
 
-		if codec_name in ("hdmv_pgs_subtitle", "dvd_subtitle", "ass", "unknown?"):
-			# Remove these
-			ff_sub = ["-map", f"-0:s:{idx}"]
-			extra += f" Delete: {codec_name} {language} |"
-			all_skippable = False
-		elif codec_name in ("subrip", "mov_text"):
-			# Keep subrip/mov_text
-			ff_sub = ["-map", f"0:s:{idx}"]
-			if language == "eng":
-				extra += f"Keep: {codec_name} {language}|"
-				if not default_eng_set:
-					default_eng_set = True
-					extra += "Set to Default|"
-					ff_sub.extend([
-						f"-c:s:{idx}", "mov_text",
-						f"-metadata:s:s:{idx}", f"language={language}",
-						f"-disposition:s:s:{idx}", "default"
-					])
-				else:
-					extra += "Not Default|"
-			elif language in Keep_langua:
-				extra += f"Keep: {codec_name} {language}"
-			else:
-				ff_sub = ["-map", f"-0:s:{idx}"]
-				extra += f" Delete: {codec_name} {language} X"
+        # Only compute a score if it's subrip/mov_text AND English
+        if codec_name in ("subrip", "mov_text") and language == "eng":
+            s = _score_english_sub(codec_name, disposition, handler_name)
+            if s > best_eng_score:
+                best_eng_score = s
+                best_eng_idx = idx
 
-			# Handler name fix
-			if handler_name != "mov_text":
-				extra += f" handler_name: {handler_name} -> mov_text"
-				ff_sub.extend([
-					f"-metadata:s:s:{idx}",
-					"handler_name=mov_text"
-				])
-				metadata_changed = True
+    #
+    # Now do the main pass: keep/remove subtitles and set dispositions.
+    #
+    for idx, this_sub in enumerate(streams_in):
+        ff_sub = []
+        extra = ""
+        metadata_changed = False
 
-		msg = (
-			f"|<S:{idx:2}>|{codec_name[:8]:^8}|{codec_type[:8]}|"
-			f"{language:3}|Disp: default={disposition.get('default',0)}, forced={disposition.get('forced',0)}|"
-			f"{extra}"
-		)
-		print(f"\033[94m    {msg}\033[0m")
+        codec_name =	this_sub.get("codec_name", "unknown?")
+        codec_type =	this_sub.get("codec_type", "unknown?")
+        disposition =	this_sub.get("disposition", {"forced": 0, "default": 0})
+        tags =			this_sub.get("tags", {})
+        handler_name =	tags.get("handler_name", "Unknown")
+        language =		tags.get("language", "und")
 
-		ff_subttl += ff_sub
-		if metadata_changed:
-			all_skippable = False
+        if codec_name in ("hdmv_pgs_subtitle", "dvd_subtitle", "ass", "unknown?"):
+            # Remove these
+            ff_sub = ["-map", f"-0:s:{idx}"]
+            extra += f" Delete: {codec_name} {language} |"
+            all_skippable = False
 
-	# Force mov_text for all kept subtitles
-	ff_subttl.extend(["-c:s", "mov_text"])
+        elif codec_name in ("subrip", "mov_text"):
+            # Keep subrip/mov_text
+            ff_sub = ["-map", f"0:s:{idx}"]
 
-	if all_skippable:
-		logger.info("Skipping Subtitles")
-		print("   .Skip: Subtitle")
-	return ff_subttl, all_skippable
+            # Is this English?
+            if language == "eng":
+                extra += f"Keep: {codec_name} {language}|"
+
+                # If this stream is the best English one, set default
+                if idx == best_eng_idx and best_eng_idx != -1:
+                    extra += "Set to Default|"
+                    ff_sub.extend([
+                        f"-c:s:{idx}", "mov_text",
+                        f"-metadata:s:s:{idx}", f"language={language}",
+                        f"-disposition:s:s:{idx}", "default"
+                    ])
+                else:
+                    # It's English but not the best
+                    extra += "Not Default|"
+                    ff_sub.extend([
+                        f"-c:s:{idx}", "mov_text",
+                        f"-metadata:s:s:{idx}", f"language={language}",
+                        f"-disposition:s:s:{idx}", "0"
+                    ])
+
+            # If it's a non-English language we want to keep
+            elif language in Keep_langua:
+                extra += f"Keep: {codec_name} {language}"
+                ff_sub.extend([
+                    f"-c:s:{idx}", "mov_text",
+                    f"-metadata:s:s:{idx}", f"language={language}",
+                    f"-disposition:s:s:{idx}", "0"
+                ])
+
+            else:
+                # Remove any other languages not in Keep_langua
+                ff_sub = ["-map", f"-0:s:{idx}"]
+                extra += f" Delete: {codec_name} {language} X"
+
+            # Handler name fix
+            if handler_name != "mov_text":
+                extra += f" handler_name: {handler_name} -> mov_text"
+                ff_sub.extend([
+                    f"-metadata:s:s:{idx}",
+                    "handler_name=mov_text"
+                ])
+                metadata_changed = True
+
+        # Otherwise, remove unrecognized formats (if any)
+        else:
+            ff_sub = ["-map", f"-0:s:{idx}"]
+            extra += f" Delete: {codec_name} {language} X"
+            all_skippable = False
+
+        # Build the debug message in your original style
+        msg = (
+            f"|<S:{idx:2}>|{codec_name[:8]:^8}|{codec_type[:8]}|"
+            f"{language:3}|Disp: default={disposition.get('default',0)}, forced={disposition.get('forced',0)}|"
+            f"{extra}"
+        )
+        print(f"\033[94m    {msg}\033[0m")
+
+        ff_subttl += ff_sub
+        if metadata_changed:
+            all_skippable = False
+
+    # Force mov_text for all kept subtitles (global setting)
+    ff_subttl.extend(["-c:s", "mov_text"])
+
+    # If we ended up removing everything, all_skippable might be True
+    if all_skippable:
+        logger.info("Skipping Subtitles")
+        print("   .Skip: Subtitle")
+
+    return ff_subttl, all_skippable
 
 ###############################################################################
 #                           PARSE EXTRA DATA
@@ -697,22 +776,23 @@ def parse_frmat(
 	then delegates to parse_video, parse_audio, parse_subtl, etc.
 	Returns combined FFmpeg args and skip flag.
 	"""
-	_format = metadata.get("format", {})
+	_format  = metadata.get("format", {})
 	_streams = metadata.get("streams", [])
 	if not _format:
 		raise ValueError(f"'format' not found in metadata:\n{json.dumps(metadata, indent=2)}")
 	if not _streams:
 		raise ValueError(f"'streams' not found in metadata:\n{json.dumps(metadata, indent=2)}")
 
-	size = int(float(_format.get("size", 0)))
-	filename = _format.get("filename", "No_file_name")
-	duration = int(float(_format.get("duration", 0.0)))
-	bitrate = int(_format.get("bit_rate", 0))
-	nb_streams = int(_format.get("nb_streams", 0))
-	nb_programs = int(_format.get("nb_programs", 0))
-	tags = _format.get("tags", {})
-	f_comment = tags.get("comment", "No_comment")
-	title = tags.get("title", "No_title")
+	filename =       _format.get("filename", "No_file_name")
+	size =          int(float(_format.get("size", 0)))
+	duration =      int(float(_format.get("duration", 0.0)))
+	bitrate =       int(_format.get("bit_rate", 0))
+	nb_streams =    int(_format.get("nb_streams", 0))
+	nb_programs =   int(_format.get("nb_programs", 0))
+
+	tags =           _format.get("tags", {})
+	f_comment =     tags.get("comment", "No_comment")
+	title =         tags.get("title", "No_title")
 
 	# We build a context object for video
 	context = VideoContext(
@@ -761,7 +841,7 @@ def parse_frmat(
 		f"    |=Title|{title}|\n"
 		f"    |>FRMT<|Size: {hm_sz(size)}|Bitrate: {hm_sz(bitrate)}|Length: {hm_time(duration)}|"
 	)
-	summary_msg += ''.join([f" {key}: {count}|" for key, count in stream_counts.items() if count != 0])
+	summary_msg += ''.join([f"{key}:{count}|" for key, count in stream_counts.items() if count != 0])
 	print(f"\033[96m{summary_msg}\033[0m")
 
 	# Skip logic
@@ -880,55 +960,113 @@ regex_dict = {
 	"fps":     re.compile(r"fps=\s*([0-9]+)")
 }
 
+def extract_progress_data(line_to: str) -> dict:
+	"""Extracts relevant progress data using regular expressions."""
+	regx_val = {}
+	try:
+		for key, rx in regex_dict.items():
+			match = rx.search(line_to)
+			if match:
+				regx_val[key] = match.group(1)
+	except Exception as e:
+		print(f"Error extracting progress data: {e}")
+	return regx_val
+
+def calculate_eta(regx_val: dict, sp_float: float) -> str:
+	"""
+	Calculates ETA from 'time' and 'speed'.
+	Depends on global 'glb_vidolen' (total video length in seconds).
+	"""
+	try:
+		hh, mm, ss = 0, 0, 0
+		if "time" in regx_val:
+			hh, mm, ss = map(int, regx_val["time"].split(":"))
+		a_sec = hh * 3600 + mm * 60 + ss
+
+		# 'glb_vidolen' is assumed to be defined globally
+		dif = abs(glb_vidolen - a_sec)
+		eta = round(dif / sp_float) if sp_float else 9999
+
+		mints, secs = divmod(int(eta), 60)
+		hours, mints = divmod(mints, 60)
+		return f"{hours:02d}:{mints:02d}:{secs:02d}"
+	except Exception as e:
+		print(f"Error calculating ETA: {e}")
+		return "00:00:00"
+
 def show_progrs(line_to: str, sy: str, de_bug: bool = False) -> bool:
 	"""
-	Parses ffmpeg progress lines to display a spinner plus some stats (fps, speed, etc.).
-	Returns True to keep spinning, -1 or False otherwise.
+	Parses ffmpeg progress lines to display a spinner plus stats (fps, speed, etc.).
+	:param line_to: A single line of ffmpeg progress.
+	:param sy:      Spinner or status symbol to show.
+	:param de_bug:  If True, prints raw lines (debug mode).
+	:return:
+	  True  -> Keep reading lines,
+	  False -> Stop if "N/A" found,
+	  -1    -> Done if "muxing overhead" or "global headers" found.
 	"""
-	if "N/A" in line_to:
-		return False
-	elif all(substr in line_to for substr in ["fps=", "speed=", "size="]):
-		regx_val = {}
-		try:
-			for key, rx in regex_dict.items():
-				match = rx.search(line_to)
-				if match:
-					regx_val[key] = match.group(1)
+	# 1) Debug: print the raw line and continue
+	if de_bug :
+		print(line_to)
+		return True
 
-			fp_int = int(regx_val["fps"])
-			if fp_int >= 1:
-				sp_float = float(regx_val["speed"])
-				hh, mm, ss = 0, 0, 0
-				if "time" in regx_val:
-					time_parts = regx_val["time"].split(":")
-					hh = int(time_parts[0])
-					mm = int(time_parts[1])
-					ss = int(time_parts[2])
-				a_sec = hh * 3600 + mm * 60 + ss
-				dif = abs(glb_vidolen - a_sec)  # NOTE: This references a global variable in your original.
-											   # You might keep track in a context or pass as param
-				eta = round(dif / sp_float) if sp_float != 0 else 9999
-				mints, secs = divmod(int(eta), 60)
-				hours, mints = divmod(mints, 60)
-				_eta = f"{hours:02d}:{mints:02d}:{secs:02d}"
-				disp_str = (
-					f"    | {sy} |Size: {hm_sz(regx_val['size']):>10}"
-					f"|Frames: {int(regx_val['frame']):>7}"
-					f"|Fps: {fp_int:>4}"
-					f"|BitRate: {hm_sz(regx_val['bitrate']):>6}"
-					f"|Speed: {sp_float:>5}"
-					f"|ETA: {_eta:>9}|\r"
-				)
-				sys.stderr.write(disp_str)
-				sys.stderr.flush()
+	# 2) If the line has "N/A", we stop
+	if "N/A" in line_to:
+		line_to = line_to.rstrip('\r\n')  # Remove all trailing '\r' and '\n'
+		line_to =f"    | {sy} | {line_to}               \r"
+		print (line_to, end='')
+		return False
+
+	# 3) If the line has all of: ["fps=", "speed=", "size="]
+	elif all(x in line_to for x in ["fps=", "speed=", "size="]):
+		regx_val = extract_progress_data(line_to)
+		try:
+			fp_int = int(regx_val.get("fps", 0))
+			sp_float = float(regx_val.get("speed", 0))
+			eta_str = calculate_eta(regx_val, sp_float)
+
+			disp_str = (
+				f"    | {sy} "
+				f"|Size: {hm_sz(regx_val.get('size', '0')):>10}"
+				f"|Frames: {int(regx_val.get('frame', 0)):>7}"
+				f"|Fps: {fp_int:>4}"
+				f"|BitRate: {hm_sz(regx_val.get('bitrate', '0')):>6}"
+				f"|Speed: {sp_float:>5}"
+				f"|ETA: {eta_str:>9}|                   \r"
+			)
+			print (disp_str, end='')
+
 		except Exception as e:
-			logger.exception("show_progrs exception: %s in line: %s", e, line_to)
-	elif any(substr in line_to for substr in ["muxing overhead:", "global headers:"]):
-		# Possibly the last line
-		logger.info("Done: %s", line_to)
+			print(f"show_progrs exception: {e} in line: {line_to}")
+
+	# 4) Else if the line has all of: ["time=", "speed=", "size="] (but no "fps=")
+	elif all(x in line_to for x in ["time=", "speed=", "size="]):
+		regx_val = extract_progress_data(line_to)
+		try:
+			sp_float = float(regx_val.get("speed", 0))
+			eta_str = calculate_eta(regx_val, sp_float)
+
+			disp_str = (
+				f"    | {sy} "
+				f"|Size: {hm_sz(regx_val.get('size', '0')):>10}"
+				f"|BitRate: {hm_sz(regx_val.get('bitrate', '0')):>6}"
+				f"|ETA: {eta_str:>9}|                   \r"
+			)
+			print (disp_str, end='')
+
+		except Exception as e:
+			print(f"show_progrs exception: {e} in line: {line_to}")
+
+	# 5) Else if any of ["muxing overhead:", "global headers:"] -> done
+	elif any(x in line_to for x in ["muxing overhead:", "global headers:"]):
+#		Done: [out#0/mp4 @ 0000026f47d68e80] video:603557KiB audio:181972KiB subtitle:82KiB other streams:0KiB global headers:14KiB muxing overhead: 0.504575%
+		line_to = line_to.rstrip('\r\n')  # Remove all trailing '\r' and '\n'
+		print(f"    | Done: {line_to[31:]} |  ")
 		return -1
 
+	# 6) Otherwise, return True to continue reading lines
 	return True
+
 
 ###############################################################################
 #                          EXAMPLE EXTRA FUNCTIONS
@@ -1088,4 +1226,4 @@ def main():
 
 if __name__ == "__main__":
 	print ("Testing")
-#	main()
+#    main()

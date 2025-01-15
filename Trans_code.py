@@ -11,8 +11,8 @@ import psutil
 import datetime
 import itertools
 
-from functools	import cmp_to_key
 from typing		import List, Optional
+from functools	import cmp_to_key
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # External references from your code
@@ -90,14 +90,14 @@ def perform_clustering(data: List[List[float]], _lst: List[List]) -> None:
 ##==============-------------------   End   -------------------==============##
 
 @perf_monitor
-def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> int:
+def clean_up(input_file: str, output_file: str, skip_it: bool = False, debug: bool = False) -> int:
 	msj = sys._getframe().f_code.co_name
 
 	if skip_it:
 		return 0
 
 	if debug:
-		print(f"  +{msj} Start: {time.strftime('%H:%M:%S')}" + " " * 80)
+		print(f" +{msj} Start: {time.strftime('%H:%M:%S')}")
 
 	try:
 		if not os.path.exists(input_file):
@@ -110,14 +110,15 @@ def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> i
 			print(f"Output file '{output_file}' does not exist.")
 			return -1
 		output_file_size = os.path.getsize(output_file)
-		if output_file_size > 100 :
-			os.chmod(output_file, stat.S_IWRITE)
-		else :
+		if output_file_size <= 100:
+			print(f"Output file '{output_file}' is too small to process.")
 			return 0
 
-		ratio = round (100 * ((output_file_size - input_file_size) / input_file_size), 2)
-		extra = "+Biger" if ratio > 0 else ("=Same" if (input_file_size - output_file_size) == 0 else "-Lost")
-		sv_ms = f"    Size Was: {hm_sz(input_file_size)} Is: {hm_sz(output_file_size)} {extra}: {hm_sz(abs(input_file_size - output_file_size))} {ratio}%"
+		os.chmod(output_file, stat.S_IWRITE)
+		size_diff = output_file_size - input_file_size
+		ratio = round(100 * (size_diff / input_file_size), 2) if input_file_size > 0 else 0
+		extra = "+Bigger" if ratio > 0 else ("=Same" if size_diff == 0 else "-Lost")
+		sv_ms = f"    Size Was: {hm_sz(input_file_size)} Is: {hm_sz(output_file_size)} {extra}: {hm_sz(abs(input_file_size - output_file_size))} {ratio}% "
 
 		final_output_file = input_file if input_file.endswith('.mp4') else input_file.rsplit('.', 1)[0] + '.mp4'
 
@@ -128,23 +129,27 @@ def clean_up(input_file: str, output_file: str, skip_it: bool, debug: bool) -> i
 
 #		debug = True
 		if debug:
-			confirm = input(f"  Are you sure you want to delete {temp_file}? (y/n): ")
+			confirm = input(f" Are you sure you want to delete {temp_file}? (y/n): ")
 			if confirm.lower() != "y":
-				print("   Not Deleted.")
-				return  input_file_size - output_file_size # Return here to stop further execution
-			print(f"   File {temp_file} Deleted.")
+				print("  Not Deleted.")
+				shutil.move(temp_file, input_file)
+				return 0
+			print(f"  File {temp_file} Deleted.")
 
-		print(sv_ms)
 		os.remove(temp_file)
-		return input_file_size - output_file_size
+		print(sv_ms + " " * 80)
+		return size_diff
 
 	except FileNotFoundError as e:
-		print(f"  {msj} File not found: {e}")
+		print(f" {msj} File not found: {e}")
 	except PermissionError as e:
-		print(f"  {msj} Permission denied: {e}")
+		print(f" {msj} Permission denied: {e}")
 	except Exception as e:
-		print(f"  {msj} An error occurred: {e}")
-		input(f"? {msj} WTF ?")
+		print(f" {msj} An error occurred: {e}")
+		if debug:
+			input(f"? {msj} What went wrong? ")
+	if os.path.exists(temp_file):
+		shutil.move(temp_file, input_file)
 
 	return -1
 
