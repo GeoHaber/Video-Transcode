@@ -25,9 +25,8 @@ MultiThread = False		# XXX: It is set to True in the scan_folder # XXX:
 de_bug = False
 
 # Specify sorting keys and orders
-sort_keys = [
-			('size', True),	# Sort by size True=descending False=ascending
-			('date', True),		# Then by date descending
+sort_keys = [ ('size', True),	# Sort by size True=descending False=ascending
+			  ('date', True),	# Then by date descending
 			]
 
 Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')}_{time.strftime('%Y_%j_%H-%M-%S')}.log"
@@ -305,8 +304,11 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 								result = ffprobe_run(f_path)
 								if result is not None:
 									handle_result(f_path, file_s, ext, result)
+						else :
+							input (f"Error process_files {f_path}: {e}")
+							raise
 					except Exception as e:
-						print(f"Error getting size of file {f_path}: {e}")
+						print(f"Error process_files {f_path}: {e}")
 						continue
 
 		if executor:
@@ -315,7 +317,7 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 					jsn_ou = future.result()
 					handle_result(f_path, file_s, ext, jsn_ou)
 				except Exception as e:
-					print(f"Error processing future for file {f_path}: {e}")
+					print(f"\nError processing future for file {f_path}:\n {e}\n")
 		spinner.stop()  # Ensure the spinner stops
 
 	def handle_result(f_path, file_s, ext, jsn_ou):

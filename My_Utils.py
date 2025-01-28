@@ -439,16 +439,21 @@ class Color:
 ##	XXX: Functions :XXX
 ##==============-------------------  Start  -------------------==============##
 
-def hm_sz(numb: Union[str, int, float], type: str = "B") -> str:
+from typing import Union
+
+def hm_sz(numb: Union[str, int, float], suffix: str = "B") -> str:
 	"""
-	Convert a file size to human-readable format.
+	Convert a size to human-readable format with a customizable suffix.
 
 	Parameters:
-	- numb (str, int, float): File size.
-	- type (str): Type of file size (default is "B" for bytes).
+	- numb (str, int, float): The size to convert.
+	- suffix (str): The suffix to append to units (e.g., "B" for bytes, "g" for grams).
 
 	Returns:
-	- str: Human-readable file size with sign.
+	- str: Human-readable size with sign and the given suffix.
+
+	Example:
+	- hm_sz(1024, "g") -> "1.00 Kg"
 	"""
 	# Handle different input types for numb
 	if isinstance(numb, str):
@@ -459,14 +464,14 @@ def hm_sz(numb: Union[str, int, float], type: str = "B") -> str:
 	sign = '-' if numb < 0 else ''
 	numb = abs(numb)  # Convert to absolute value for calculations
 
-	units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB']
+	units = ['', 'K', 'M', 'G', 'T', 'P', 'E']
 
 	for unit in units:
 		if numb < 1024.0:
-			return f"{sign}{numb:.2f} {unit}"
+			return f"{sign}{numb:.2f} {unit}{suffix}"
 		numb /= 1024.0
 
-	return f"{sign}{numb:.2f} {units[-1]}"
+	return f"{sign}{numb:.2f} {units[-1]}{suffix}"
 ##==============-------------------   End   -------------------==============##
 
 def hm_time(timez) -> str:

@@ -1,66 +1,65 @@
-
 Glob:
-  junk_nm:    "notvalid"
+  junk_nm: "notvalid"
 
 Path:
-  host:             localhost
-  user:             root
-  passwd:           my secret password
-  Min_fsize:        120000
-  Root:             C:\\Users\\Geo\\Desktop\\downloads
-  Excepto:          C:\\Users\\Geo\\Desktop\\Except
-  Tmp_exte:         '.mp4' #.png or .jpg
+  host: "localhost"
+  user: "root"
+  passwd: "my secret password"
+  Min_fsize: 120000
+  Root: "C:\\Users\\Geo\\Desktop\\downloads"
+  Excepto: "C:\\Users\\Geo\\Desktop\\Except"
+  Tmp_exte: ".mp4" #.png or .jpg
 
 Action:
-  Skip_typ:       '.lock'  # .png or .lock
-  Skip_key:       "| <¯\_(%)_/¯> | .mp4|"
+  Skip_typ: ".lock"  # .png or .lock
+  Skip_key: "| <¯\_(%)_/¯> | .mp4|"
 
 Video:
-  codec_name:   'libx265'
-  Max_frm_r :   60
-  crf-25    :   '-crf 23'
-  Max_v_btr :   3500000
-  Bl_and_Wh :   No
-# File extensions to procces
-  Extensi:  ('.avchd', '.avi', '.divx', '.dv', '.flic', '.flv', '.flx', '.h264',
-               '.m4v', '.mkv','.moov', '.mov', '.movhd', '.movie', '.movx', '.mts',
-               '.mp4', '.mpe', '.mpeg', '.mpg', '.mpv', '.mpv2', '.ogv', '.ram', '.rmvb', '.ts',
-               '.vfw', '.vid', '.video', '.viv', '.vivo', '.vro', '.wm', '.wmv', '.wmx',
-               '.wrap', '.wvx', '.webm', '.x264', '.xvid')
+  codec_name: "libx265"
+  Max_frm_r: 60
+  crf-25: "-crf 23"
+  Max_v_btr: 3500000
+  Bl_and_Wh: "No"
+  Extensions: [ ".avchd", ".avi", ".divx", ".dv", ".flic", ".flv", ".flx",
+                ".h264", ".m4v", ".mkv", ".moov", ".mov", ".movhd", ".movie",
+                ".movx", ".mts", ".mp4", ".mpe", ".mpeg", ".mpg", ".mpv",
+                ".mpv2", ".ogv", ".ram", ".rmvb", ".ts", ".vfw", ".vid",
+                ".video", ".viv", ".vivo", ".vro", ".wm", ".wmv", ".wmx",
+                ".wrap", ".wvx", ".webm", ".x264", ".xvid"]
 
 Audio:
-  codec_name :      'libvorbis'
-  Max_a_btr:        3300000
-  use_anonymous:    yes
+  codec_name: "libvorbis"
+  Max_a_btr: 3300000
+  use_anonymous: "yes"
 
 Subtitle:
-  codec_name:     'mov_text'
-  Ignore_sub:     ('hdmv_pgs_subtitle', 'dvd_subtitle', 'ass', 'bin_data')
-  use_anonymous:   yes
+  codec_name: "mov_text"
+  Ignore_sub: ["hdmv_pgs_subtitle", "dvd_subtitle", "ass", "bin_data"]
+  use_anonymous: "yes"
 
 Language:
-  Default: 'eng'
-  Keep:   ('eng', 'fre', 'ger', 'heb', 'hun', 'ita', 'rum', 'rus', 'spa' )
+  Default: "eng"
+  Keep: ["eng", "fre", "ger", "heb", "hun", "ita", "rum", "rus", "spa"]
 
 Skip:
-  condition 1:
-  condition 2:
-    condtion 2.1:
+  condition_1: null
+  condition_2:
+    condition_2.1: null
 
 Metadata:
-  title     : ("title=" '+' file_name '+' " x256 ")
-  copyright : ("copyright=" + "2023 Me " )
-  comment   : ("comment="   + "An exercise in metadata creation" )
-  author    : ("author="    + "Encoded by the one and only GeoHab" )
-  Skip_key  : "| <¯\_(%)_/¯> | .mp4|"
-  use_anonymous:    yes
+  title: "title= file_name x256 "
+  copyright: "copyright= 2023 Me"
+  comment: "comment= An exercise in metadata creation"
+  author: "author= Encoded by the one and only GeoHab"
+  Skip_key: "| <¯\_(%)_/¯> | .mp4|"
+  use_anonymous: "yes"
 
 FfMpegCom:
-  convert_to_h265 : 'command to convert'
-  subtitl_extract : 'flags to extract subs'
-  create_matrix   : 'matrix creation flags'
+  convert_to_h265: "command to convert"
+  subtitle_extract: "flags to extract subs"
+  create_matrix: "matrix creation flags"
 
 GitHub:
-  url:              www.github.com\\dvdzen
-  passwd:           xxxxxxxx
-  user_name:        wtf is this name for?
+  url: "www.github.com/dvdzen"
+  passwd: "xxxxxxxx"
+  user_name: "wtf is this name for?"

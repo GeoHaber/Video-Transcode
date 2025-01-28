@@ -41,8 +41,6 @@ logger.info(
 # Some global or shared constants (rather than global variables)
 Skip_key = "AlreadyEncoded"
 TmpF_Ex = "_out.mp4"
-File_extn = (".mp4", ".mkv", ".avi", ".mov", ".flv")  # whichever you allow
-Keep_langua = ("eng", "fre", "spa")  # example of keep-languages for subtitles
 
 ###############################################################################
 #                          DATA CLASSES & CONTEXT
@@ -357,7 +355,6 @@ def parse_video(
 
 		if codec_name.lower() == 'mjpeg':
 			print (f"    |<V:{idx:2}>| > Skip {codec_name:6} |" )
-#            ff_video.extend (['-map', '0:' + str(idx) + '?'])
 			skip_all = False
 			continue
 
@@ -419,19 +416,73 @@ def parse_video(
 			skip_all = False
 			extra_msg = f" Re-encode: {hm_sz(btrt)}"
 
-		# If scaling is needed, we must re-encode
 		if needs_scaling:
-			new_w = 1920
-			new_h = round((1920 / context.vid_width) * context.vid_height / 2) * 2
-			ff_vid.extend([
-				"-vf", f"scale={new_w}:{new_h}",
-				"-pix_fmt", "yuv420p10le",
-				"-crf", "21",
-				"-b:v", f"{max_vid_btrt}",
-				"-preset", "slow"
-			])
+			use_hw_accel = True
+			max_width = 1920  # Adjust as needed
+			max_height = 1080  # Adjust as needed
+
+			if context.vid_width <= 0 or context.vid_height <= 0:
+				raise ValueError("Invalid video dimensions: Width and height must be positive.")
+
+			aspect_ratio = context.vid_width / context.vid_height
+
+			if context.vid_width > max_width or context.vid_height > max_height:
+				if max_width / aspect_ratio <= max_height:
+					scaled_width = max_width
+					scaled_height = round(max_width / aspect_ratio / 2) * 2
+				else:
+					scaled_height = max_height
+					scaled_width = round(max_height * aspect_ratio / 2) * 2
+			else:
+				scaled_width = context.vid_width
+				scaled_height = context.vid_height
+
+			if scaled_width <= 0 or scaled_height <= 0:
+				raise ValueError("Calculated dimensions are invalid for scaling.")
+
+			scale_pad_chain = (
+				f"scale={scaled_width}:{scaled_height}:force_original_aspect_ratio=decrease,"
+#				f"pad={max_width}:{max_height}:(ow-iw)/2:(oh-ih)/2"
+			)
+#			filter_chain = "hqdn3d=1.5:1.5:6:6, unsharp=5:5:0.8:3:3:0.4"
+#			filter_chain = "hqdn3d=1.0:1.0:3:3, unsharp=5:5:0.6:3:3:0.3"
+			filter_chain = "nlmeans=s=2:pc=1,   unsharp=5:5:0.7:3:3:0.35"
+
+			is_10bit = True
+			hw_pix_fmt = "p010le" if is_10bit else "nv12"
+
+			if use_hw_accel:
+				# Initialize QSV only if not already initialized
+				if "-init_hw_device" not in ff_vid:
+					ff_vid.extend([
+						"-init_hw_device", "qsv=qsv:MFX_IMPL_hw_any",  # Initialize QSV hardware once
+						"-filter_hw_device", "qsv"
+					])
+				ff_vid.extend([
+					"-load_plugin", "hevc_hw",
+					"-vf", scale_pad_chain,  # Scaling and padding
+					"-pix_fmt", hw_pix_fmt,
+					"-c:v", "hevc_qsv",
+					"-b:v", str(min(max_vid_btrt, int(btrt))),  # Limit bitrate
+					"-global_quality", "20",  # Set global quality for QSV
+					"-look_ahead", "1",
+					"-look_ahead_depth", "90",
+					"-rc:v", "vbr_la",
+					"-preset", "slow"
+				])
+				extra_msg += f"| HW Accelerated Scaling: {context.vid_width}x{context.vid_height} -> {scaled_width}x{scaled_height}"
+			else:
+				ff_vid.extend([
+					"-vf", f"{scale_pad_chain},{filter_chain}",
+					"-pix_fmt", "yuv420p10le",
+					"-crf", "20",
+					"-b:v", str(min(max_vid_btrt, int(btrt))),  # Limit bitrate
+					"-c:v", "libx265",
+					"-preset", "slow"
+				])
+				extra_msg += f"| SW Scaling: {context.vid_width}x{context.vid_height} -> {scaled_width}x{scaled_height}"
+
 			skip_all = False
-			extra_msg += f"| Scale {context.vid_width}x{context.vid_height} -> {new_w}x{new_h}"
 
 		# Update handler name if needed
 		desired_handler = "VideoHandler x265"
@@ -446,7 +497,7 @@ def parse_video(
 		# Print log
 		msg = (
 			f"|<V:{idx:2}>|{codec_name:^8}|{context.vid_width}x{context.vid_height}|"
-			f"{bit_depth_str}|Bitrate: {hm_sz(this_bitrate)}|Frames: {context.total_frames}|{extra_msg}|"
+			f"{bit_depth_str}|Bitrate: {hm_sz(this_bitrate,'bits')}|Frames: {hm_sz(context.total_frames,'frames')}|{extra_msg}|"
 		)
 		print(f"\033[91m    {msg}\033[0m")
 
@@ -460,6 +511,7 @@ def parse_video(
 		print("   .Skip: Video")
 
 	return ff_video, skip_all
+
 
 ###############################################################################
 #                            PARSE AUDIO
@@ -576,157 +628,157 @@ def parse_audio(
 #Keep_langua = ["eng", "spa", "fre"]  # Adjust to your needs
 
 def _score_english_sub(codec_name: str, disposition: Dict[str, int], handler_name: str) -> int:
-    """
-    Assign a 'score' to an English subtitle. Higher means more preferred.
-    You can customize these rules as you see fit.
-    """
-    score = 0
-    # Prefer mov_text over subrip
-    if codec_name == "mov_text":
-        score += 3
-    elif codec_name == "subrip":
-        score += 2
+	"""
+	Assign a 'score' to an English subtitle. Higher means more preferred.
+	You can customize these rules as you see fit.
+	"""
+	score = 0
+	# Prefer mov_text over subrip
+	if codec_name == "mov_text":
+		score += 3
+	elif codec_name == "subrip":
+		score += 2
 
-    # Bonus points if it's forced or default in the source
-    if disposition.get("forced", 0) == 1:
-        score += 2
-    if disposition.get("default", 0) == 1:
-        score += 1
+	# Bonus points if it's forced or default in the source
+	if disposition.get("forced", 0) == 1:
+		score += 2
+	if disposition.get("default", 0) == 1:
+		score += 1
 
-    # Bonus if the handler_name is mov_text
-    if handler_name.lower() == "mov_text":
-        score += 1
+	# Bonus if the handler_name is mov_text
+	if handler_name.lower() == "mov_text":
+		score += 1
 
-    return score
+	return score
 
 
 def parse_subtl(
-    streams_in: List[Dict[str, Any]],
-    de_bug: bool = False
+	streams_in: List[Dict[str, Any]],
+	de_bug: bool = False
 ) -> Tuple[List[str], bool]:
-    """
-    Parse and extract data from subtitle streams, removing some, keeping others.
-    Enhanced so that the "best" English subtitle is forced to be default.
-    """
+	"""
+	Parse and extract data from subtitle streams, removing some, keeping others.
+	Enhanced so that the "best" English subtitle is forced to be default.
+	"""
 
-    ff_subttl = []
-    all_skippable = True
+	ff_subttl = []
+	all_skippable = True
 
-    # First, find the "best" English subtitle (highest score).
-    best_eng_idx = -1
-    best_eng_score = float("-inf")
+	# First, find the "best" English subtitle (highest score).
+	best_eng_idx = -1
+	best_eng_score = float("-inf")
 
-    for idx, this_sub in enumerate(streams_in):
-        # Extract fields we'll need for scoring
-        codec_name =	this_sub.get("codec_name", "unknown?")
-        disposition =	this_sub.get("disposition", {"forced": 0, "default": 0})
-        tags =			this_sub.get("tags", {})
-        handler_name =	tags.get("handler_name", "Unknown")
-        language =		tags.get("language", "und")
+	for idx, this_sub in enumerate(streams_in):
+		# Extract fields we'll need for scoring
+		codec_name =	this_sub.get("codec_name", "unknown?")
+		disposition =	this_sub.get("disposition", {"forced": 0, "default": 0})
+		tags =			this_sub.get("tags", {})
+		handler_name =	tags.get("handler_name", "Unknown")
+		language =		tags.get("language", "und")
 
-        # Only compute a score if it's subrip/mov_text AND English
-        if codec_name in ("subrip", "mov_text") and language == "eng":
-            s = _score_english_sub(codec_name, disposition, handler_name)
-            if s > best_eng_score:
-                best_eng_score = s
-                best_eng_idx = idx
+		# Only compute a score if it's subrip/mov_text AND English
+		if codec_name in ("subrip", "mov_text") and language == "eng":
+			s = _score_english_sub(codec_name, disposition, handler_name)
+			if s > best_eng_score:
+				best_eng_score = s
+				best_eng_idx = idx
 
-    #
-    # Now do the main pass: keep/remove subtitles and set dispositions.
-    #
-    for idx, this_sub in enumerate(streams_in):
-        ff_sub = []
-        extra = ""
-        metadata_changed = False
+	#
+	# Now do the main pass: keep/remove subtitles and set dispositions.
+	#
+	for idx, this_sub in enumerate(streams_in):
+		ff_sub = []
+		extra = ""
+		metadata_changed = False
 
-        codec_name =	this_sub.get("codec_name", "unknown?")
-        codec_type =	this_sub.get("codec_type", "unknown?")
-        disposition =	this_sub.get("disposition", {"forced": 0, "default": 0})
-        tags =			this_sub.get("tags", {})
-        handler_name =	tags.get("handler_name", "Unknown")
-        language =		tags.get("language", "und")
+		codec_name =	this_sub.get("codec_name", "unknown?")
+		codec_type =	this_sub.get("codec_type", "unknown?")
+		disposition =	this_sub.get("disposition", {"forced": 0, "default": 0})
+		tags =			this_sub.get("tags", {})
+		handler_name =	tags.get("handler_name", "Unknown")
+		language =		tags.get("language", "und")
 
-        if codec_name in ("hdmv_pgs_subtitle", "dvd_subtitle", "ass", "unknown?"):
-            # Remove these
-            ff_sub = ["-map", f"-0:s:{idx}"]
-            extra += f" Delete: {codec_name} {language} |"
-            all_skippable = False
+		if codec_name in ("hdmv_pgs_subtitle", "dvd_subtitle", "ass", "unknown?"):
+			# Remove these
+			ff_sub = ["-map", f"-0:s:{idx}"]
+			extra += f" Delete: {codec_name} {language} |"
+			all_skippable = False
 
-        elif codec_name in ("subrip", "mov_text"):
-            # Keep subrip/mov_text
-            ff_sub = ["-map", f"0:s:{idx}"]
+		elif codec_name in ("subrip", "mov_text"):
+			# Keep subrip/mov_text
+			ff_sub = ["-map", f"0:s:{idx}"]
 
-            # Is this English?
-            if language == "eng":
-                extra += f"Keep: {codec_name} {language}|"
+			# Is this English?
+			if language == "eng":
+				extra += f"Keep: {codec_name} {language}|"
 
-                # If this stream is the best English one, set default
-                if idx == best_eng_idx and best_eng_idx != -1:
-                    extra += "Set to Default|"
-                    ff_sub.extend([
-                        f"-c:s:{idx}", "mov_text",
-                        f"-metadata:s:s:{idx}", f"language={language}",
-                        f"-disposition:s:s:{idx}", "default"
-                    ])
-                else:
-                    # It's English but not the best
-                    extra += "Not Default|"
-                    ff_sub.extend([
-                        f"-c:s:{idx}", "mov_text",
-                        f"-metadata:s:s:{idx}", f"language={language}",
-                        f"-disposition:s:s:{idx}", "0"
-                    ])
+				# If this stream is the best English one, set default
+				if idx == best_eng_idx and best_eng_idx != -1:
+					extra += "Set to Default|"
+					ff_sub.extend([
+						f"-c:s:{idx}", "mov_text",
+						f"-metadata:s:s:{idx}", f"language={language}",
+						f"-disposition:s:s:{idx}", "default"
+					])
+				else:
+					# It's English but not the best
+					extra += "Not Default|"
+					ff_sub.extend([
+						f"-c:s:{idx}", "mov_text",
+						f"-metadata:s:s:{idx}", f"language={language}",
+						f"-disposition:s:s:{idx}", "0"
+					])
 
-            # If it's a non-English language we want to keep
-            elif language in Keep_langua:
-                extra += f"Keep: {codec_name} {language}"
-                ff_sub.extend([
-                    f"-c:s:{idx}", "mov_text",
-                    f"-metadata:s:s:{idx}", f"language={language}",
-                    f"-disposition:s:s:{idx}", "0"
-                ])
+			# If it's a non-English language we want to keep
+			elif language in Keep_langua:
+				extra += f"Keep: {codec_name} {language}"
+				ff_sub.extend([
+					f"-c:s:{idx}", "mov_text",
+					f"-metadata:s:s:{idx}", f"language={language}",
+					f"-disposition:s:s:{idx}", "0"
+				])
 
-            else:
-                # Remove any other languages not in Keep_langua
-                ff_sub = ["-map", f"-0:s:{idx}"]
-                extra += f" Delete: {codec_name} {language} X"
+			else:
+				# Remove any other languages not in Keep_langua
+				ff_sub = ["-map", f"-0:s:{idx}"]
+				extra += f" Delete: {codec_name} {language} X"
 
-            # Handler name fix
-            if handler_name != "mov_text":
-                extra += f" handler_name: {handler_name} -> mov_text"
-                ff_sub.extend([
-                    f"-metadata:s:s:{idx}",
-                    "handler_name=mov_text"
-                ])
-                metadata_changed = True
+			# Handler name fix
+			if handler_name != "mov_text":
+				extra += f" handler_name: {handler_name} -> mov_text"
+				ff_sub.extend([
+					f"-metadata:s:s:{idx}",
+					"handler_name=mov_text"
+				])
+				metadata_changed = True
 
-        # Otherwise, remove unrecognized formats (if any)
-        else:
-            ff_sub = ["-map", f"-0:s:{idx}"]
-            extra += f" Delete: {codec_name} {language} X"
-            all_skippable = False
+		# Otherwise, remove unrecognized formats (if any)
+		else:
+			ff_sub = ["-map", f"-0:s:{idx}"]
+			extra += f" Delete: {codec_name} {language} X"
+			all_skippable = False
 
-        # Build the debug message in your original style
-        msg = (
-            f"|<S:{idx:2}>|{codec_name[:8]:^8}|{codec_type[:8]}|"
-            f"{language:3}|Disp: default={disposition.get('default',0)}, forced={disposition.get('forced',0)}|"
-            f"{extra}"
-        )
-        print(f"\033[94m    {msg}\033[0m")
+		# Build the debug message in your original style
+		msg = (
+			f"|<S:{idx:2}>|{codec_name[:8]:^8}|{codec_type[:8]}|"
+			f"{language:3}|Disp: default={disposition.get('default',0)}, forced={disposition.get('forced',0)}|"
+			f"{extra}"
+		)
+		print(f"\033[94m    {msg}\033[0m")
 
-        ff_subttl += ff_sub
-        if metadata_changed:
-            all_skippable = False
+		ff_subttl += ff_sub
+		if metadata_changed:
+			all_skippable = False
 
-    # Force mov_text for all kept subtitles (global setting)
-    ff_subttl.extend(["-c:s", "mov_text"])
+	# Force mov_text for all kept subtitles (global setting)
+	ff_subttl.extend(["-c:s", "mov_text"])
 
-    # If we ended up removing everything, all_skippable might be True
-    if all_skippable:
-        logger.info("Skipping Subtitles")
-        print("   .Skip: Subtitle")
+	# If we ended up removing everything, all_skippable might be True
+	if all_skippable:
+		logger.info("Skipping Subtitles")
+		print("   .Skip: Subtitle")
 
-    return ff_subttl, all_skippable
+	return ff_subttl, all_skippable
 
 ###############################################################################
 #                           PARSE EXTRA DATA
