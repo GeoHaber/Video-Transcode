@@ -9,6 +9,7 @@ import stat
 import shutil
 import psutil
 import datetime
+import traceback
 import itertools
 
 from typing		import List, Optional
@@ -24,14 +25,31 @@ from My_Utils	import copy_move, hm_sz, hm_time, Tee
 MultiThread = False		# XXX: It is set to True in the scan_folder # XXX:
 de_bug = False
 
+# XXX: FYI
+valid_sort_keys = {
+    'size':      lambda x: x['size'],
+    'date':      lambda x: x['date'],
+    'name':      lambda x: x['name'],
+    'duration':  lambda x: x['duration'],
+    'extension': lambda x: x['extension'],
+}
 # Specify sorting keys and orders
-sort_keys = [ ('size', True),	# Sort by size True=descending False=ascending
-			  ('date', True),	# Then by date descending
+sort_keys = [
+				('size', True),		# Sort by size True=descending False=ascending
+				('date', False),	# False = Newest First
 			]
 
 Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')}_{time.strftime('%Y_%j_%H-%M-%S')}.log"
 
+#Root = r"C:\Users\Geo\Desktop\Except"
+#Root = r"C:\Users\Geo\Desktop\Video_downloads"
 
+#Root = r"F:\Media"
+#Root = r"F:\Media\TV"
+#Root = r"F:\Media\Movie"
+#Root = r"F:\Media\MasterClass Collection"
+#Root = r"F:\BackUp\_Adlt"
+#Root = r"F:\video"
 
 ''' Global Variables '''
 glb_totfrms = 0
@@ -136,7 +154,9 @@ def clean_up(input_file: str, output_file: str, skip_it: bool = False, debug: bo
 			print(f"  File {temp_file} Deleted.")
 
 		os.remove(temp_file)
+
 		print(sv_ms + " " * 80)
+
 		return size_diff
 
 	except FileNotFoundError as e:
@@ -318,25 +338,38 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 					handle_result(f_path, file_s, ext, jsn_ou)
 				except Exception as e:
 					print(f"\nError processing future for file {f_path}:\n {e}\n")
-		spinner.stop()  # Ensure the spinner stops
+					traceback.print_exc()
 
+		spinner.stop()  # Ensure the spinner stops
 	def handle_result(f_path, file_s, ext, jsn_ou):
-		if jsn_ou:
-			mod_time = os.path.getmtime(f_path)
+		"""
+		Only do something if jsn_ou is valid and has the 'format' key.
+		Otherwise, log and skip.
+		"""
+		if not jsn_ou:
+			print(f"No valid JSON returned for {f_path}. Possibly ffprobe failed.")
+			return
+
+		mod_time = os.path.getmtime(f_path)
+		try:
 			mod_datetime = datetime.datetime.fromtimestamp(mod_time)
-			duration = float(jsn_ou.get('format', {}).get('duration', 0.0))
-			file_info = {
-				'path':		f_path,
-				'name':		os.path.basename(f_path),
-				'size':		file_s,
-				'extension':ext.lower(),
-				'date':		mod_datetime,
-				'duration':	duration,
-				'metadata':	jsn_ou,
-			}
-			file_list.append(file_info)
-			if de_bug:
-				print(f"Collected file info: {file_info}")
+		except (ValueError, OSError):
+			# If Windows doesn't like the timestamp (out of range, etc.), pick a default:
+			mod_datetime = datetime.datetime(1970, 1, 1)
+
+		duration = float(jsn_ou.get("format", {}).get("duration", 0.0))
+		file_info = {
+			'path':      f_path,
+			'name':      os.path.basename(f_path),
+			'size':      file_s,
+			'extension': ext.lower(),
+			'date':      mod_datetime,
+			'duration':  duration,
+			'metadata':  jsn_ou,
+		}
+		file_list.append(file_info)
+		if de_bug:
+			print(f"Collected file info: {file_info}")
 
 	MultiThread = True
 	if MultiThread:

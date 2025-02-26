@@ -12,7 +12,7 @@ Path:
 
 Action:
   Skip_typ: ".lock"  # .png or .lock
-  Skip_key: "| <¯\_(%)_/¯> | .mp4|"
+  Skip_key: "| <¯\\_(%)_/¯> | .mp4|"
 
 Video:
   codec_name: "libx265"
