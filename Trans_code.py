@@ -27,11 +27,11 @@ de_bug = False
 
 # XXX: FYI
 valid_sort_keys = {
-    'size':      lambda x: x['size'],
-    'date':      lambda x: x['date'],
-    'name':      lambda x: x['name'],
-    'duration':  lambda x: x['duration'],
-    'extension': lambda x: x['extension'],
+	'size':      lambda x: x['size'],
+	'date':      lambda x: x['date'],
+	'name':      lambda x: x['name'],
+	'duration':  lambda x: x['duration'],
+	'extension': lambda x: x['extension'],
 }
 # Specify sorting keys and orders
 sort_keys = [
@@ -337,8 +337,11 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 					jsn_ou = future.result()
 					handle_result(f_path, file_s, ext, jsn_ou)
 				except Exception as e:
-					print(f"\nError processing future for file {f_path}:\n {e}\n")
-					traceback.print_exc()
+					print(f"\n Error processing future for:\n {f_path}\n\n {e}\n")
+					traceback.format_exc()
+#					traceback.print_exc()
+					if copy_move(f_path, Excepto, True, True):
+						print(f"Copied to {Excepto}")
 
 		spinner.stop()  # Ensure the spinner stops
 	def handle_result(f_path, file_s, ext, jsn_ou):

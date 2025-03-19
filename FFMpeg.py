@@ -324,8 +324,8 @@ def parse_video(
 		context.total_frames = round(frm_rate * context.vid_length)
 
 		# Decide maximum allowed bitrate
-
-		max_vid_btrt = 3700000
+		max_vid_btrt = 4300000
+#		max_vid_btrt = 3700000
 		bit_depth_str = "8-bit"
 		if pix_fmt.endswith("10le"):
 			bit_depth_str = "10-bit"
@@ -672,13 +672,20 @@ def parse_subtl(
 			# Keep subrip/mov_text
 			ff_sub = ["-map", f"0:s:{idx}"]
 
+			if handler_name != "mov_text":
+				extra += f" handler_name: {handler_name} -> mov_text"
+				ff_sub.extend([
+					f"-metadata:s:s:{idx}",
+					"handler_name=mov_text"
+				])
+				metadata_changed = True
 			# Is this English?
 			if language == "eng":
-				extra += f"Keep: {codec_name} {language}|"
+				extra += f" Keep:   {codec_name} {language}|"
 
 				# If this stream is the best English one, set default
 				if idx == best_eng_idx and best_eng_idx != -1:
-					extra += "Set to Default|"
+					extra += " Set Default|"
 					ff_sub.extend([
 						f"-c:s:{idx}", "mov_text",
 						f"-metadata:s:s:{idx}", f"language={language}",
@@ -695,7 +702,7 @@ def parse_subtl(
 
 			# If it's a non-English language we want to keep
 			elif language in Keep_langua:
-				extra += f"Keep: {codec_name} {language}"
+				extra += f" Keep:   {codec_name} {language}"
 				ff_sub.extend([
 					f"-c:s:{idx}", "mov_text",
 					f"-metadata:s:s:{idx}", f"language={language}",
@@ -708,13 +715,6 @@ def parse_subtl(
 				extra += f" Delete: {codec_name} {language} X"
 
 			# Handler name fix
-			if handler_name != "mov_text":
-				extra += f" handler_name: {handler_name} -> mov_text"
-				ff_sub.extend([
-					f"-metadata:s:s:{idx}",
-					"handler_name=mov_text"
-				])
-				metadata_changed = True
 
 		# Otherwise, remove unrecognized formats (if any)
 		else:
@@ -867,9 +867,10 @@ def parse_frmat(
 	if skip_it:
 		print("   .Skip: Format")
 	elif fnam != title :
-		print (f"   .nOK Name:\n    Is: {title}\n     Sb: {fnam}")
+		print (f"   .nOK Name:\n     Is: {title}\n     Sb: {fnam}")
 	elif f_comment != Skip_key :
 		print (f"   .nOK Skip:  {f_comment} != {Skip_key}")
+		skip_it = True
 	else :
 		print(f"   !{title} ? {fnam} {f_comment}")
 
