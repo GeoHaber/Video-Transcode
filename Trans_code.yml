@@ -51,7 +51,7 @@ Metadata:
   copyright: "copyright= 2023 Me"
   comment: "comment= An exercise in metadata creation"
   author: "author= Encoded by the one and only GeoHab"
-  Skip_key: "| <¯\_(%)_/¯> | .mp4|"
+  Skip_key: "| <¯\\_(%)_/¯> | .mp4|"
   use_anonymous: "yes"
 
 FfMpegCom:

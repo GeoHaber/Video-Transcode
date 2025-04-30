@@ -29,14 +29,27 @@ ffmpg_bin = r"C:\Program Files\ffmpeg\bin"
 ffmpeg = os.path.join(ffmpg_bin, "ffmpeg.exe")
 ffprob = os.path.join(ffmpg_bin, "ffprobe.exe")
 
-if not os.path.exists(ffmpeg) or not os.path.exists(ffprob):
-	raise OSError(f"FFmpeg or FFprobe not found in {ffmpg_bin}.")
+try:
+	if not os.path.isfile(ffmpeg):
+		raise FileNotFoundError(f"FFmpeg not found at '{ffmpeg}'.")
+	if not os.path.isfile(ffprob):
+		raise FileNotFoundError(f"FFprobe not found at '{ffprob}'.")
 
-logger.info(
-	"Ffmpeg version: %s",
-	SP.run([ffmpeg, "-version"], stdout=SP.PIPE)
-	  .stdout.decode("utf-8")[15:20]
-)
+	result = SP.run([ffmpeg, "-version"], stdout=SP.PIPE, stderr=SP.PIPE)
+	if result.returncode == 0:
+		version_info = result.stdout.decode("utf-8")
+		match = re.search(r"ffmpeg version (\d+\.\d+\.\d+)", version_info)
+		if match:
+			ffmpeg_version = match.group(1)
+		else:
+			print(f"Warning: Could not extract the desired ffmpeg version from output:\n{version_info}")
+	else:
+		print(f"Error running ffmpeg -version:\n{result.stderr.decode('utf-8')}")
+
+except FileNotFoundError as e:
+	print(f"Error: {e}")
+except Exception as e:
+	print(f"An unexpected error occurred: {e}")
 
 # Some global or shared constants (rather than global variables)
 TmpF_Ex = "_out.mp4"
@@ -325,7 +338,7 @@ def parse_video(
 
 		# Decide maximum allowed bitrate
 		max_vid_btrt = 4300000
-#		max_vid_btrt = 3700000
+		max_vid_btrt = 3800000
 		bit_depth_str = "8-bit"
 		if pix_fmt.endswith("10le"):
 			bit_depth_str = "10-bit"
@@ -685,7 +698,7 @@ def parse_subtl(
 
 				# If this stream is the best English one, set default
 				if idx == best_eng_idx and best_eng_idx != -1:
-					extra += " Set Default|"
+					extra += "Set Default|"
 					ff_sub.extend([
 						f"-c:s:{idx}", "mov_text",
 						f"-metadata:s:s:{idx}", f"language={language}",
@@ -870,7 +883,7 @@ def parse_frmat(
 		print (f"   .nOK Name:\n     Is: {title}\n     Sb: {fnam}")
 	elif f_comment != Skip_key :
 		print (f"   .nOK Skip:  {f_comment} != {Skip_key}")
-		skip_it = True
+	#	skip_it = True
 	else :
 		print(f"   !{title} ? {fnam} {f_comment}")
 

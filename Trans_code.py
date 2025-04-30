@@ -35,9 +35,9 @@ valid_sort_keys = {
 }
 # Specify sorting keys and orders
 sort_keys = [
-				('size', True),		# Sort by size True=descending False=ascending
-				('date', False),	# False = Newest First
-			]
+	('size', True),		# Sort by size True=descending False=ascending
+	('date', False),	# False = Newest First
+]
 
 Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')}_{time.strftime('%Y_%j_%H-%M-%S')}.log"
 
@@ -74,7 +74,8 @@ def metric(x, y, size_margin, leng_margin):
 def perform_clustering(data: List[List[float]], _lst: List[List]) -> None:
 	size_margin = 0.01
 	leng_margin = 0.01
-	clustering = DBSCAN(eps=0.01, min_samples=2, metric=metric, metric_params={'size_margin': size_margin, 'leng_margin': leng_margin}).fit(data)
+	clustering = DBSCAN(eps=0.01, min_samples=2, metric=metric, metric_params={'size_margin': size_margin, 'leng_margin': leng_margin}).fit(
+		data)
 	labels = clustering.labels_
 
 	clusters = {}
@@ -135,7 +136,7 @@ def clean_up(input_file: str, output_file: str, skip_it: bool = False, debug: bo
 		size_diff = output_file_size - input_file_size
 		ratio = round(100 * (size_diff / input_file_size), 2) if input_file_size > 0 else 0
 		extra = "+Bigger" if ratio > 0 else ("=Same" if size_diff == 0 else "-Lost")
-		sv_ms = f"    Size Was: {hm_sz(input_file_size)} Is: {hm_sz(output_file_size)} {extra}: {hm_sz(abs(input_file_size - output_file_size))} {ratio}% "
+		sv_ms = f"  Size Was: {hm_sz(input_file_size)} Is: {hm_sz(output_file_size)} {extra}: {hm_sz(abs(input_file_size - output_file_size))} {ratio}% "
 
 		final_output_file = input_file if input_file.endswith('.mp4') else input_file.rsplit('.', 1)[0] + '.mp4'
 
@@ -208,7 +209,7 @@ def process_file(file_info, cnt, fl_nmb ):
 #				print (f"\nDebug: {de_bug}  Ext: {ext}\n")
 #				print (f"\nFile: {file_p}\nFfmpeg: {all_good}\n")
 			if skip_it:
-				print(f"\033[91m   .Skip: >|  {msj} |<\033[0m")
+				print(f"\033[91m  .Skip: >|  {msj} |<\033[0m")
 				skipt += 1
 
 			all_good = ffmpeg_run(file_p, all_good, skip_it, ffmpeg, de_bug)
@@ -257,7 +258,8 @@ def process_file(file_info, cnt, fl_nmb ):
 	return saved, procs, skipt, errod
 ##==============-------------------   End   -------------------==============##
 @perf_monitor
-def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str, bool]]] = None, do_clustering: bool = False) -> Optional[List[Dict]]:
+def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str, bool]]] = None,
+			   do_clustering: bool = False) -> Optional[List[Dict]]:
 	"""Scans a directory for files with specified extensions, extracts information
 	in parallel, and returns a sorted list of file information.
 
@@ -275,7 +277,7 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 	"""
 	str_t = time.perf_counter()
 	msj = f"{sys._getframe().f_code.co_name} Start: {time.strftime('%H:%M:%S')}"
-	print(f"Scan: {root}\tSize: {hm_sz(get_tree_size(root))}\n{msj}")
+	print(f"Scan: {root}\tSize: {hm_sz(get_tree_size(root))}\n{msj}", flush=True)
 	spinner = Spinner(indent=0)
 #	print(f"Extensions to scan: {xtnsio}")
 
@@ -302,20 +304,21 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 			for one_file in files:
 				f_path = os.path.join(dirpath, one_file)
 				if not is_file_accessible(f_path):
-					print(f"Skipping inaccessible file: {f_path}")
+					print(f"Skipping inaccessible file: {f_path}", flush=True)
 					continue
+				file_s = os.path.getsize(f_path)
+				if file_s < 10:
+					print(f"\nRemove empty file: {f_path} Size: { file_s }", flush=True )
+					os.remove(f_path)
 				_, ext = os.path.splitext(one_file)
 				if ext.lower() in xtnsio:
 					spinner.print_spin(f" {one_file} ")
 					try:
 						file_s = os.path.getsize(f_path)
 						if not os.access(f_path, os.W_OK) or not (os.stat(f_path).st_mode & stat.S_IWUSR):
-							print(f"Skip read-only file: {f_path}")
+							print(f"Skip read-only file: {f_path}", flush=True)
 							continue
-						if file_s < 10:
-							print(f"Remove empty file: {f_path}")
-							os.remove(f_path)
-						elif file_s > 1000 and len(f_path) < 333:
+						elif len(f_path) < 333:
 							# Runn ffprobe to extract
 							if executor:
 								future = executor.submit(ffprobe_run, f_path)
@@ -325,10 +328,10 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 								if result is not None:
 									handle_result(f_path, file_s, ext, result)
 						else :
-							input (f"Error process_files {f_path}: {e}")
+							input(f"Error process_files {f_path}: {e}", flush=True)
 							raise
 					except Exception as e:
-						print(f"Error process_files {f_path}: {e}")
+						print(f"Error process_files {f_path}: {e}", flush=True)
 						continue
 
 		if executor:
@@ -384,18 +387,11 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 	if do_clustering:
 		print(f" Start Clustering : {time.strftime('%H:%M:%S')}")
 		duration = round(float(jsn_ou.get('format', {}).get('duration', 0.0)), 1)
-		print(f"     Duration: {duration}")
+		print(f"  Duration: {duration}")
 		data.append([file_s, duration])
 		perform_clustering(data, _lst)
 
 	# Sorting based on the provided key # XXX: TBD
-	valid_sort_keys = {
-		'name':		lambda x: x['name'],
-		'size':		lambda x: x['size'],
-		'extension':lambda x: x['extension'],
-		'date':		lambda x: x['date'],
-		'duration':	lambda x: x['duration'],
-	}
 	# Sorting by the key specified (name, size, extension, date)
 	if sort_keys:
 		sort_keys = [(key, descending) for key, descending in sort_keys if key in valid_sort_keys]
@@ -431,18 +427,41 @@ def main():
 	str_t = time.perf_counter()
 
 	with Tee(sys.stdout, open(Log_File, 'w', encoding='utf-8')) as qa:
-		print(f"{psutil.cpu_count()} CPU's\t ¯\\_(%)_/¯")
-		print(f"Python version: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
-		print(f"Script absolute path: {os.path.abspath(__file__)}")
-		print(f'Main Start: {time.strftime("%Y-%m-%d %H:%M:%S")}')
-		print("-" * 70)
+		print(f"{psutil.cpu_count()} CPU's\t ¯\\_(%)_/¯", flush=True)
+		print(f"Python version: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}", flush=True)
+		print(f"Script absolute path: {os.path.abspath(__file__)}", flush=True)
+		print(f"Main Start: {time.strftime("%Y-%m-%d %H:%M:%S")}", flush=True)
+		print("-" * 70, flush=True)
 
+		ffmpeg_version_output = ""
+		try:
+			if not os.path.isfile(ffmpeg):
+				raise FileNotFoundError(f"FFmpeg not found at '{ffmpeg}'.")
+			if not os.path.isfile(ffprob):
+				raise FileNotFoundError(f"FFprobe not found at '{ffprob}'.")
+			result = SP.run([ffmpeg, "-version"], stdout=SP.PIPE, stderr=SP.PIPE)
+			if result.returncode == 0:
+				version_info = result.stdout.decode("utf-8")
+				match = re.search(r"ffmpeg version (\d+\.\d+\.\d+)", version_info)
+				if match:
+					ffmpeg_version_output = f"Ffmpeg version: {match.group(1)} "
+				else:
+					ffmpeg_version_output = f"Warning: Could not extract the desired ffmpeg version from output:\n{version_info}"
+			else:
+				ffmpeg_version_output = f"Error running ffmpeg -version:\n{result.stderr.decode('utf-8')}"
+		except FileNotFoundError as e:
+			ffmpeg_version_output = f"Error: {e}"
+		except Exception as e:
+			ffmpeg_version_output = f"An unexpected error occurred: {e}"
+		print(ffmpeg_version_output, flush=True)
+		print(f"Scan: F:\\Media\\Movie\t  Size: 4.85 TB", flush=True)
+		print(f"scan_folder Start: {time.strftime('%H:%M:%S')}", flush=True)
 		if not Root:
-			print("Root directory not provided")
+			print("Root directory not provided", flush=True)
 			return
 
 		if not os.path.exists(Excepto):
-			print(f"Creating dir: {Excepto}")
+			print(f"Creating dir: {Excepto}", flush=True)
 			os.mkdir(Excepto)
 
 		saved = procs = skipt = errod = total_time = 0
@@ -479,8 +498,8 @@ def main():
 
 		end_t = time.perf_counter()
 		total_time = end_t - str_t
-		print(f"\n Done: {time.strftime('%H:%M:%S')}\t Total Time: {hm_time(total_time)}")
-		print(f" Files: {fl_nmb}\tProcessed: {procs}\tSkipped : {skipt}\tErrors : {errod}\n Saved in Total: {hm_sz(saved)}\n")
+		print(f"\n Done: {time.strftime('%H:%M:%S')}\t Total Time: {hm_time(total_time)}", flush=True)
+		print(f" Files: {fl_nmb}\tProcessed: {procs}\tSkipped : {skipt}\tErrors : {errod}\n Saved in Total: {hm_sz( abs(saved) )}\n", flush=True)
 
 	input('All Done :)')
 	exit()
