@@ -38,9 +38,11 @@ try:
 	result = SP.run([ffmpeg, "-version"], stdout=SP.PIPE, stderr=SP.PIPE)
 	if result.returncode == 0:
 		version_info = result.stdout.decode("utf-8")
+		# Use regular expression to extract the desired version part
 		match = re.search(r"ffmpeg version (\d+\.\d+\.\d+)", version_info)
 		if match:
 			ffmpeg_version = match.group(1)
+#			print(f"Ffmpeg version: {ffmpeg_version} ")
 		else:
 			print(f"Warning: Could not extract the desired ffmpeg version from output:\n{version_info}")
 	else:
@@ -251,15 +253,18 @@ def get_encoder_options(
 	) -> List[str]:
 	"""
 	Returns FFmpeg arguments for encoding with x265 or QSV tailored for streaming.
+
 	:param codec_name: The name of the codec to use (not directly used in this function but for consistency).
 	:param is_10bit: Boolean indicating if the video should use 10-bit depth.
 	:param bit_rate: The bit rate of the input video in bits per second.
 	:param use_hw_accel: Boolean to determine if hardware acceleration (QSV) should be used.
 	:return: List of FFmpeg arguments.
 	"""
-	# Keep your existing 'target_quality' = 'as_is'
+	# Define the quality preset to use; 'as_is' means no change to the input quality
 	target_quality = "as_is"
 
+	# Define quality presets for different streaming quality levels
+	# Each preset contains (bitrate in kb/s, quality level or CRF value)
 	quality_presets = {
 		"low":    (bit_rate // 4096, 28),  # Lower quality, lower bitrate
 		"medium": (bit_rate // 2048, 25),  # Medium quality, medium bitrate
@@ -268,19 +273,17 @@ def get_encoder_options(
 		"higher": (bit_rate // 512,  18)   # Highest quality, highest bitrate (visually lossless)
 	}
 
+	# Unpack bitrate and quality for the chosen preset
 	bitrate, quality = quality_presets[target_quality]
 
-	# If 10-bit source, bump up the bitrate slightly
+	# Convert bitrates to string format with 'k' for kilobits
 	bitrate_str, maxrate_str, bufsize_str = [f"{x}k" for x in (bitrate, bitrate * 1.1, bitrate * 2.2)]
 
-	# Convert to 'k'
-
-	# Hardware QSV path
 	if use_hw_accel:
 		# Return configuration for hardware acceleration using Intel Quick Sync Video
 		return [
 			"hevc_qsv", "-load_plugin", "hevc_hw",
-			"-init_hw_device", "qsv=qsv:MFX_IMPL_hw_any",
+			"-init_hw_device", "qsv=qsv:MFX_IMPL_hw_any",  # Initialize hardware device for QSV
 			"-filter_hw_device", "qsv",
 			"-pix_fmt", "p010le" if is_10bit else "nv12",  # Choose pixel format based on bit depth
 			"-b:v", bitrate_str, "-maxrate", maxrate_str, "-bufsize", bufsize_str,  # Set bitrate parameters
@@ -288,19 +291,19 @@ def get_encoder_options(
 			"-global_quality", str(quality), "-rc:v", "vbr_la", "-preset", "slow"  # Quality and encoding controls
 		]
 
-	# Software x265 path
+	# x265 parameters for software encoding
 	x265_params = (
 		"open-gop=0:keyint=60:min-keyint=30:scenecut=40:"
 		"bframes=3:b-adapt=2:psy-rd=1:aq-mode=3:aq-strength=0.8:"
 		"deblock=1,1:me=umh:subme=7"
 	)
-
+	# Return configuration for software encoding using x265
 	return [
 		"libx265", "-x265-params", x265_params,
 		"-pix_fmt", "yuv420p10le" if is_10bit else "yuv420p",  # Choose pixel format based on bit depth
 		"-crf", str(quality), "-b:v", bitrate_str,
 		"-maxrate", maxrate_str, "-bufsize", bufsize_str,
-		"-preset", "slow"
+		"-preset", "slow"  # Set encoding speed and quality
 	]
 
 @perf_monitor
@@ -337,8 +340,7 @@ def parse_video(
 		context.total_frames = round(frm_rate * context.vid_length)
 
 		# Decide maximum allowed bitrate
-		max_vid_btrt = 4300000
-		max_vid_btrt = 3800000
+		max_vid_btrt = 3500000	# Was 4300000
 		bit_depth_str = "8-bit"
 		if pix_fmt.endswith("10le"):
 			bit_depth_str = "10-bit"
@@ -394,8 +396,9 @@ def parse_video(
 
 		if needs_scaling:
 			use_hw_accel = False
-			max_width = 1920  # Adjust as needed
+			max_width  = 1920  # Adjust as needed
 			max_height = 1080  # Adjust as needed
+
 			is_10bit = True
 			hw_pix_fmt = "p010le" if is_10bit else "nv12"
 
@@ -423,7 +426,6 @@ def parse_video(
 #				f"pad={max_width}:{max_height}:(ow-iw)/2:(oh-ih)/2"
 			)
 #			filter_chain = "hqdn3d=1.5:1.5:6:6, unsharp=5:5:0.8:3:3:0.4"
-#			filter_chain = "hqdn3d=1.0:1.0:3:3, unsharp=5:5:0.6:3:3:0.3"
 #			filter_chain = "nlmeans=s=2:pc=1,   unsharp=5:5:0.3:3:3:0.2"
 			filter_chain = ""
 
@@ -460,6 +462,9 @@ def parse_video(
 				extra_msg += f"| SW Scaling: {context.vid_width}x{context.vid_height} -> {scaled_width}x{scaled_height}"
 
 			skip_all = False
+# XXX: New Code
+
+# XXX: End New codes
 
 		# Update handler name if needed
 		desired_handler = "VideoHandler x265"
@@ -819,9 +824,9 @@ def parse_frmat(
 	nb_streams =    int(_format.get("nb_streams", 0))
 	nb_programs =   int(_format.get("nb_programs", 0))
 
-	tags =           _format.get("tags", {})
+	tags =           _format.get("tags",{})
 	f_comment =     tags.get("comment",	"No_Comment")
-	title =         tags.get("title", "No_title")
+	title =         tags.get("title",	"No_title")
 
 	# We build a context object for video
 	context = VideoContext(
@@ -878,12 +883,13 @@ def parse_frmat(
 	skip_it = (fnam == title and ext == ".mp4" and f_comment == Skip_key)
 
 	if skip_it:
-		print("   .Skip: Format")
+		print(  "   .Skip: Format")
 	elif fnam != title :
-		print (f"   .nOK Name:\n     Is: {title}\n     Sb: {fnam}")
+		print (f"   .NOK Name:\n     Is: {title}\n     Sb: {fnam}")
 	elif f_comment != Skip_key :
-		print (f"   .nOK Skip:  {f_comment} != {Skip_key}")
-	#	skip_it = True
+		print (f"   .NOK Skip:  {f_comment} != {Skip_key}")
+		# XXX: Avoid Key # XXX:
+#		skip_it = True
 	else :
 		print(f"   !{title} ? {fnam} {f_comment}")
 
@@ -893,8 +899,8 @@ def parse_frmat(
 	if video_streams:
 		# We set context.vid_width / context.vid_height from the first video stream
 		first_vid = video_streams[0]
-		context.vid_width = first_vid.get("width", 2)
-		context.vid_height = first_vid.get("height", 1)
+		context.vid_width	= first_vid.get("width", 2)
+		context.vid_height	= first_vid.get("height", 1)
 
 		v_cmd, v_skip = parse_video(video_streams, context, de_bug, skip_it)
 		ff_com.extend(v_cmd)

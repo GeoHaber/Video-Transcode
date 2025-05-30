@@ -39,7 +39,7 @@ Subtitle:
 
 Language:
   Default: "eng"
-  Keep: ["eng", "fre", "ger", "heb", "hun", "ita", "rum", "rus", "spa"]
+  Keep: ["eng", "fre", "ger", "heb", "hun", "ita", "jpn", "rum", "rus", "spa"]
 
 Skip:
   condition_1: null

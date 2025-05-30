@@ -12,26 +12,29 @@ import datetime
 import traceback
 import itertools
 
-from typing		import List, Optional
-from functools	import cmp_to_key
+from typing import List, Optional
+from functools import cmp_to_key
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # External references from your code
-from FFMpeg		import *
-from My_Utils	import copy_move, hm_sz, hm_time, Tee
+from FFMpeg import *
+from My_Utils import copy_move, hm_sz, hm_time, Tee
 
-#from sklearn.cluster import DBSCAN
+# from sklearn.cluster import DBSCAN
 
-MultiThread = False		# XXX: It is set to True in the scan_folder # XXX:
+#Root = r"F:\Media"
+#Root = r"F:\Media\TV"
+
+MultiThread = False  # XXX: It is set to True in the scan_folder # XXX:
 de_bug = False
 
 # XXX: FYI
 valid_sort_keys = {
-	'size':      lambda x: x['size'],
-	'date':      lambda x: x['date'],
-	'name':      lambda x: x['name'],
-	'duration':  lambda x: x['duration'],
-	'extension': lambda x: x['extension'],
+	'size':		lambda x: x['size'],
+	'date':		lambda x: x['date'],
+	'name':		lambda x: x['name'],
+	'duration':	lambda x: x['duration'],
+	'extension':lambda x: x['extension'],
 }
 # Specify sorting keys and orders
 sort_keys = [
@@ -41,15 +44,6 @@ sort_keys = [
 
 Log_File = f"__{os.path.basename(sys.argv[0]).strip('.py')}_{time.strftime('%Y_%j_%H-%M-%S')}.log"
 
-#Root = r"C:\Users\Geo\Desktop\Except"
-#Root = r"C:\Users\Geo\Desktop\Video_downloads"
-
-#Root = r"F:\Media"
-#Root = r"F:\Media\TV"
-#Root = r"F:\Media\Movie"
-#Root = r"F:\Media\MasterClass Collection"
-#Root = r"F:\BackUp\_Adlt"
-#Root = r"F:\video"
 
 ''' Global Variables '''
 glb_totfrms = 0
@@ -57,6 +51,7 @@ glb_vidolen = 0
 vid_width = 0
 aud_smplrt = 0
 total_size = 0
+
 
 ##>>============-------------------< Start >------------------==============<<##
 @perf_monitor
@@ -68,7 +63,9 @@ def metric(x, y, size_margin, leng_margin):
 			(1 - leng_margin) * y[1] <= x[1] <= (1 + leng_margin) * y[1]
 		) else 1
 	)
+
 ##>>============-------------------<  End  >------------------==============<<##
+
 
 @perf_monitor
 def perform_clustering(data: List[List[float]], _lst: List[List]) -> None:
@@ -105,7 +102,9 @@ def perform_clustering(data: List[List[float]], _lst: List[List]) -> None:
 			else:
 				for info in cluster:
 					print(f'[Size: {hm_sz(info[1])}\t\tLen: {int(info[5])}] - {info[0]}')
-##==============-------------------   End   -------------------==============##
+
+##==============-------------------  End   -------------------==============##
+
 
 @perf_monitor
 def clean_up(input_file: str, output_file: str, skip_it: bool = False, debug: bool = False) -> int:
@@ -145,7 +144,7 @@ def clean_up(input_file: str, output_file: str, skip_it: bool = False, debug: bo
 		os.rename(input_file, temp_file)
 		shutil.move(output_file, final_output_file)
 
-#		debug = True
+		#   debug = True
 		if debug:
 			confirm = input(f" Are you sure you want to delete {temp_file}? (y/n): ")
 			if confirm.lower() != "y":
@@ -173,24 +172,25 @@ def clean_up(input_file: str, output_file: str, skip_it: bool = False, debug: bo
 
 	return -1
 
-##>>============-------------------<  End  >------------------==============<<##
+##>>============-------------------  End   -------------------==============##
+
 
 @perf_monitor
-def process_file(file_info, cnt, fl_nmb ):
+def process_file(file_info, cnt, fl_nmb):
 	msj = sys._getframe().f_code.co_name
 	str_t = time.perf_counter()
 
 	saved, procs, skipt, errod = 0, 0, 0, 0
 	skip_it = False
 
-	file_p =	file_info['path']
-	file_s =	file_info['size']
-	ext =		file_info['extension']
-	jsn_ou =	file_info['metadata']
+	file_p = file_info['path']
+	file_s = file_info['size']
+	ext = file_info['extension']
+	jsn_ou = file_info['metadata']
 
 	# Is it a file ?
 	if os.path.isfile(file_p):
-#		print(f'\n{file_p}\n{hm_sz(file_s)}')
+		#   print(f'\n{file_p}\n{hm_sz(file_s)}')
 		print(f'\n{file_p}\n {ordinal(cnt)} of {fl_nmb}, {ext}, {hm_sz(file_s)}')
 		if len(file_p) < 333:
 			free_disk_space = shutil.disk_usage(Root).free
@@ -202,18 +202,18 @@ def process_file(file_info, cnt, fl_nmb ):
 			input("File name too long > 333")
 
 		try:
-#			de_bug = True # DEBUG:
+			#   de_bug = True # DEBUG:
 			all_good, skip_it = parse_finfo(file_p, jsn_ou, de_bug)
 			if de_bug or ext != ".mp4":
 				skip_it = False
-#				print (f"\nDebug: {de_bug}  Ext: {ext}\n")
-#				print (f"\nFile: {file_p}\nFfmpeg: {all_good}\n")
+			#   print (f"\nDebug: {de_bug}  Ext: {ext}\n")
+			#   print (f"\nFile: {file_p}\nFfmpeg: {all_good}\n")
 			if skip_it:
 				print(f"\033[91m  .Skip: >|  {msj} |<\033[0m")
 				skipt += 1
 
 			all_good = ffmpeg_run(file_p, all_good, skip_it, ffmpeg, de_bug)
-			if all_good :
+			if all_good:
 				saved += clean_up(file_p, all_good, skip_it, de_bug) or 0
 				procs += 1
 			elif not skip_it:
@@ -239,9 +239,9 @@ def process_file(file_info, cnt, fl_nmb ):
 			errod += 1
 			msj = f" +: Exception: {e}\n{os.path.dirname(file_p)}\n\t{os.path.basename(file_p)}\t{hm_sz(file_s)}\nCopied"
 			print(msj)
-			if de_bug :
+			if de_bug:
 				input('Next')
-			if copy_move(file_p, Excepto, True, True):
+			if copy_move(file_p, Excepto, False, True):
 				print("Done")
 			else:
 				input("Exception WTF")
@@ -256,7 +256,10 @@ def process_file(file_info, cnt, fl_nmb ):
 		time.sleep(1)
 
 	return saved, procs, skipt, errod
-##==============-------------------   End   -------------------==============##
+
+##==============-------------------  End   -------------------==============##
+
+
 @perf_monitor
 def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str, bool]]] = None,
 			   do_clustering: bool = False) -> Optional[List[Dict]]:
@@ -277,9 +280,10 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 	"""
 	str_t = time.perf_counter()
 	msj = f"{sys._getframe().f_code.co_name} Start: {time.strftime('%H:%M:%S')}"
+#	print(f"DEBUG: scan_folder called with root = {root}", flush=True)  # Add this debug print
 	print(f"Scan: {root}\tSize: {hm_sz(get_tree_size(root))}\n{msj}", flush=True)
 	spinner = Spinner(indent=0)
-#	print(f"Extensions to scan: {xtnsio}")
+	#   print(f"Extensions to scan: {xtnsio}")
 
 	if not root or not isinstance(root, str) or not os.path.isdir(root):
 		print(f"Invalid root directory: {root}")
@@ -314,7 +318,6 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 				if ext.lower() in xtnsio:
 					spinner.print_spin(f" {one_file} ")
 					try:
-						file_s = os.path.getsize(f_path)
 						if not os.access(f_path, os.W_OK) or not (os.stat(f_path).st_mode & stat.S_IWUSR):
 							print(f"Skip read-only file: {f_path}", flush=True)
 							continue
@@ -327,7 +330,7 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 								result = ffprobe_run(f_path)
 								if result is not None:
 									handle_result(f_path, file_s, ext, result)
-						else :
+						else:
 							input(f"Error process_files {f_path}: {e}", flush=True)
 							raise
 					except Exception as e:
@@ -342,11 +345,12 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 				except Exception as e:
 					print(f"\n Error processing future for:\n {f_path}\n\n {e}\n")
 					traceback.format_exc()
-#					traceback.print_exc()
+					#               traceback.print_exc()
 					if copy_move(f_path, Excepto, True, True):
 						print(f"Copied to {Excepto}")
 
 		spinner.stop()  # Ensure the spinner stops
+
 	def handle_result(f_path, file_s, ext, jsn_ou):
 		"""
 		Only do something if jsn_ou is valid and has the 'format' key.
@@ -365,13 +369,13 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 
 		duration = float(jsn_ou.get("format", {}).get("duration", 0.0))
 		file_info = {
-			'path':      f_path,
-			'name':      os.path.basename(f_path),
-			'size':      file_s,
+			'path': f_path,
+			'name': os.path.basename(f_path),
+			'size': file_s,
 			'extension': ext.lower(),
-			'date':      mod_datetime,
-			'duration':  duration,
-			'metadata':  jsn_ou,
+			'date': mod_datetime,
+			'duration': duration,
+			'metadata': jsn_ou,
 		}
 		file_list.append(file_info)
 		if de_bug:
@@ -391,7 +395,6 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 		data.append([file_s, duration])
 		perform_clustering(data, _lst)
 
-	# Sorting based on the provided key # XXX: TBD
 	# Sorting by the key specified (name, size, extension, date)
 	if sort_keys:
 		sort_keys = [(key, descending) for key, descending in sort_keys if key in valid_sort_keys]
@@ -399,9 +402,11 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 			sort_keys = [('size', True)]
 	else:
 		sort_keys = [('size', True)]
+
 	key_funcs = [valid_sort_keys[key] for key, _ in sort_keys]
 	sort_orders = [descending for _, descending in sort_keys]
-#	sorted_list = sorted(_lst, key=lambda item: item[1],        reverse=sort_order)
+
+	#   sorted_list = sorted(_lst, key=lambda item: item[1],    reverse=sort_order)
 	def compare_items(a, b):
 		for key_func, descending in zip(key_funcs, sort_orders):
 			a_key = key_func(a)
@@ -412,6 +417,7 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 				else:
 					return -1 if a_key < b_key else 1
 		return 0  # All keys are equal
+
 	sorted_list = sorted(file_list, key=cmp_to_key(compare_items))
 
 	# Prepare sorting order string for display
@@ -421,11 +427,11 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 	print(f"\nSort by: {order_str}\nScan Done: {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}\n")
 	return sorted_list
 
-##==============-------------------   End   -------------------==============##
+##==============-------------------  End   -------------------==============##
+
 
 def main():
 	str_t = time.perf_counter()
-
 	with Tee(sys.stdout, open(Log_File, 'w', encoding='utf-8')) as qa:
 		print(f"{psutil.cpu_count()} CPU's\t ¯\\_(%)_/¯", flush=True)
 		print(f"Python version: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}", flush=True)
@@ -434,11 +440,13 @@ def main():
 		print("-" * 70, flush=True)
 
 		ffmpeg_version_output = ""
+
 		try:
 			if not os.path.isfile(ffmpeg):
 				raise FileNotFoundError(f"FFmpeg not found at '{ffmpeg}'.")
 			if not os.path.isfile(ffprob):
 				raise FileNotFoundError(f"FFprobe not found at '{ffprob}'.")
+
 			result = SP.run([ffmpeg, "-version"], stdout=SP.PIPE, stderr=SP.PIPE)
 			if result.returncode == 0:
 				version_info = result.stdout.decode("utf-8")
@@ -449,17 +457,21 @@ def main():
 					ffmpeg_version_output = f"Warning: Could not extract the desired ffmpeg version from output:\n{version_info}"
 			else:
 				ffmpeg_version_output = f"Error running ffmpeg -version:\n{result.stderr.decode('utf-8')}"
+
 		except FileNotFoundError as e:
 			ffmpeg_version_output = f"Error: {e}"
 		except Exception as e:
 			ffmpeg_version_output = f"An unexpected error occurred: {e}"
+
 		print(ffmpeg_version_output, flush=True)
+
+		# Ensure these print statements are within the 'with Tee' block
 		print(f"Scan: F:\\Media\\Movie\t  Size: 4.85 TB", flush=True)
 		print(f"scan_folder Start: {time.strftime('%H:%M:%S')}", flush=True)
+
 		if not Root:
 			print("Root directory not provided", flush=True)
 			return
-
 		if not os.path.exists(Excepto):
 			print(f"Creating dir: {Excepto}", flush=True)
 			os.mkdir(Excepto)
@@ -503,10 +515,12 @@ def main():
 
 	input('All Done :)')
 	exit()
-##==============-------------------   End   -------------------==============##
+
+##==============-------------------  End   -------------------==============##
+
 
 # Call main function
 if __name__ == "__main__":
 	main()
 
-##>>============-------------------<  End  >------------------==============<<##
+##>>============-------------------<  End  >------------------==============##
