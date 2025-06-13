@@ -1,55 +1,74 @@
 # -*- coding: utf-8 -*-
-
 import sys
 import yaml
 
-debug = False  # Changed variable name for clarity
-yaml_f_loc = 'Trans_code.yml'
+# It's better to avoid a global 'debug' variable here if FFMpeg.py has its own APP_CONFIG.debug_mode
+# This debug flag would only control printing within Yaml.py during its own execution.
+YAML_LOAD_DEBUG = False # Use a distinct name
+YAML_FILE_LOCATION = 'Trans_code.yml'
 
 console_encoding = sys.getfilesystemencoding() or 'utf-8'
-print("Console encoding = ", console_encoding)
+print(f"Console encoding = {console_encoding}") # This prints when Yaml.py is imported
 
-# XXX read the yaml_f_loc file
+Yml_Data = {} # Initialize to an empty dict in case the file is missing or empty
 try:
-	with open(yaml_f_loc, 'r', encoding='utf-8') as Yml_file:  # Added encoding explicitly
-		Yml_Data = yaml.safe_load(Yml_file)
+    with open(YAML_FILE_LOCATION, 'r', encoding='utf-8') as yml_file_stream:
+        loaded_data = yaml.safe_load(yml_file_stream)
+        if isinstance(loaded_data, dict): # Ensure we loaded a dictionary
+            Yml_Data = loaded_data
+        else:
+            print(f"Warning: YAML file '{YAML_FILE_LOCATION}' is empty or not a dictionary. Using empty defaults.")
 
-		if debug:
-			for key, value in Yml_Data.items():
-				print(f"\n{key}:")
-				for ky, va in value.items():
-					print(f"\t{ky:<18}= {va}")
+    if YAML_LOAD_DEBUG and Yml_Data: # Check if Yml_Data is not empty
+        print(f"\n--- Content of '{YAML_FILE_LOCATION}' ---")
+        for top_key, section_value in Yml_Data.items():
+            print(f"\n[{top_key}]:")
+            if isinstance(section_value, dict):
+                for sub_key, val in section_value.items():
+                    print(f"  {sub_key:<25} = {val}")
+            else:
+                print(f"  {section_value}")
+        print("--- End of YAML Content ---")
+
+except FileNotFoundError:
+    print(f"Warning: YAML configuration file '{YAML_FILE_LOCATION}' not found. Script will use defaults for YAML-sourced values.")
 except yaml.YAMLError as e:
-	message = f' Yaml read error {e}'
-	input(message)
+    print(f"Warning: Error parsing YAML file '{YAML_FILE_LOCATION}': {e}. Script will use defaults for YAML-sourced values.")
 
-# Use .get method to access values with default values
-Glob =		Yml_Data.get('Glob', {})
-Path =		Yml_Data.get('Path', {})
-Action =	Yml_Data.get('Action', {})
-Video =		Yml_Data.get('Video', {})
-Audio =		Yml_Data.get('Audio', {})
-Language =	Yml_Data.get('Language', {})
+# Define global variables for each top-level section from YAML
+# FFMpeg.py will import these section dictionaries.
+Glob = Yml_Data.get('Glob', {})
+Path_section = Yml_Data.get('Path', {}) # Renamed to avoid conflict with pathlib.Path
+Action = Yml_Data.get('Action', {})
+Video = Yml_Data.get('Video', {})
+Audio = Yml_Data.get('Audio', {})
+Language = Yml_Data.get('Language', {})
+Metadata = Yml_Data.get('Metadata', {})
+FfMpegCom = Yml_Data.get('FfMpegCom', {}) # Exporting this in case it's needed later
+GitHub = Yml_Data.get('GitHub', {})     # Exporting this in case it's needed later
 
-Not_valid =	Glob.get('junk_nm', None)
+# Define specific commonly used values as globals for convenience if your FFMpeg.py's
+# load_script_config directly imports them.
+# The refactored FFMpeg.py's load_script_config will primarily use the section dictionaries above.
+Root =      Path_section.get('Root')
+Excepto =   Path_section.get('Excepto')
+TmpF_Ex =   Path_section.get('Tmp_exte')
+MinF_sz =   Path_section.get('Min_fsize')
+ffmpg_bin = Path_section.get('ffmpg_bin') # If you define this in your YAML Path section
 
-Excepto =	Path.get('Excepto', None)
-Root =		Path.get('Root', None)
-TmpF_Ex =	Path.get('Tmp_exte', None)
-MinF_sz =	Path.get('Min_fsize', None)
+Skip_typ =  Action.get('Skip_typ')
+Skip_key =  Action.get('Skip_key')
 
-Skip_typ =	Action.get('Skip_typ', None)
-Skip_key =	Action.get('Skip_key', None)
+File_extn = Video.get('Extensions')
+Max_v_btr = Video.get('Max_v_btr')
+Max_frm_r = Video.get('Max_frm_r')
+Bl_and_Wh = Video.get('Bl_and_Wh')
+Video_crf = Video.get('crf-25') # Key from your YAML
 
-File_extn =	Video.get('Extensions', None)  # Changed to 'Extensions'
-Max_v_btr =	Video.get('Max_v_btr', None)
-Max_frm_r =	Video.get('Max_frm_r', None)
-Bl_and_Wh =	Video.get('Bl_and_Wh', None)
-Video_crf =	Video.get('crf-25', None)
+Audio_codec_name_from_yaml = Audio.get('codec_name') # Specific for audio codec, distinct name
+Max_a_btr = Audio.get('Max_a_btr')
 
-Max_a_btr =	Audio.get('Max_a_btr', None)
+Keep_langua = Language.get('Keep')
+Default_lng = Language.get('Default')
 
-Keep_langua = Language.get('Keep', None)
-Default_lng = Language.get('Default', None)
-
-print(f'Parsed File: {yaml_f_loc}')
+print(f"Parsed File: {YAML_FILE_LOCATION}")

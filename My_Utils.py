@@ -545,10 +545,10 @@ def copy_move(src: str, dst: str, keep_original: bool = True, verbose: bool = Fa
 		(action, transfer_func) = ("_Copy", shutil.copy2) if keep_original else ("_Move", shutil.move)
 		transfer_func(src, dst)
 		if verbose:
-			print(f"{action}: {src}\nTo:    {dst}")
+			print(f"{action}: {src}\n   To: {dst}")
 		return True
 	except (PermissionError, IOError, OSError) as err:
-		print(f"\ncopy_move Error: {err}\n{action}: {src} to {dst}")
+		print(f"\ncopy_move Error: {err}\n   Action: {action}: {src} to {dst}")
 		return False
 ##==============-------------------   End   -------------------==============##
 

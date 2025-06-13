@@ -54,11 +54,6 @@ Metadata:
   Skip_key: "| <¯\\_(%)_/¯> | .mp4|"
   use_anonymous: "yes"
 
-FfMpegCom:
-  convert_to_h265: "command to convert"
-  subtitle_extract: "flags to extract subs"
-  create_matrix: "matrix creation flags"
-
 GitHub:
   url: "www.github.com/dvdzen"
   passwd: "xxxxxxxx"

@@ -4,25 +4,17 @@ import re
 import sys
 import json
 import time
-import logging
-import subprocess as SP
 import datetime as TM
+import subprocess as SP
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import List, Dict, Tuple, Any, Optional
+from typing	import List, Dict, Tuple, Any, Optional
 
 # External references from your code
-from My_Utils import *  # e.g. hm_sz, hm_time, divd_strn, stmpd_rad_str, perf_monitor
-from Yaml import *      # if needed
+from Yaml		import *      # if needed
+from My_Utils	import *  # e.g. hm_sz, hm_time, divd_strn, stmpd_rad_str, perf_monitor
 
-# Set up logging (simple example)
-logging.basicConfig(
-	level=logging.WARNING,
-	format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
-	datefmt="%H:%M:%S"
-)
-logger = logging.getLogger(__name__)
 
 # Paths to FFmpeg/FFprobe executables (update if needed)
 ffmpg_bin = r"C:\Program Files\ffmpeg\bin"
@@ -64,7 +56,7 @@ class VideoContext:
 	"""Holds metadata about the video file being processed."""
 	vid_width: int = 0
 	vid_height: int = 0
-	vid_length: int = 0    # total duration in seconds
+	vid_length: float = 0.0  # total duration in seconds as float
 	vid_bitrate: int = 0
 	total_frames: int = 0
 
@@ -105,7 +97,7 @@ def ffprobe_run(
 
 		if not jsn_out or "error" in jsn_out:
 			err_msg = jsn_out.get("error") if jsn_out else f"{input_file} no JSON output"
-			logger.error("ffprobe error: %s", err_msg)
+			print ("ffprobe error: %s", err_msg)
 			raise ValueError(f"ffprobe error: {err_msg}")
 		return jsn_out
 
@@ -121,23 +113,19 @@ def run_ffm(args: List[str], de_bug: bool = False) -> bool:
 	Run an ffmpeg command. If `de_bug` is True, print full output; otherwise, show a spinner.
 	Returns True if command succeeds, False otherwise.
 	"""
-	logger.debug("run_ffm: %s", " ".join(args))
-
-	if de_bug:
-		print("run_ffm: %s", " ".join(args))
-
+	if de_bug: print(f"run_ffm: {' '.join(args)}")
 	if not args:
-		logger.error("run_ffm: No arguments provided.")
+		print ("run_ffm: No arguments provided.")
 		return False
 
 	try:
 		if de_bug:
 			# Debug mode: Capture stdout/stderr and print them
-			print ("Running ffmpeg in debug mode.\n%s", " ".join(args))
+			print(f"Running ffmpeg in debug mode.\n {' '.join(args)}")
 			process = SP.run(args, stdout=SP.PIPE, stderr=SP.STDOUT)
-			print ("Stdout:\n%s", process.stdout.decode("utf-8", errors="replace"))
+			print(f"Stdout:\n{process.stdout.decode('utf-8', errors='replace')}")
 			if process.returncode != 0:
-				print ("FFmpeg failed with return code %d", process.returncode)
+				print (f"FFmpeg failed with return code {process.returncode}")
 				return False
 			time.sleep(1)
 			return True
@@ -159,12 +147,12 @@ def run_ffm(args: List[str], de_bug: bool = False) -> bool:
 				_, _ = process.communicate()
 
 			if process.returncode != 0:
-				print ("FFmpeg failed with return code %d", process.returncode)
+				print (f"FFmpeg failed with return code {process.returncode}")
 				return False
 		return True
 
 	except Exception as e:
-		logger.exception("run_ffm exception: %s", e)
+		print (f"run_ffm exception: {e}")
 		return False
 
 @perf_monitor
@@ -185,7 +173,7 @@ def ffmpeg_run(
 #        print("Skipping ffmpeg_run: skip_it=%s, input_file=%s", skip_it, input_file)
 		return None
 
-#    logger.info("ffmpeg_run start: %s", input_file)
+#    print ("ffmpeg_run start: %s", input_file)
 
 	file_name, _ = os.path.splitext(os.path.basename(input_file))
 	out_file = os.path.normpath("_" + stmpd_rad_str(7, file_name[0:25]))
@@ -195,7 +183,7 @@ def ffmpeg_run(
 	try:
 		ffmpeg_vers = SP.check_output([execu, "-version"]).decode("utf-8").splitlines()[0].split()[2]
 	except SP.CalledProcessError as e:
-		logger.error("Error getting ffmpeg version: %s", e)
+		print (f"Error getting ffmpeg version: {e}")
 		return None
 
 	# Head + user command + tail
@@ -222,21 +210,21 @@ def ffmpeg_run(
 		try:
 			if attempt > 1:
 				time.sleep(retry_delay)
-				logger.warning("Retry attempt %d...", attempt)
+				print (f"Retry attempt {attempt}")
 				# In debug mode for the second attempt
 				ff_head = [execu, "-report", "-loglevel", "verbose", "-i", input_file, "-hide_banner"]
 
 			full_cmd = ff_head + ff_com + ff_tail
 			if run_ffm(full_cmd, de_bug=de_bug):
-				logger.info("Successfully created file: %s", out_file)
+				if de_bug: print (f"Successfully created file: {out_file}")
 				return out_file
 
 		except Exception as e:
-			logger.error("ffmpeg_run attempt %d failed: %s", attempt, e)
+			print (f"ffmpeg_run attempt {attempt} failed: {e}")
 
 		if attempt == max_retries:
 			msg = f"Failed after {attempt} attempts."
-			logger.error(msg)
+			print (msg)
 			raise Exception(msg)
 
 	return None
@@ -252,60 +240,68 @@ def get_encoder_options(
 	use_hw_accel: bool = False
 	) -> List[str]:
 	"""
-	Returns FFmpeg arguments for encoding with x265 or QSV tailored for streaming.
+	Returns FFmpeg arguments for encoding with x265 or QSV, optimized for high quality.
 
-	:param codec_name: The name of the codec to use (not directly used in this function but for consistency).
-	:param is_10bit: Boolean indicating if the video should use 10-bit depth.
+	:param codec_name: The name of the codec to use.
+	:param is_10bit: Boolean indicating if the video is 10-bit.
 	:param bit_rate: The bit rate of the input video in bits per second.
 	:param use_hw_accel: Boolean to determine if hardware acceleration (QSV) should be used.
 	:return: List of FFmpeg arguments.
 	"""
-	# Define the quality preset to use; 'as_is' means no change to the input quality
+	# Define the quality preset. For high quality, we'll target 'high'.
+	# CRF 20 is a great balance of quality and file size. CRF 18 is near-lossless.
 	target_quality = "as_is"
 
-	# Define quality presets for different streaming quality levels
 	# Each preset contains (bitrate in kb/s, quality level or CRF value)
 	quality_presets = {
-		"low":    (bit_rate // 4096, 28),  # Lower quality, lower bitrate
-		"medium": (bit_rate // 2048, 25),  # Medium quality, medium bitrate
-		"as_is":  (bit_rate // 1536, 23),  # Default quality, slight bitrate reduction
-		"high":   (bit_rate // 1024, 20),  # High quality, higher bitrate
-		"higher": (bit_rate // 512,  18)   # Highest quality, highest bitrate (visually lossless)
+		"low":    (bit_rate // 4096, 25),  # Lower quality
+		"medium": (bit_rate // 2048, 23),  # Good quality
+		"as_is":  (bit_rate // 1600, 22),  # Default quality, slight bitrate reduction
+		"high":   (bit_rate // 1024, 20),  # Excellent quality
+		"higher": (bit_rate // 512,  18)   # Visually lossless
 	}
 
 	# Unpack bitrate and quality for the chosen preset
-	bitrate, quality = quality_presets[target_quality]
+	target_bitrate, quality_level = quality_presets[target_quality]
 
 	# Convert bitrates to string format with 'k' for kilobits
-	bitrate_str, maxrate_str, bufsize_str = [f"{x}k" for x in (bitrate, bitrate * 1.1, bitrate * 2.2)]
+	bitrate_str, maxrate_str, bufsize_str = [f"{x}k" for x in (target_bitrate, target_bitrate * 1.5, target_bitrate * 2.5)]
 
 	if use_hw_accel:
-		# Return configuration for hardware acceleration using Intel Quick Sync Video
+		# Return configuration for hardware acceleration (QSV) using ICQ for quality.
+		# ICQ (Intelligent Constant Quality) is the QSV equivalent of CRF.
 		return [
 			"hevc_qsv", "-load_plugin", "hevc_hw",
-			"-init_hw_device", "qsv=qsv:MFX_IMPL_hw_any",  # Initialize hardware device for QSV
+			"-init_hw_device", "qsv=qsv:MFX_IMPL_hw_any",
 			"-filter_hw_device", "qsv",
-			"-pix_fmt", "p010le" if is_10bit else "nv12",  # Choose pixel format based on bit depth
-			"-b:v", bitrate_str, "-maxrate", maxrate_str, "-bufsize", bufsize_str,  # Set bitrate parameters
-			"-look_ahead", "1", "-look_ahead_depth", "90",  # Look ahead for better compression
-			"-global_quality", str(quality), "-rc:v", "vbr_la", "-preset", "slow"  # Quality and encoding controls
+			"-pix_fmt", "p010le" if is_10bit else "nv12",
+			"-rc", "icq",  # Use Intelligent Constant Quality rate control
+			"-q", str(quality_level),  # Set the ICQ quality level (lower is better)
+			"-b:v", bitrate_str, "-maxrate", maxrate_str, "-bufsize", bufsize_str, # Bitrate hints
+			"-look_ahead", "1", "-look_ahead_depth", "40",  # Optimal look-ahead depth
+			"-preset", "slow"  # 'slow' preset for best QSV quality
 		]
 
-	# x265 parameters for software encoding
+	# x265 parameters for high-quality software encoding
+	# Enhanced for better detail retention and psychovisual quality
 	x265_params = (
 		"open-gop=0:keyint=60:min-keyint=30:scenecut=40:"
-		"bframes=3:b-adapt=2:psy-rd=1:aq-mode=3:aq-strength=0.8:"
-		"deblock=1,1:me=umh:subme=7"
+		"bframes=8:b-adapt=2:"
+		"psy-rd=2.0:psy-rdoq=2.0:"  # Increase psychovisual strength for detail
+		"aq-mode=3:aq-strength=1.0:" # Auto-variance AQ is excellent
+		"deblock=-1,-1:" # Less aggressive deblocking to retain detail
+		"nr-inter=400:nr-intra=100:" # Light denoising for better compression
+		"me=umh:subme=7"
 	)
-	# Return configuration for software encoding using x265
+	# Return configuration for software encoding using libx265
 	return [
 		"libx265", "-x265-params", x265_params,
-		"-pix_fmt", "yuv420p10le" if is_10bit else "yuv420p",  # Choose pixel format based on bit depth
-		"-crf", str(quality), "-b:v", bitrate_str,
-		"-maxrate", maxrate_str, "-bufsize", bufsize_str,
-		"-preset", "slow"  # Set encoding speed and quality
+		"-pix_fmt", "yuv420p10le" if is_10bit else "yuv420p",
+		"-crf", str(quality_level),  # Use CRF for constant quality
+		"-b:v", bitrate_str, # Provide target bitrate
+		"-maxrate", maxrate_str, "-bufsize", bufsize_str, # Set ceiling and buffer
+		"-preset", "slow"  # 'slow' is a great balance of speed and quality
 	]
-
 @perf_monitor
 def parse_video(
 	streams_in: List[Dict[str, Any]],
@@ -317,7 +313,7 @@ def parse_video(
 	global glb_vidolen
 	glb_vidolen = context.vid_length
 
-	logger.debug("parse_video start, skip_it=%s", skip_it)
+	if de_bug: print (f"parse_video start, skip_it={skip_it}")
 	ff_video = []
 	skip_all = True
 
@@ -331,8 +327,8 @@ def parse_video(
 		frm_rate     = divd_strn(stream.get("r_frame_rate", "25"))
 		this_bitrate = int(stream.get("bit_rate", context.vid_bitrate * 0.8))
 
-		if codec_name.lower() == 'mjpeg':
-			print (f"    |<V:{idx:2}>| > Skip {codec_name:6} |" )
+		if codec_name.lower() in ['mjpeg', 'png']:
+			print (f"    |<V:{idx:2}>|{codec_name:^8}| Ignore !!" )
 			skip_all = False
 			continue
 
@@ -340,7 +336,7 @@ def parse_video(
 		context.total_frames = round(frm_rate * context.vid_length)
 
 		# Decide maximum allowed bitrate
-		max_vid_btrt = 3500000	# Was 4300000
+		max_vid_btrt = 3900000
 		bit_depth_str = "8-bit"
 		if pix_fmt.endswith("10le"):
 			bit_depth_str = "10-bit"
@@ -364,9 +360,6 @@ def parse_video(
 		needs_scaling = (output_label in ["2K", "4K", "8K"])
 
 		# The combined condition:
-		#  - Must be HEVC
-		#  - Must have bitrate <= max
-		#  - Must not need scaling
 		already_streaming_friendly = (
 			codec_name.lower() == "hevc"
 			and this_bitrate <= max_vid_btrt
@@ -390,81 +383,35 @@ def parse_video(
 				True  # use_hw_accel = True
 			)
 			ff_vid.extend(encoder_opts)
-
 			skip_all = False
 			extra_msg = f" Re-encode: {hm_sz(btrt)}"
 
 		if needs_scaling:
-			use_hw_accel = False
-			max_width  = 1920  # Adjust as needed
-			max_height = 1080  # Adjust as needed
+			use_hw_accel = False # Set to True to use QSV scaling
+			max_width  = 1920
+			max_height = 1080
 
-			is_10bit = True
-			hw_pix_fmt = "p010le" if is_10bit else "nv12"
+			# Use -1 to maintain aspect ratio automatically during scaling
+			# flags=lanczos uses a high-quality scaling algorithm
+			scale_chain = f"scale=-1:{max_height}:flags=lanczos"
 
-			if context.vid_width <= 0 or context.vid_height <= 0:
-				raise ValueError("Invalid video dimensions: Width and height must be positive.")
+			# A subtle sharpening filter to compensate for softness from scaling
+			sharp_chain = "unsharp=5:5:0.5:5:5:0.2"
 
-			aspect_ratio = context.vid_width / context.vid_height
-
-			if context.vid_width > max_width or context.vid_height > max_height:
-				if max_width / aspect_ratio <= max_height:
-					scaled_width = max_width
-					scaled_height = round(max_width / aspect_ratio / 2) * 2
-				else:
-					scaled_height = max_height
-					scaled_width = round(max_height * aspect_ratio / 2) * 2
-			else:
-				scaled_width = context.vid_width
-				scaled_height = context.vid_height
-
-			if scaled_width <= 0 or scaled_height <= 0:
-				raise ValueError("Calculated dimensions are invalid for scaling.")
-
-			scale_pad_chain = (
-				f"scale={scaled_width}:{scaled_height}:force_original_aspect_ratio=decrease"
-#				f"pad={max_width}:{max_height}:(ow-iw)/2:(oh-ih)/2"
-			)
-#			filter_chain = "hqdn3d=1.5:1.5:6:6, unsharp=5:5:0.8:3:3:0.4"
-#			filter_chain = "nlmeans=s=2:pc=1,   unsharp=5:5:0.3:3:3:0.2"
-			filter_chain = ""
-
+			extra_msg += f"| Scaling: {context.vid_width}x{context.vid_height} -> to {max_height}p"
 
 			if use_hw_accel:
-				# Initialize QSV only if not already initialized
-				if "-init_hw_device" not in ff_vid:
-					ff_vid.extend([
-						"-init_hw_device", "qsv=qsv:MFX_IMPL_hw_any",  # Initialize QSV hardware once
-						"-filter_hw_device", "qsv"
-					])
-				ff_vid.extend([
-					"-load_plugin", "hevc_hw",
-					"-vf", scale_pad_chain,  # Scaling and padding
-					"-pix_fmt", hw_pix_fmt,
-					"-c:v", "hevc_qsv",
-					"-b:v", str(min(max_vid_btrt, int(btrt))),  # Limit bitrate
-					"-global_quality", "20",  # Set global quality for QSV
-					"-look_ahead", "1",
-					"-look_ahead_depth", "90",
-					"-rc:v", "vbr_la",
-					"-preset", "slow"
-				])
-				extra_msg += f"| HW Accelerated Scaling: {context.vid_width}x{context.vid_height} -> {scaled_width}x{scaled_height}"
+				# For QSV, use the vpp_qsv filter for hardware-accelerated scaling
+				qsv_scale_chain = f"vpp_qsv=w=-1:h={max_height}"
+				ff_vid.extend(["-vf", qsv_scale_chain])
+				extra_msg += " (HW)"
 			else:
-				ff_vid.extend([
-					"-vf", f"{scale_pad_chain},{filter_chain}",
-					"-pix_fmt", "yuv420p10le",
-					"-crf", "20",
-					"-b:v", str(min(max_vid_btrt, int(btrt))),  # Limit bitrate
-					"-c:v", "libx265",
-					"-preset", "slow"
-				])
-				extra_msg += f"| SW Scaling: {context.vid_width}x{context.vid_height} -> {scaled_width}x{scaled_height}"
+				# For software, combine scaling and sharpening
+				full_filter_chain = f"{scale_chain},{sharp_chain}"
+				ff_vid.extend(["-vf", full_filter_chain])
+				extra_msg += " (SW)"
 
 			skip_all = False
-# XXX: New Code
-
-# XXX: End New codes
 
 		# Update handler name if needed
 		desired_handler = "VideoHandler x265"
@@ -474,7 +421,7 @@ def parse_video(
 				f"handler_name={desired_handler}"
 			])
 			skip_all = False
-			extra_msg += f"| Handler => {desired_handler}"
+			extra_msg += f"|Handler => {desired_handler}"
 
 		# Print log
 		msg = (
@@ -485,282 +432,251 @@ def parse_video(
 
 		ff_video += ff_vid
 
-		if de_bug:
-			logger.debug("Stream %s => %s", idx, ff_vid)
+		if de_bug: print(f"Stream {idx} => {ff_vid}")
 
 	if skip_all :
-		logger.info("Skipping video because skip_all=%s and skip_it=%s", skip_all, skip_it)
+		if de_bug: print (f"Skipping video because skip_all={skip_all} and skip_it={skip_it}")
 		print("   .Skip: Video")
 
 	return ff_video, skip_all
 
-
 ###############################################################################
 #                            PARSE AUDIO
 ###############################################################################
+## This function REPLACES the parse_audio in YOUR FFMpeg.py
+# It assumes globals like TmpF_Ex, Max_a_btr, Keep_langua, Default_lng, max_bitrate
+# and functions like hm_sz, perf_monitor are available in FFMpeg.py's scope.
 @perf_monitor
 def parse_audio(
 	streams: List[Dict[str, Any]],
 	de_bug: bool = False
 ) -> Tuple[List[str], bool]:
 	"""
-	Parse and process audio streams, prioritizing the best English stream
-	based on channels and bitrate.
+	Parses and processes audio streams, with improved logic to correctly handle
+	single, compliant audio streams to prevent re-encoding loops.
 	"""
 	ffmpeg_audio_options: List[str] = []
 	all_skippable = True
 
-	best_stream = None
-	prev_default_idx = None
+	# --- Stage 1: Analyze Streams ---
 	extracted_data = []
+	best_english_stream_candidate = None
+	original_default_stream_info = None
 
-	# Analyze streams
-	for idx, audio_stream in enumerate(streams):
-		codec_name = audio_stream.get("codec_name", "unknown")
-		channels = int(audio_stream.get("channels", -1))
-		bitrate = int(audio_stream.get("bit_rate", 0))
-		language = audio_stream.get("tags", {}).get("language", "und")
-		disposition = audio_stream.get("disposition", {})
-		dispo_default = int(disposition.get("default", 0))
-		handler_name = audio_stream.get("tags", {}).get("handler_name", "Unknown")
-		sample_rate = audio_stream.get("sample_rate", "N/A")
+	for idx, audio_strm in enumerate(streams):
+		s_data = {
+			"input_idx": idx,
+			"codec_name": audio_strm.get("codec_name", "unknown").lower(),
+			"channels": int(audio_strm.get("channels", 0)),
+			"bitrate": int(audio_strm.get("bit_rate", 0)),
+			"language": audio_strm.get("tags", {}).get("language", "und"),
+			"original_deflt": bool(audio_strm.get("disposition", {}).get("default", 0)),
+			"will_be_output_default": False
+		}
+		extracted_data.append(s_data)
+		if s_data["original_deflt"]:
+			original_default_stream_info = s_data
+		if s_data["language"] == Default_lng:
+			if best_english_stream_candidate is None or s_data["channels"] > best_english_stream_candidate.get("channels", 0):
+				best_english_stream_candidate = s_data
 
-		extracted_data.append({
-			"codec_name": codec_name,
-			"channels": channels,
-			"bitrate": bitrate,
-			"language": language,
-			"dispo_default": dispo_default,
-			"handler_name": handler_name,
-			"sample_rate": sample_rate
-		})
-		if dispo_default:
-			prev_default_idx = idx
+	# --- Stage 2: Determine Default Stream ---
+	stream_to_make_default = best_english_stream_candidate or \
+							(extracted_data[0] if len(extracted_data) == 1 else None) or \
+							original_default_stream_info or \
+							(extracted_data[0] if extracted_data else None)
 
-		# Pick best English by channels then bitrate
-		if language == "eng":
-			if (best_stream is None
-				or channels > best_stream["channels"]
-				or (channels == best_stream["channels"] and bitrate > best_stream["bitrate"])):
-				best_stream = extracted_data[-1]
+	if stream_to_make_default:
+		stream_to_make_default["will_be_output_default"] = True
+		# Only consider changing the default flag a modification if there are MULTIPLE streams.
+		# If there's only one stream, it will be default anyway, so we don't need to process the file for this.
+		if len(extracted_data) > 1 and not stream_to_make_default["original_deflt"]:
+			all_skippable = False
 
-	# Assign disposition & generate ffmpeg commands
-	for idx, data in enumerate(extracted_data):
-		copy_codec = (
-			data["codec_name"] in ("aac", "vorbis", "mp3", "opus")
-			and data["channels"] <= 8
+	# --- Stage 3: Generate FFmpeg Commands ---
+	output_audio_idx = 0
+	for data in extracted_data:
+		input_idx = data["input_idx"]
+		codec = data["codec_name"]
+		channels = data["channels"]
+		lang = data.get("language", "und")
+		is_original_default = data["original_deflt"]
+
+		is_compliant = (
+			(codec == 'eac3' and channels == 6) or
+			(codec == 'aac' and channels <= 6)
 		)
-		stream_opts = ["-map", f"0:a:{idx}"]
 
-		if copy_codec:
-			stream_opts.extend([f"-c:a:{idx}", "copy"])
+		stream_opts = ["-map", f"0:a:{input_idx}"]
+		log_action = ""
+
+		if is_compliant:
+			stream_opts.extend([f"-c:a:{output_audio_idx}", "copy"])
+			log_action = "=> Copy (Compliant)"
 		else:
-			# re-encode to e.g. libvorbis
-			stream_opts.extend([f"-c:a:{idx}", "libvorbis", "-q:a", "8"])
+			all_skippable = False # Re-encoding is always a modification
+			if channels >= 6:
+				stream_opts.extend([f"-c:a:{output_audio_idx}", "eac3", f"-b:a:{output_audio_idx}", "640k"])
+				log_action = "=> Re-encode to E-AC3 640k"
+			else:
+				stream_opts.extend([f"-c:a:{output_audio_idx}", "aac", f"-q:a:{output_audio_idx}", "2"])
+				log_action = "=> Re-encode to AAC (VBR q:2)"
+				if channels > 2:
+					stream_opts.extend([f"-ac:a:{output_audio_idx}", "2"])
+					log_action += " [Stereo Mixdown]"
 
-		# Update metadata if needed
-		if data["handler_name"] != "SoundHandler":
-			stream_opts.extend([
-				f"-metadata:s:a:{idx}",
-				"handler_name=SoundHandler"
-			])
-
-		# Disposition
-		if data == best_stream:
-			stream_opts.extend([f"-disposition:a:{idx}", "default"])
-			if prev_default_idx is None or best_stream != extracted_data[prev_default_idx]:
-				all_skippable = False
+		log_disposition = ""
+		if data["will_be_output_default"]:
+			stream_opts.extend([f"-disposition:a:{output_audio_idx}", "default"])
+			log_disposition = "|Is new default"
 		else:
-			stream_opts.extend([f"-disposition:a:{idx}", "none"])
+			stream_opts.extend([f"-disposition:a:{output_audio_idx}", "0"])
+			if is_original_default:
+				log_disposition = "|Was default (now cleared)"
 
 		ffmpeg_audio_options.extend(stream_opts)
 
-		msg = (
-			f"|<A:{idx:2}>|{data['codec_name']:^8}|"
-			f"Br:{data['bitrate']:>7}|{data['language']}|"
-			f"Frq:{data['sample_rate']:>6}|Ch:{data['channels']}|"
-			f"Dis:{data['dispo_default']}|Handler:{data['handler_name']}"
-		)
-		# Additional notes
-		if data["dispo_default"]:
-			msg += "|Was default"
-		if data == best_stream:
-			msg += "|Is new default"
+		bitrate = data["bitrate"]
+		msg = (f"|<A:{input_idx:2}>|{codec:^8}|{lang:<3}|Br:{bitrate:>7}|"
+			   f"Ch:{channels}|Dis:{int(is_original_default)}| {log_action}{log_disposition}")
 		print(f"\033[92m    {msg}\033[0m")
+		output_audio_idx += 1
 
-	# Decide skip
-	skip_audio = (
-		len(streams) == 1
-		or (best_stream and prev_default_idx is not None and best_stream == extracted_data[prev_default_idx])
-	)
-	if skip_audio:
-		all_skippable = True
-		logger.info("Skipping Audio")
-		print("   .Skip: Audio")
+	if all_skippable:
+		print("    .Skip: Audio")
+		return [], True
 
-	if de_bug:
-		logger.debug("Audio opts: %s", ffmpeg_audio_options)
-
-	return ffmpeg_audio_options, all_skippable
+	return ffmpeg_audio_options, False
 
 ###############################################################################
 #                           PARSE SUBTITLES
 ###############################################################################
-# Example: Some global or previously defined variable
-#Keep_langua = ["eng", "spa", "fre"]  # Adjust to your needs
+# These two functions REPLACE _score_english_sub and parse_subtl in your FFMpeg.py
+# They assume globals like Keep_langua and Default_lng are available.
 
-def _score_english_sub(codec_name: str, disposition: Dict[str, int], handler_name: str) -> int:
-	"""
-	Assign a 'score' to an English subtitle. Higher means more preferred.
-	You can customize these rules as you see fit.
-	"""
-	score = 0
-	# Prefer mov_text over subrip
-	if codec_name == "mov_text":
-		score += 3
-	elif codec_name == "subrip":
-		score += 2
+def _score_subtitle(stream: Dict[str, Any]) -> int:
+    """
+    Calculates a "quality score" for a subtitle stream based on a set of heuristics.
+    This version is more robust to handle cases where metadata is missing.
+    """
+    score = 100 # Base score for just existing as a valid candidate
+    tags = stream.get("tags", {})
+    title = tags.get("title", "").lower()
+    disposition = stream.get("disposition", {})
 
-	# Bonus points if it's forced or default in the source
-	if disposition.get("forced", 0) == 1:
-		score += 2
-	if disposition.get("default", 0) == 1:
-		score += 1
+    # Penalize "Forced" subtitles, as they are usually not the main track.
+    if disposition.get("forced", 0) == 1 or "forced" in title:
+        score -= 1000
 
-	# Bonus if the handler_name is mov_text
-	if handler_name.lower() == "mov_text":
-		score += 1
+    # Reward SDH (Subtitles for the Deaf and Hard of Hearing) for completeness.
+    if "sdh" in title or "hearing impaired" in title:
+        score += 500
 
-	return score
+    # Give a bonus to the stream that was originally the default.
+    if disposition.get("default", 0) == 1:
+        score += 200
+
+    # Use bitrate and frame count as the strongest indicators of content amount.
+    # ffprobe sometimes returns 0 for these in certain containers, but if it exists, it's valuable.
+    score += int(stream.get("bit_rate", 0))
+    score += int(stream.get("nb_frames", 0) or stream.get("nb_read_packets", 0))
+
+    return score
 
 
+@perf_monitor
 def parse_subtl(
 	streams_in: List[Dict[str, Any]],
 	de_bug: bool = False
 ) -> Tuple[List[str], bool]:
 	"""
-	Parse and extract data from subtitle streams, removing some, keeping others.
-	Enhanced so that the "best" English subtitle is forced to be default.
+    Parses, scores, and processes subtitle streams. It finds the single best
+    stream for each desired language and uses a stable command structure,
+    while also correctly determining if the section can be skipped.
 	"""
 
-	ff_subttl = []
+	# --- Pass 1: Find the single best stream for each desired language ---
+	best_streams_by_lang = {}
+	for stream in streams_in:
+		if stream.get("codec_type") != "subtitle":
+			continue
+
+		lang = stream.get("tags", {}).get("language", "und")
+		codec = stream.get("codec_name", "unknown")
+
+		if lang in Keep_langua and codec in ("subrip", "ass", "mov_text"):
+			score = _score_subtitle(stream)
+			if lang not in best_streams_by_lang or score > best_streams_by_lang[lang]['score']:
+				best_streams_by_lang[lang] = {'score': score, 'stream': stream}
+
+	streams_to_keep = sorted([data['stream'] for data in best_streams_by_lang.values()], key=lambda s: s['index'])
+	indices_to_keep = {s['index'] for s in streams_to_keep}
+
+	# --- Pass 2: Determine if any changes are needed (SKIP LOGIC) ---
 	all_skippable = True
 
-	# First, find the "best" English subtitle (highest score).
-	best_eng_idx = -1
-	best_eng_score = float("-inf")
+	# Count the number of original streams that are text-based and in our keep languages
+	original_candidate_count = sum(1 for s in streams_in if s.get("codec_type") == "subtitle" and s.get("tags", {}).get("language", "und") in Keep_langua and s.get("codec_name") in ("subrip", "ass", "mov_text"))
 
-	for idx, this_sub in enumerate(streams_in):
-		# Extract fields we'll need for scoring
-		codec_name =	this_sub.get("codec_name", "unknown?")
-		disposition =	this_sub.get("disposition", {"forced": 0, "default": 0})
-		tags =			this_sub.get("tags", {})
-		handler_name =	tags.get("handler_name", "Unknown")
-		language =		tags.get("language", "und")
+	# If we are reducing the number of streams (e.g., from 2 english to 1), we can't skip.
+	if len(streams_to_keep) != original_candidate_count:
+		all_skippable = False
+	else:
+		# If the stream count is the same, check if their properties are already perfect.
+		best_eng_stream = best_streams_by_lang.get(Default_lng, {}).get('stream')
+		for stream in streams_to_keep:
+			is_default = stream.get('disposition', {}).get('default', 0)
 
-		# Only compute a score if it's subrip/mov_text AND English
-		if codec_name in ("subrip", "mov_text") and language == "eng":
-			s = _score_english_sub(codec_name, disposition, handler_name)
-			if s > best_eng_score:
-				best_eng_score = s
-				best_eng_idx = idx
+			# All kept streams must already be 'mov_text'.
+			if stream.get('codec_name') != 'mov_text':
+				all_skippable = False; break
 
-	#
-	# Now do the main pass: keep/remove subtitles and set dispositions.
-	#
-	for idx, this_sub in enumerate(streams_in):
-		ff_sub = []
-		extra = ""
-		metadata_changed = False
+			# The best English track must be default, and no others should be.
+			if best_eng_stream and stream['index'] == best_eng_stream['index']:
+				if not is_default: all_skippable = False; break
+			elif is_default:
+				all_skippable = False; break
 
-		codec_name =	this_sub.get("codec_name", "unknown?")
-		codec_type =	this_sub.get("codec_type", "unknown?")
-		disposition =	this_sub.get("disposition", {"forced": 0, "default": 0})
-		tags =			this_sub.get("tags", {})
-		handler_name =	tags.get("handler_name", "Unknown")
-		language =		tags.get("language", "und")
-
-		if codec_name in ("hdmv_pgs_subtitle", "dvd_subtitle", "ass", "unknown?"):
-			# Remove these
-			ff_sub = ["-map", f"-0:s:{idx}"]
-			extra += f" Delete: {codec_name} {language} |"
-			all_skippable = False
-
-		elif codec_name in ("subrip", "mov_text"):
-			# Keep subrip/mov_text
-			ff_sub = ["-map", f"0:s:{idx}"]
-
-			if handler_name != "mov_text":
-				extra += f" handler_name: {handler_name} -> mov_text"
-				ff_sub.extend([
-					f"-metadata:s:s:{idx}",
-					"handler_name=mov_text"
-				])
-				metadata_changed = True
-			# Is this English?
-			if language == "eng":
-				extra += f" Keep:   {codec_name} {language}|"
-
-				# If this stream is the best English one, set default
-				if idx == best_eng_idx and best_eng_idx != -1:
-					extra += "Set Default|"
-					ff_sub.extend([
-						f"-c:s:{idx}", "mov_text",
-						f"-metadata:s:s:{idx}", f"language={language}",
-						f"-disposition:s:s:{idx}", "default"
-					])
-				else:
-					# It's English but not the best
-					extra += "Not Default|"
-					ff_sub.extend([
-						f"-c:s:{idx}", "mov_text",
-						f"-metadata:s:s:{idx}", f"language={language}",
-						f"-disposition:s:s:{idx}", "0"
-					])
-
-			# If it's a non-English language we want to keep
-			elif language in Keep_langua:
-				extra += f" Keep:   {codec_name} {language}"
-				ff_sub.extend([
-					f"-c:s:{idx}", "mov_text",
-					f"-metadata:s:s:{idx}", f"language={language}",
-					f"-disposition:s:s:{idx}", "0"
-				])
-
+	# --- Logging ---
+	for stream in streams_in:
+		if stream.get("codec_type") == "subtitle":
+			lang = stream.get("tags", {}).get("language", "und")
+			codec = stream.get("codec_name", "unknown")
+			if stream['index'] in indices_to_keep:
+				data = next((d for d in best_streams_by_lang.values() if d['stream']['index'] == stream['index']), None)
+				if data:
+					extra_msg = "|Set as Best Default" if best_streams_by_lang.get(Default_lng, {}).get('stream') == stream else ""
+					msg = f"|<S:{stream['index']:2}>|{codec:^8}|{lang:3}| => Keep BEST for lang (Score: {int(data['score'])}){extra_msg}"
+					print(f"\033[94m    {msg}\033[0m")
 			else:
-				# Remove any other languages not in Keep_langua
-				ff_sub = ["-map", f"-0:s:{idx}"]
-				extra += f" Delete: {codec_name} {language} X"
+				msg = f"|<S:{stream['index']:2}>|{codec:^8}|{lang:3}| => Remove"
+				print(f"\033[90m    {msg}\033[0m")
 
-			# Handler name fix
-
-		# Otherwise, remove unrecognized formats (if any)
-		else:
-			ff_sub = ["-map", f"-0:s:{idx}"]
-			extra += f" Delete: {codec_name} {language} X"
-			all_skippable = False
-
-		# Build the debug message in your original style
-		msg = (
-			f"|<S:{idx:2}>|{codec_name[:8]:^8}|{codec_type[:8]}|"
-			f"{language:3}|Disp: default={disposition.get('default',0)}, forced={disposition.get('forced',0)}|"
-			f"{extra}"
-		)
-		print(f"\033[94m    {msg}\033[0m")
-
-		ff_subttl += ff_sub
-		if metadata_changed:
-			all_skippable = False
-
-	# Force mov_text for all kept subtitles (global setting)
-	ff_subttl.extend(["-c:s", "mov_text"])
-
-	# If we ended up removing everything, all_skippable might be True
 	if all_skippable:
-		logger.info("Skipping Subtitles")
-		print("   .Skip: Subtitle")
+		print("    .Skip: Subtitle section is already compliant.")
+		return [], True
 
-	return ff_subttl, all_skippable
+	# --- Pass 3: If not skippable, generate commands using YOUR WORKING structure ---
+	ff_subttl = []
+
+	# 1. Map all the streams we decided to keep.
+	for stream in streams_to_keep:
+		ff_subttl.extend(["-map", f"0:{stream['index']}"])
+
+	# 2. Set dispositions for the MAPPED streams by their new output index.
+	output_sub_idx = 0
+	for stream in streams_to_keep:
+		if best_streams_by_lang.get(Default_lng, {}).get('stream') == stream:
+			ff_subttl.extend([f"-disposition:s:{output_sub_idx}", "default"])
+		else:
+			ff_subttl.extend([f"-disposition:s:{output_sub_idx}", "0"])
+		output_sub_idx += 1
+
+	# 3. Add a SINGLE, GLOBAL codec command at the end. THIS PREVENTS THE CRASH.
+	if streams_to_keep:
+		ff_subttl.extend(["-c:s", "mov_text"])
+
+	return ff_subttl, False
 
 ###############################################################################
 #                           PARSE EXTRA DATA
@@ -773,28 +689,25 @@ def parse_extrd(
 	"""
 	Parse data streams. Usually we discard them, or at least we map them carefully.
 	"""
-	ff_data = []
-	skip_all = True
-	for idx, data_stream in enumerate(streams_in):
-		codec_name = data_stream.get("codec_name", "")
-		codec_long_name = data_stream.get("codec_long_name", "")
-		codec_type = data_stream.get("codec_type", "")
-		tags = data_stream.get("tags", {})
-		handler_name = tags.get("handler_name", "Unknown")
-
-		msj = f"    |<D:{idx:2}>|{codec_name:^8}| {codec_long_name:<9}| {codec_type:^11} | {handler_name}"
+	if not streams_in: return [], True
+	"""Parses and removes all data streams."""
+	ff_data =[]
+	for idx, d in enumerate(streams_in):
+		codec_name		= d.get('codec_name','?')
+		tags			= d.get("tags", {})
+		handler_name	= tags.get("handler_name", "?")
+		msj = f"\033[90m    |<D:{idx:2}>|{codec_name:^8}|"
 		if handler_name == 'SubtitleHandler':
-			msj += "|Keep Subtitle|"
-			print(msj)
-			print ("   .Skip: Data")
+#			print("   .Skip: Extradata")
+			msj += f" |Keep Subtitle |"
+			print ( msj + "\033[0m")
 			return [], True
+		print ( msj + "\033[0m")
 
-		# Potential logic: keep or remove
 		ff_dd = ["-map", f"-0:d:{idx}"]
 		ff_data += ff_dd
-		# If you do something special with data, put it here
+	return ff_data, True
 
-	return ff_data, skip_all
 
 ###############################################################################
 #                        PARSE FORMAT / MAIN PARSER
@@ -818,11 +731,11 @@ def parse_frmat(
 		raise ValueError(f"'streams' not found in metadata:\n{json.dumps(metadata, indent=2)}")
 
 	filename =       _format.get("filename", "No_file_name")
-	size =          int(float(_format.get("size", 0)))
-	duration =      int(float(_format.get("duration", 0.0)))
-	bitrate =       int(_format.get("bit_rate", 0))
-	nb_streams =    int(_format.get("nb_streams", 0))
-	nb_programs =   int(_format.get("nb_programs", 0))
+	size =           int(float(_format.get("size", 0)))
+	duration =       int(float(_format.get("duration", 0.0)))
+	bitrate =        int(_format.get("bit_rate", 0))
+	nb_streams =     int(_format.get("nb_streams", 0))
+	nb_programs =    int(_format.get("nb_programs", 0))
 
 	tags =           _format.get("tags",{})
 	f_comment =     tags.get("comment",	"No_Comment")
@@ -837,19 +750,7 @@ def parse_frmat(
 		total_frames=0
 	)
 
-	# For logging
-	summary_msg = (
-		f"Title={title} | "
-		f"Size={hm_sz(size)} | "
-		f"Bitrate={hm_sz(bitrate)} | "
-		f"Length={hm_time(duration)} | "
-		f"Streams={nb_streams} | "
-		f"Programs={nb_programs}"
-	)
-	logger.info("parse_frmat: %s", summary_msg)
-
 	# Build stream groups
-	from collections import defaultdict
 	streams_by_type = defaultdict(list)
 	for s in _streams:
 		codec_type = s.get("codec_type", "?")
@@ -862,82 +763,74 @@ def parse_frmat(
 
 	# Also build a stream_counts dict for your console print
 	stream_counts = {
-		"Strms": nb_streams,
-		"V": len(video_streams),
-		"A": len(audio_streams),
-		"S": len(subtl_streams),
-		"D": len(datax_streams),
-		"Prog": nb_programs,
+		"Strms": nb_streams, "V": len(video_streams), "A": len(audio_streams),
+		"S": len(subtl_streams), "D": len(datax_streams),"Prog": nb_programs,
 	}
 
 	# Summaries for console
-	summary_msg = (
+	fmrt_msj = (
 		f"    |=Title|{title}|\n"
 		f"    |<FRMT>|Size: {hm_sz(size)}|Bitrate: {hm_sz(bitrate)}|Length: {hm_time(duration)}|"
 	)
-	summary_msg += ''.join([f"{key}:{count}|" for key, count in stream_counts.items() if count != 0])
-	print(f"\033[96m{summary_msg}\033[0m")
+	fmrt_msj += ''.join([f"{count}:{key}|" for key, count in stream_counts.items() if count != 0])
+	print(f"\033[96m{fmrt_msj}\033[0m")
 
-	# Skip logic
-	fnam, ext = os.path.splitext(os.path.basename(input_file))
-	skip_it = (fnam == title and ext == ".mp4" and f_comment == Skip_key)
-
-	if skip_it:
-		print(  "   .Skip: Format")
-	elif fnam != title :
-		print (f"   .NOK Name:\n     Is: {title}\n     Sb: {fnam}")
-	elif f_comment != Skip_key :
-		print (f"   .NOK Skip:  {f_comment} != {Skip_key}")
-		# XXX: Avoid Key # XXX:
-#		skip_it = True
-	else :
-		print(f"   !{title} ? {fnam} {f_comment}")
-
-	# Parse video
+	# --- STEP 1: PERFORM FULL ANALYSIS OF ALL COMPONENTS ---
 	ff_com = []
+
 	v_skip = True
 	if video_streams:
-		# We set context.vid_width / context.vid_height from the first video stream
 		first_vid = video_streams[0]
 		context.vid_width	= first_vid.get("width", 2)
 		context.vid_height	= first_vid.get("height", 1)
-
-		v_cmd, v_skip = parse_video(video_streams, context, de_bug, skip_it)
+		v_cmd, v_skip = parse_video(video_streams, context, de_bug, False)
 		ff_com.extend(v_cmd)
 	else:
-		logger.warning("No Video in: %s", input_file)
+		print (f"No Video in: {input_file}")
 		time.sleep(2)
 		return [], True
 
-	# Parse audio
 	a_skip = True
 	if audio_streams:
 		a_cmd, a_skip = parse_audio(audio_streams, de_bug)
 		ff_com.extend(a_cmd)
 	else:
-		logger.warning("No Audio in: %s", input_file)
+		print (f"No Audio in: {input_file}")
 		time.sleep(2)
 		return [], True
 
-	# Parse subtitles
 	s_skip = True
 	if subtl_streams:
 		s_cmd, s_skip = parse_subtl(subtl_streams, de_bug)
 		ff_com.extend(s_cmd)
 	else:
-		# Try external subtitles?
 		s_cmd, s_skip = add_subtl_from_file(input_file, de_bug)
 		ff_com.extend(s_cmd)
 
-	# Parse data
 	d_skip = True
 	if datax_streams:
 		d_cmd, d_skip = parse_extrd(datax_streams, de_bug)
 		ff_com.extend(d_cmd)
-		# we might do skip logic, etc.
 
-	# Combine skip logic
-	final_skip = skip_it and v_skip and a_skip and s_skip and d_skip
+	# --- STEP 2: MAKE THE FINAL, INTELLIGENT SKIP DECISION ---
+
+	# First, check if all components meet the current rules.
+	all_components_ok = v_skip and a_skip and s_skip and d_skip
+
+	# Now, check if the file was previously processed.
+	already_processed = (f_comment == Skip_key)
+
+	# The final decision: Skip only if the file was already processed AND all components are still OK.
+	final_skip = already_processed and all_components_ok
+
+	# Provide clear feedback on the decision
+	if final_skip:
+		print("   .Skip: File was already processed and all components meet current rules.")
+	elif already_processed and not all_components_ok:
+		print("   .Process: File was processed before, but some components no longer meet current rules.")
+	elif not already_processed:
+		print("   .Process: New file, processing required.")
+
 	return ff_com, final_skip
 
 ###############################################################################
@@ -949,10 +842,10 @@ def add_subtl_from_file(input_file: str, de_bug: bool) -> Tuple[List[str], bool]
 	Searches for a subtitle file in the same directory as the input file.
 	Returns a (list_of_subtitle_args, skip_flag).
 	"""
-	directory = os.path.dirname(input_file)
+	print(f"    No Subtitle in: {input_file}")
 	largest_file = None
 	extensions = [".srt", ".ass", ".sub"]
-
+	directory = os.path.dirname(input_file)
 	for file in os.listdir(directory):
 		if any(file.endswith(ext) for ext in extensions):
 			filepath = os.path.join(directory, file)
@@ -961,7 +854,7 @@ def add_subtl_from_file(input_file: str, de_bug: bool) -> Tuple[List[str], bool]
 
 	if largest_file:
 		if de_bug:
-			logger.debug("Found external subtitle: %s", largest_file)
+			print (f"Found external subtitle: {largest_file}")
 		# If you want to auto-add:
 		# ff_sub = ["-i", largest_file, "-map", "1:0", "-c:s", "mov_text"]
 		# return ff_sub, False
@@ -969,7 +862,7 @@ def add_subtl_from_file(input_file: str, de_bug: bool) -> Tuple[List[str], bool]
 		return [], True
 	else:
 		if de_bug:
-			logger.debug("No external subtitle found.")
+			print ("No external subtitle found.")
 	return [], True
 
 ###############################################################################
@@ -981,7 +874,7 @@ def parse_finfo(input_file: str, metadata: Dict[str, Any], de_bug: bool = False)
 	High-level entry point that uses parse_frmat to get the combined ffmpeg command & skip flag.
 	"""
 	if not input_file or not metadata:
-		logger.error("parse_finfo: missing file or metadata")
+		print("parse_finfo: missing file or metadata")
 		return [], True
 
 	ff_run_cmd, skip_it = parse_frmat(input_file, metadata, de_bug)
@@ -997,7 +890,7 @@ regex_dict = {
 	"frame":   re.compile(r"frame=\s*([0-9]+)"),
 	"speed":   re.compile(r"speed=\s*([0-9\.]+)"),
 	"size":    re.compile(r"size=\s*([0-9]+)"),
-	"time":    re.compile(r"time=\S([0-9:]+)"),
+	"time":    re.compile(r"time=([0-9:.]+)"),  # Updated
 	"fps":     re.compile(r"fps=\s*([0-9]+)")
 }
 
@@ -1019,16 +912,17 @@ def calculate_eta(regx_val: dict, sp_float: float) -> str:
 	Depends on global 'glb_vidolen' (total video length in seconds).
 	"""
 	try:
-		hh, mm, ss = 0, 0, 0
-		if "time" in regx_val:
-			hh, mm, ss = map(int, regx_val["time"].split(":"))
-		a_sec = hh * 3600 + mm * 60 + ss
-
+		time_str = regx_val.get("time", "00:00:00.00")
+		parts = time_str.split(".")
+		hh, mm, ss = map(int, parts[0].split(":"))
+		fractional = float("0." + parts[1]) if len(parts) > 1 else 0.0
+		a_sec = hh * 3600 + mm * 60 + ss + fractional
+#		glb_vidolen = 0
 		# 'glb_vidolen' is assumed to be defined globally
-		dif = abs(glb_vidolen - a_sec)
-		eta = round(dif / sp_float) if sp_float else 9999
-
-		mints, secs = divmod(int(eta), 60)
+		dif = max(glb_vidolen - a_sec, 0.0)
+		eta = dif / sp_float if sp_float > 0 else 9999.0
+		eta = round(eta)
+		mints, secs = divmod(eta, 60)
 		hours, mints = divmod(mints, 60)
 		return f"{hours:02d}:{mints:02d}:{secs:02d}"
 	except Exception as e:
@@ -1108,7 +1002,7 @@ def show_progrs(line_to: str, sy: str, de_bug: bool = False) -> bool:
 	elif any(x in line_to for x in ["muxing overhead:", "global headers:"]):
 #		Done: [out#0/mp4 @ 0000026f47d68e80] video:603557KiB audio:181972KiB subtitle:82KiB other streams:0KiB global headers:14KiB muxing overhead: 0.504575%
 		line_to = line_to.rstrip('\r\n')  # Remove all trailing '\r' and '\n'
-		print(f"    | Done: {line_to[31:]} |  ")
+		print(f"   .Done: {line_to[31:]} |  ")
 		return -1
 
 	# 6) Otherwise, return True to continue reading lines
@@ -1131,7 +1025,7 @@ def matrix_it(
 	We use FFmpeg's 'select' filter to pick frames and 'tile' filter to arrange them.
 	The result is a single image (e.g., .png).
 	"""
-	logger.info("matrix_it: creating a %dx%d collage for %s", columns, rows, input_file)
+	if de_bug : print(f"matrix_it: creating a {columns}x{rows} collage for {input_file}")
 	# e.g. glb_totfrms, vid_width
 	base_name, _ = os.path.splitext(os.path.basename(input_file))
 	out_file = base_name + "_matrix" + ext
@@ -1148,10 +1042,10 @@ def matrix_it(
 		"-y", out_file
 	]
 	if run_ffm(cmd):
-		logger.info("Matrix collage created: %s", out_file)
+		if de_bug : print(f"Matrix collage created: {out_file}")
 		return True
 	else:
-		logger.error("Failed to create matrix collage.")
+		print("Failed to create matrix collage.")
 		return False
 
 @perf_monitor
@@ -1160,7 +1054,7 @@ def speed_up(input_file: str, factor: float = 4.0, de_bug: bool = False) -> Opti
 	Create a 'factor'x speed version of the input video using FFmpeg filters.
 	E.g., factor=4.0 => 4x speed (25% the original duration).
 	"""
-	logger.info("speed_up: input=%s factor=%.2f", input_file, factor)
+	if de_bug : print(f"speed_up: input={input_file} factor={factor:.2f}")
 	# Generate output file name
 	base_name, _ = os.path.splitext(os.path.basename(input_file))
 	out_file = base_name + f"_speed{int(factor)}x.mp4"
@@ -1182,10 +1076,10 @@ def speed_up(input_file: str, factor: float = 4.0, de_bug: bool = False) -> Opti
 		"-y", out_file
 	]
 	if run_ffm(cmd, de_bug=de_bug):
-		logger.info("Speeded-up file created: %s", out_file)
+		if de_bug : print(f"Speeded-up file created: {out_file}")
 		return out_file
 	else:
-		logger.error("Failed to speed-up file.")
+		print("Failed to speed-up file.")
 		return None
 
 @perf_monitor
@@ -1194,7 +1088,7 @@ def video_diff(file1: str, file2: str, de_bug: bool = False) -> Optional[str]:
 	Visually compare two videos by showing the pixel difference (blend=all_mode=difference).
 	Produces an output diff.mp4 or something similar.
 	"""
-	logger.info("video_diff: comparing %s vs %s", file1, file2)
+	if de_bug : print(f"video_diff: comparing {file1} vs {file2}")
 	base_name, _ = os.path.splitext(os.path.basename(file1))
 	out_file = base_name + "_diff.mp4"
 	cmd = [
@@ -1208,10 +1102,10 @@ def video_diff(file1: str, file2: str, de_bug: bool = False) -> Optional[str]:
 		"-y", out_file
 	]
 	if run_ffm(cmd, de_bug=de_bug):
-		logger.info("Difference file created: %s", out_file)
+		if de_bug : print(f"Difference file created: {out_file}")
 		return out_file
 	else:
-		logger.error("Failed to create difference file.")
+		print("Failed to create difference file.")
 		return None
 
 @perf_monitor
@@ -1226,7 +1120,7 @@ def short_ver(
 	Make a short version of the input file, starting at 'start' timecode,
 	for 'duration'. Example: short_ver('in.mp4', start="00:00:30", duration="00:01:00")
 	"""
-	logger.info("short_ver: input=%s start=%s duration=%s", input_file, start, duration)
+	if de_bug : print(f"short_ver: input={input_file} start={start} duration={duration}")
 	base_name, _ = os.path.splitext(os.path.basename(input_file))
 	out_file = base_name + "_short.mp4"
 	cmd = [
@@ -1239,10 +1133,10 @@ def short_ver(
 		"-y", out_file
 	]
 	if run_ffm(cmd, de_bug=de_bug):
-		logger.info("Short version created: %s", out_file)
+		if de_bug : print(f"Short version created: {out_file}")
 		return out_file
 	else:
-		logger.error("Failed to create short version.")
+		print("Failed to create short version.")
 		return None
 
 ###############################################################################
@@ -1261,15 +1155,15 @@ def main():
 
 	# 2) If skip_it, do nothing
 	if skip_it:
-		logger.info("Skipping entire file: %s", input_file)
+		if de_bug : print(f"Skipping entire file: {input_file}")
 		return
 
 	# 3) Otherwise, run ffmpeg
 	out_file = ffmpeg_run(input_file, ff_run_cmd, skip_it, execu=ffmpeg, de_bug=False)
 	if out_file:
-		logger.info("Output file: %s", out_file)
+		if de_bug : print(f"Output file: {out_file}")
 	else:
-		logger.warning("No output created.")
+		print("No output created.")
 
 if __name__ == "__main__":
 	print ("Testing")

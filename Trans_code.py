@@ -20,9 +20,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from FFMpeg import *
 from My_Utils import copy_move, hm_sz, hm_time, Tee
 
-# from sklearn.cluster import DBSCAN
-
-#Root = r"F:\Media"
+Root = r"C:\\Users\\Geo\\Desktop\\downloads"
+#Root = r"F:\BackUp\_Adlt"
+#Root = r"F:\Media\Movie"
 #Root = r"F:\Media\TV"
 
 MultiThread = False  # XXX: It is set to True in the scan_folder # XXX:
@@ -183,11 +183,14 @@ def process_file(file_info, cnt, fl_nmb):
 	saved, procs, skipt, errod = 0, 0, 0, 0
 	skip_it = False
 
-	file_p = file_info['path']
-	file_s = file_info['size']
-	ext = file_info['extension']
-	jsn_ou = file_info['metadata']
+	file_p	= file_info['path']
+	file_s	= file_info['size']
+	ext		= file_info['extension']
+	jsn_ou	= file_info['metadata']
 
+	# XXX:
+	de_bug = False # DEBUG
+	# XXX:
 	# Is it a file ?
 	if os.path.isfile(file_p):
 		#   print(f'\n{file_p}\n{hm_sz(file_s)}')
@@ -202,7 +205,6 @@ def process_file(file_info, cnt, fl_nmb):
 			input("File name too long > 333")
 
 		try:
-			#   de_bug = True # DEBUG:
 			all_good, skip_it = parse_finfo(file_p, jsn_ou, de_bug)
 			if de_bug or ext != ".mp4":
 				skip_it = False
@@ -218,6 +220,9 @@ def process_file(file_info, cnt, fl_nmb):
 				procs += 1
 			elif not skip_it:
 				print(f"FFMPEG failed for {file_p}")
+				traceback.format_exc()
+				resp = input("Continue? (y/N): ").lower() != 'y'
+				if de_bug: exit()
 				if copy_move(file_p, Excepto, True, True):
 					time.sleep(5)
 
@@ -228,8 +233,9 @@ def process_file(file_info, cnt, fl_nmb):
 			errod += 1
 			msj = f" +: ValueError: {e}\n{os.path.dirname(file_p)}\n\t{os.path.basename(file_p)}\t{hm_sz(file_s)}\nMoved"
 			print(msj)
-			if de_bug:
-				input('Next')
+			traceback.format_exc()
+			resp = input("Continue? (y/N): ").lower() != 'y'
+			if de_bug: exit()
 			if copy_move(file_p, Excepto, True, True):
 				print("Done")
 			else:
@@ -239,8 +245,9 @@ def process_file(file_info, cnt, fl_nmb):
 			errod += 1
 			msj = f" +: Exception: {e}\n{os.path.dirname(file_p)}\n\t{os.path.basename(file_p)}\t{hm_sz(file_s)}\nCopied"
 			print(msj)
-			if de_bug:
-				input('Next')
+			traceback.format_exc()
+			if de_bug: exit()
+			resp = input("Continue? (y/N): ").lower() != 'y'
 			if copy_move(file_p, Excepto, False, True):
 				print("Done")
 			else:
@@ -289,7 +296,7 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 		print(f"Invalid root directory: {root}")
 		return []
 	if not isinstance(xtnsio, (tuple, list)):
-		print(f"Invalid extensions list: {xtnsio}")
+		print(f"Invalid extension list: {xtnsio}")
 		return []
 
 	file_list = []
@@ -345,7 +352,9 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 				except Exception as e:
 					print(f"\n Error processing future for:\n {f_path}\n\n {e}\n")
 					traceback.format_exc()
-					#               traceback.print_exc()
+#					traceback.print_exc()
+					resp = input("Continue? (y/N): ").lower() != 'y'
+					if de_bug: exit()
 					if copy_move(f_path, Excepto, True, True):
 						print(f"Copied to {Excepto}")
 
@@ -369,13 +378,13 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 
 		duration = float(jsn_ou.get("format", {}).get("duration", 0.0))
 		file_info = {
-			'path': f_path,
-			'name': os.path.basename(f_path),
-			'size': file_s,
+			'path':		f_path,
+			'name':		os.path.basename(f_path),
 			'extension': ext.lower(),
-			'date': mod_datetime,
-			'duration': duration,
-			'metadata': jsn_ou,
+			'size':		file_s,
+			'date':		mod_datetime,
+			'duration':	duration,
+			'metadata':	jsn_ou,
 		}
 		file_list.append(file_info)
 		if de_bug:
@@ -464,10 +473,6 @@ def main():
 			ffmpeg_version_output = f"An unexpected error occurred: {e}"
 
 		print(ffmpeg_version_output, flush=True)
-
-		# Ensure these print statements are within the 'with Tee' block
-		print(f"Scan: F:\\Media\\Movie\t  Size: 4.85 TB", flush=True)
-		print(f"scan_folder Start: {time.strftime('%H:%M:%S')}", flush=True)
 
 		if not Root:
 			print("Root directory not provided", flush=True)
