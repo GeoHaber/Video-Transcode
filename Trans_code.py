@@ -38,7 +38,7 @@ valid_sort_keys = {
 }
 # Specify sorting keys and orders
 sort_keys = [
-	('size', True),		# Sort by size True=descending False=ascending
+	('size', False),		# Sort by size True=descending False=ascending
 	('date', False),	# False = Newest First
 ]
 
@@ -65,7 +65,6 @@ def metric(x, y, size_margin, leng_margin):
 	)
 
 ##>>============-------------------<  End  >------------------==============<<##
-
 
 @perf_monitor
 def perform_clustering(data: List[List[float]], _lst: List[List]) -> None:
@@ -105,16 +104,20 @@ def perform_clustering(data: List[List[float]], _lst: List[List]) -> None:
 
 ##==============-------------------  End   -------------------==============##
 
-
 @perf_monitor
-def clean_up(input_file: str, output_file: str, skip_it: bool = False, debug: bool = False) -> int:
+def clean_up(input_file: str, output_file: str, skip_it: bool = False, de_bug: bool = False) -> int:
+	"""
+	Compares the new file to the old one and replaces it, deleting the original.
+	Includes a safety check to confirm replacement if the new file is >10% larger.
+	"""
 	msj = sys._getframe().f_code.co_name
 
-	if skip_it:
-		return 0
+	if skip_it: return 0
 
-	if debug:
-		print(f" +{msj} Start: {time.strftime('%H:%M:%S')}")
+	if de_bug: 	print(f" +{msj} Start: {time.strftime('%H:%M:%S')}")
+
+	# Define temp_file here to ensure it's in scope for the final exception block
+	temp_file = ""
 
 	try:
 		if not os.path.exists(input_file):
@@ -127,25 +130,43 @@ def clean_up(input_file: str, output_file: str, skip_it: bool = False, debug: bo
 			print(f"Output file '{output_file}' does not exist.")
 			return -1
 		output_file_size = os.path.getsize(output_file)
+		os.chmod(output_file, stat.S_IWRITE)
+
 		if output_file_size <= 100:
-			print(f"Output file '{output_file}' is too small to process.")
+			print(f"Output file '{output_file}' is too small. Deleting it and keeping original.")
+			os.remove(output_file)
 			return 0
 
-		os.chmod(output_file, stat.S_IWRITE)
 		size_diff = output_file_size - input_file_size
-		ratio = round(100 * (size_diff / input_file_size), 2) if input_file_size > 0 else 0
+		# Ensure we don't divide by zero if the original file is empty
+		ratio = round(100 * (size_diff / input_file_size), 2) if input_file_size > 0 else float('inf') if output_file_size > 0 else 0
+
 		extra = "+Bigger" if ratio > 0 else ("=Same" if size_diff == 0 else "-Lost")
-		sv_ms = f"  Size Was: {hm_sz(input_file_size)} Is: {hm_sz(output_file_size)} {extra}: {hm_sz(abs(input_file_size - output_file_size))} {ratio}% "
+		msj_ = f"   Size Was: {hm_sz(input_file_size)} Is: {hm_sz(output_file_size)} {extra}: {hm_sz(abs(size_diff))} {ratio}% "
+
+		# --- NEW: Check if the output file is significantly larger ---
+		# The condition 'ratio > 10' correctly checks if the new file is more than 10% bigger.
+		if ratio > 3 :
+			print(f"\nWARNING: New file is over >10% larger than the original.")
+			print(msj_)
+			confirm = input("Proceed to replace the original file? (y/n): ")
+			if confirm.lower() != 'y':
+				print("Operation skipped. Keeping original and deleting new file.")
+				os.remove(output_file) # Clean up the newly created file
+				return 0 # Return 0 to indicate a successful skip
+		# --- Original logic continues if the size is acceptable or user confirms ---
 
 		final_output_file = input_file if input_file.endswith('.mp4') else input_file.rsplit('.', 1)[0] + '.mp4'
 
 		random_chars = ''.join(random.sample(string.ascii_letters + string.digits, 4))
 		temp_file = input_file + random_chars + "_Delete_.old"
+
+		print(msj_.ljust(80)) # Use ljust for clean alignment
+
 		os.rename(input_file, temp_file)
 		shutil.move(output_file, final_output_file)
-
-		#   debug = True
-		if debug:
+#		de_bug = True
+		if de_bug:
 			confirm = input(f" Are you sure you want to delete {temp_file}? (y/n): ")
 			if confirm.lower() != "y":
 				print("  Not Deleted.")
@@ -154,9 +175,6 @@ def clean_up(input_file: str, output_file: str, skip_it: bool = False, debug: bo
 			print(f"  File {temp_file} Deleted.")
 
 		os.remove(temp_file)
-
-		print(sv_ms + " " * 80)
-
 		return size_diff
 
 	except FileNotFoundError as e:
@@ -165,13 +183,13 @@ def clean_up(input_file: str, output_file: str, skip_it: bool = False, debug: bo
 		print(f" {msj} Permission denied: {e}")
 	except Exception as e:
 		print(f" {msj} An error occurred: {e}")
-		if debug:
+		if de_bug:
 			input(f"? {msj} What went wrong? ")
-	if os.path.exists(temp_file):
+
+	# Rollback logic in case of error after rename
+	if temp_file and os.path.exists(temp_file):
 		shutil.move(temp_file, input_file)
-
 	return -1
-
 ##>>============-------------------  End   -------------------==============##
 
 
@@ -211,7 +229,7 @@ def process_file(file_info, cnt, fl_nmb):
 			#   print (f"\nDebug: {de_bug}  Ext: {ext}\n")
 			#   print (f"\nFile: {file_p}\nFfmpeg: {all_good}\n")
 			if skip_it:
-				print(f"\033[91m  .Skip: >|  {msj} |<\033[0m")
+				print(f"\033[91m   .Skip: >|  {msj} |<\033[0m")
 				skipt += 1
 
 			all_good = ffmpeg_run(file_p, all_good, skip_it, ffmpeg, de_bug)
@@ -287,7 +305,7 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 	"""
 	str_t = time.perf_counter()
 	msj = f"{sys._getframe().f_code.co_name} Start: {time.strftime('%H:%M:%S')}"
-#	print(f"DEBUG: scan_folder called with root = {root}", flush=True)  # Add this debug print
+#	print(f"DEBUG: scan_folder called with root = {root}", flush=True)  # Add this de_bug print
 	print(f"Scan: {root}\tSize: {hm_sz(get_tree_size(root))}\n{msj}", flush=True)
 	spinner = Spinner(indent=0)
 	#   print(f"Extensions to scan: {xtnsio}")
@@ -437,7 +455,6 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str
 	return sorted_list
 
 ##==============-------------------  End   -------------------==============##
-
 
 def main():
 	str_t = time.perf_counter()

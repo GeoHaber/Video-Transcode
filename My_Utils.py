@@ -6,6 +6,7 @@ import	sys
 import	time
 import	json
 import	shutil
+import	filecmp
 import	ctypes
 import  psutil
 import	random
@@ -18,7 +19,6 @@ import	logging
 
 from	typing		import Union
 from	functools	import wraps
-
 #  DECORATORS
 
 
@@ -518,38 +518,79 @@ def hm_time(timez) -> str:
 ##==============-------------------   End   -------------------==============##
 
 
+
 def copy_move(src: str, dst: str, keep_original: bool = True, verbose: bool = False) -> bool:
 	"""
-	Copy or move a file.
+	Copies or moves a file, with a check and confirmation prompt before overwriting an existing file.
 
 	Parameters:
 	- src (str): Source file path.
-	- dst (str): Destination file path.
-	- keep_original (bool, optional): If True, keep the original file.
-	- verbose (bool optional): If True print message. Defaults to False.
+	- dst (str): Destination file or directory path.
+	- keep_original (bool, optional): If True, copies the file. If False, moves it. Defaults to True.
+	- verbose (bool, optional): If True, prints detailed messages. Defaults to False.
+
+	Returns:
+	- bool: True if the operation was successful or successfully skipped, False on error.
 	"""
-#	if verbose:
-#		print(f"\ncopy_move called with src: {src}, dst: {dst}, keep_original: {keep_original}\n")
+	if not os.path.exists(src):
+		print(f"Error: Source file not found at '{src}'")
+		return False
 
-	if os.path.exists(dst) and os.path.samefile(src, dst):
-		if not keep_original:
-			os.remove(src)
+	# If the destination is a directory, construct the full destination path
+	if os.path.isdir(dst):
+		dst = os.path.join(dst, os.path.basename(src))
+
+	# --- OVERWRITE CHECK ADDED ---
+	# First, check if the destination path already exists.
+	if os.path.exists(dst):
+		# If src and dst point to the exact same file, handle as before.
+		if os.path.samefile(src, dst):
 			if verbose:
-				print(f"Source {src} and destination {dst} are the same. Source has been deleted.")
+				print(f"Source '{os.path.basename(src)}' and destination are the same file. No action needed.")
+			# If it's a 'move' operation on the same file, it's effectively a delete of the source, which is confusing.
+			# Best to just confirm nothing needs to be done.
+			return True
+
+		# The destination file exists but is a different file.
+		# Compare the content of the source and destination files.
+		if filecmp.cmp(src, dst, shallow=False):
+			# Files are identical.
+			prompt_msg = f"Destination file exists and is identical. Overwrite? (y/n): "
 		else:
-			if verbose:
-				print(f"{src} and {dst} are the same, nothing to do.")
-		return True
+			# Files are different.
+			prompt_msg = f"WARNING: Destination file exists with DIFFERENT content. Overwrite? (y/n): "
 
+		if verbose:
+			print(prompt_msg, end='')
+
+		# Get user confirmation
+		response = input().lower()
+
+		# If the user does not respond with 'y', skip the operation.
+		if response != 'y':
+			if verbose:
+				print("Skipping operation.")
+			return True # Operation successfully skipped.
+
+		if verbose:
+			print("User approved overwrite.")
+
+	# --- ORIGINAL LOGIC PROCEEDS FROM HERE ---
 	try:
+		# Determine the action and the shutil function to use.
 		(action, transfer_func) = ("_Copy", shutil.copy2) if keep_original else ("_Move", shutil.move)
+
+		# Perform the copy or move.
 		transfer_func(src, dst)
+
 		if verbose:
 			print(f"{action}: {src}\n   To: {dst}")
 		return True
+
 	except (PermissionError, IOError, OSError) as err:
 		print(f"\ncopy_move Error: {err}\n   Action: {action}: {src} to {dst}")
 		return False
+
 ##==============-------------------   End   -------------------==============##
 
 
