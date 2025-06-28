@@ -21,7 +21,6 @@ from	typing		import Union
 from	functools	import wraps
 #  DECORATORS
 
-
 # XXX: color codes: https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
 '''
 \033[91m : Red
@@ -439,40 +438,15 @@ class Color:
 ##	XXX: Functions :XXX
 ##==============-------------------  Start  -------------------==============##
 
-from typing import Union
-
-def hm_sz(numb: Union[str, int, float], suffix: str = "B") -> str:
-	"""
-	Convert a size to human-readable format with a customizable suffix.
-
-	Parameters:
-	- numb (str, int, float): The size to convert.
-	- suffix (str): The suffix to append to units (e.g., "B" for bytes, "g" for grams).
-
-	Returns:
-	- str: Human-readable size with sign and the given suffix.
-
-	Example:
-	- hm_sz(1024, "g") -> "1.00 Kg"
-	"""
-	# Handle different input types for numb
-	if isinstance(numb, str):
-		numb = float(numb)
-	elif not isinstance(numb, (int, float)):
-		raise ValueError("Invalid type for numb. Must be str, int, or float.")
-
-	sign = '-' if numb < 0 else ''
-	numb = abs(numb)  # Convert to absolute value for calculations
-
+def hm_sz(bits: float, suffix: str = "b", base: int = 1000) -> str:
+	sign = '-' if bits < 0 else ''
+	bits = abs(bits)
 	units = ['', 'K', 'M', 'G', 'T', 'P', 'E']
-
 	for unit in units:
-		if numb < 1024.0:
-			return f"{sign}{numb:.2f} {unit}{suffix}"
-		numb /= 1024.0
-
-	return f"{sign}{numb:.2f} {units[-1]}{suffix}"
-##==============-------------------   End   -------------------==============##
+		if bits < base:
+			return f"{sign}{bits:.2f} {unit}{suffix}"
+		bits /= base
+	return f"{sign}{bits:.2f} {units[-1]}{suffix}"
 
 def hm_time(timez) -> str:
 	"""Converts time in seconds to a human-readable format."""
