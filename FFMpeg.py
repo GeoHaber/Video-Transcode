@@ -640,7 +640,7 @@ def parse_audio(streams_in: List[Dict[str, Any]],
 
 		can_skip_processing = (not any_recode_needed) and (not any_disposition_change_needed)
 		if can_skip_processing:
-				logs.append("\033[92m   .Skip: Audio streams are optimal (format and disposition).\033[0m")
+				logs.append("\033[92m  .Skip: Audio streams are optimal (format and disposition).\033[0m")
 
 		return opts, can_skip_processing, logs
 
@@ -899,7 +899,7 @@ def parse_subtl(sub_streams: List[Dict[str, Any]],
 
 		can_skip_processing = (not any_codec_change_needed) and (not any_disposition_change_needed)
 		if can_skip_processing:
-				logs.append("\033[94m  .Skip: Subtitles are already correct (format + disposition).\033[0m")
+				logs.append("\033[94m  .Skip: Subtitles correct (format + disposition).\033[0m")
 
 		return ffmpeg_commands, can_skip_processing, logs
 
@@ -1036,6 +1036,30 @@ def parse_finfo(input_file: str,
 			final_skip = False
 			suf = Path(input_file).suffix or "(none)"
 			log_messages.append(f"\033[96m   .Container convert required: {suf} → .mp4 \033[0m")
+		# --- <<< ADD THIS NEW SECTION BELOW >>> ---
+		# Check if we need to force processing just for the hvc1 tag
+		if final_skip and TAG_HEVC_AS_HVC1 and not needs_container_change:
+			# This block runs only if:
+			# 1. The file was going to be skipped (all skip flags were True).
+			# 2. hvc1 tagging is enabled in the config.
+			# 3. It's already an MP4 file (no container change needed).
+			try:
+				# Find the first video stream
+				primary_video = next((s for s in s_by_type.get("video", []) if s.get("codec_type") == "video"), None)
+				# Check if it's HEVC
+				if primary_video and str(primary_video.get("codec_name", "")).lower() == "hevc":
+					# If we found an HEVC stream in an MP4 that was going to be skipped,
+					# force it to be processed. The Stage 2 remux will add the tag.
+					final_skip = False # Override the skip decision
+					log_messages.append("\033[96m   !Overriding skip: Forcing remux to ensure 'hvc1' tag for HEVC in MP4.\033[0m")
+					# Optionally update the plan_info stored in SRIK
+					plan_info["skip_processing"] = False
+					plan_info.setdefault("reason_override", "hvc1 tag check")
+			except Exception as e:
+				# Log errors during this check but don't stop the process
+				log_messages.append(f"\033[93m   ?!Warning: Error during hvc1 tag check: {e}\033[0m")
+		# --- <<< END OF NEW SECTION >>> ---
+
 		if final_skip:
 			if not needs_container_change:
 				log_messages.append("\033[96m  .Skip: File compliant, already processed, and has skip key.\033[0m")
@@ -1800,70 +1824,59 @@ def short_ver( # Renamed back
 	input_path: Path,
 	output_path: Path,
 	task_id: str,
-	# --- Hints & Config ---
-	# --- MODIFIED: Renamed param for clarity ---
 	duration: Optional[float], # Hint for total video length
 	clip_duration: float = ADDITIONAL_SHORT_DUR, # How long the clip should be
 	start_skip_percent: float = ADDITIONAL_SHORT_SKP_STRT # % to skip first
 ) -> bool:
-	"""Creates a short clip using stream copy, skipping a start percentage."""
-	with print_lock: print(f"   [{task_id}] Creating {clip_duration:.1f}s short version (skipping {start_skip_percent:.1f}%)...")
+	"""Creates a short clip by re-encoding, skipping a start percentage.""" # <-- Docstring updated
+	with print_lock: print(f"   [{task_id}] Creating {clip_duration:.1f}s short version (re-encoding, skipping {start_skip_percent:.1f}%)...")
 
-	# --- MODIFIED: Use new param name 'duration' ---
 	if duration is None or duration <= 0:
 		with print_lock: print(f"   [{task_id}] ERROR: Cannot calculate start skip without total duration."); return False
 	if clip_duration <= 0 or not (0 <= start_skip_percent < 100):
 		with print_lock: print(f"   [{task_id}] ERROR: Invalid clip duration or skip percentage."); return False
 
-	# Calculate start time based on percentage
-	# --- MODIFIED: Use new param name 'duration' ---
 	start_time_sec = duration * (start_skip_percent / 100.0)
-	# Calculate end time
-	end_time_sec = start_time_sec + clip_duration
-
+	actual_clip_duration = clip_duration
 	# Ensure end time doesn't exceed total duration
-	# --- MODIFIED: Use new param name 'duration' ---
-	if end_time_sec > duration:
-		end_time_sec = duration
+	if start_time_sec + clip_duration > duration:
+		actual_clip_duration = duration - start_time_sec
 		# Prevent negative/zero duration if skip is too large or times coincide exactly
-		if start_time_sec >= end_time_sec - 0.01: # Use small tolerance
+		if actual_clip_duration <= 0.01: # Use small tolerance
 			with print_lock: print(f"   [{task_id}] ERROR: Start skip ({start_skip_percent}%) results in zero or negative duration clip."); return False
-
 	cmd = [ FFMPEG, "-y", "-hide_banner",
-			"-i", str(input_path),         # Input first for accuracy
-			"-ss", str(start_time_sec),    # Seek accurately after input
-			"-to", str(end_time_sec),      # Cut accurately using end time
-			"-map", "0",                   # Copy all streams
-			"-c", "copy",                  # Stream copy
+			# Input seeking is faster but less accurate for start, okay for re-encode
+			# "-ss", str(start_time_sec), # Optional: Seek before input for speed
+			"-i",		str(input_path),
+			"-ss",		str(start_time_sec),    # Seek accurately after input
+			"-t",		str(actual_clip_duration), # Use duration '-t' instead of '-to'
+			"-map",		"0:v:0?",              # Map first video stream if it exists
+			"-map",		"0:a:0?",              # Map first audio stream if it exists
+			# Video Encoding Settings (same as speed_up for consistency)
+			"-c:v",		"libx265",
+			"-preset",	ADDITIONAL_PRESET,
+			"-crf",		str(ADDITIONAL_QUALITY_CRF),
+			"-tag:v",	"hvc1",
+			# Audio Settings (copying audio is usually fine and faster)
+			"-c:a",		"copy",                # Try copying audio first
 			"-movflags", "+faststart",
-			"-avoid_negative_ts", "make_zero", # Handle potential timestamp issues
+			"-avoid_negative_ts", "make_zero", # Still potentially useful
 			str(output_path) ]
 
-	# --- MODIFIED: Pass 'clip_duration' as the duration for this task ---
-	rc, tail = _run_ffmpeg_live(cmd, task_id=task_id, timeout=REMUX_TIMEOUT_S, duration=clip_duration)
+	rc, tail = _run_ffmpeg_live(cmd, task_id=task_id, timeout=REMUX_TIMEOUT_S * 2, duration=actual_clip_duration) # Allow more time for encode
 	success = False
 	if rc != 0:
-		harmless = ["Invalid data found when processing input", "Error while decoding stream"]
-		if not any(e in (tail or "") for e in harmless):
-			errlog_block(str(input_path), f"short_ver failed [{task_id}]", " ".join(cmd) + f"\n\n{tail or ''}")
-		else:
-			with print_lock: print(f"   [{task_id}] WARNING: Non-fatal error during short_ver (common).")
-			# Check if output is valid despite error
-			if output_path.exists() and output_path.stat().st_size > 1024: success = True
-			else:
-				with print_lock: print(f"   [{task_id}] ERROR: short_ver output missing/empty.")
+		errlog_block(str(input_path), f"short_ver (re-encode) failed [{task_id}]", " ".join(cmd) + f"\n\n{tail or ''}")
 	else:
-		success = True # RC 0 means success
-
-	# Final check even on success=True
-	if success and (not output_path.exists() or output_path.stat().st_size <= 100):
-		errlog_block(str(input_path), f"short_ver post-check failed [{task_id}]", f"FFmpeg rc=0 but output file missing or empty.\nCmd: {' '.join(cmd)}")
-		success = False
-
+		# Check output file exists and has reasonable size
+		if output_path.exists() and output_path.stat().st_size > 100:
+			success = True
+		else:
+			with print_lock: print(f"   [{task_id}] ERROR: short_ver output missing/empty after successful encode.")
+			errlog_block(str(input_path), f"short_ver post-check failed [{task_id}]", f"FFmpeg rc=0 but output file missing or empty.\nCmd: {' '.join(cmd)}")
 	return success
 
 # --- Artifact Orchestrator ---
-
 def _post_encode_artifacts(
 	final_file_path: Path,
 	output_info: Dict[str, Any], # Info probed by clean_up
@@ -1884,14 +1897,14 @@ def _post_encode_artifacts(
 		with print_lock: print(f"   [{task_id_base}] Skipping artifacts: Missing output info.")
 		return
 
-	with print_lock: print(f"--- [{task_id_base}] Creating Additional Versions for {final_file_path.name} ---")
+	with print_lock: print(f"-> [{task_id_base}] Creating Additional Versions for {final_file_path.name} ---")
 	base_name = final_file_path.stem
 
 	# --- Extract needed info ---
 	duration	= output_info.get("dur_out")
 	width		= output_info.get("w_enc")
 	height		= output_info.get("h_enc")
-	has_audio = output_info.get("ach_out", 0) > 0
+	has_audio	= output_info.get("ach_out", 0) > 0
 
 	# --- Generate Matrix ---
 	matrix_path = final_file_path.with_name(f"{base_name}_matrix.png")
@@ -1976,7 +1989,7 @@ def _post_encode_artifacts(
 			try: errlog_block(str(final_file_path), "short_ver artifact exception", f"{e}\n{traceback.format_exc()}")
 			except Exception: pass
 
-	with print_lock: print(f"--- [{task_id_base}] Finished Additional Versions ---")
+	with print_lock: print(f"-> [{task_id_base}] Finished Additional Versions ---")
 
 # --- MODIFIED: Added 'task_id' param with a default value ---
 def clean_up(input_file: str, Outpt_fl: str, skip_it: bool = False, de_bug: bool = False, task_id: str = "CLEAN") -> int:
@@ -2144,7 +2157,7 @@ def clean_up(input_file: str, Outpt_fl: str, skip_it: bool = False, de_bug: bool
 			backup_made = False
 			try: # --- Inner Try for Rename/Move/Artifacts ---
 				# 1) Rename original -> backup (with retry)
-				_retry_with_lock_info(
+				retry_with_lock_info(
 					action_desc=f"Renaming original to backup\n   {in_path} -> {backup}",
 					func=in_path.rename,
 					args=(backup,),
@@ -2155,7 +2168,7 @@ def clean_up(input_file: str, Outpt_fl: str, skip_it: bool = False, de_bug: bool
 				if de_bug:
 					with print_lock: print(f"DEBUG: Renamed original to backup: {backup.name}")
 				# 2) Move new output -> final (with retry)
-				_retry_with_lock_info(
+				retry_with_lock_info(
 					action_desc=f"Moving new file to final location\n   {out_path} -> {final_path}",
 					func=shutil.move,
 					args=(str(out_path), str(final_path)),
@@ -2187,7 +2200,7 @@ def clean_up(input_file: str, Outpt_fl: str, skip_it: bool = False, de_bug: bool
 						# Log artifact errors but don't fail the main cleanup
 						try: errlog_block(str(final_path), "post artifacts exception", f"{art_e}\n{traceback.format_exc()}")
 						except Exception: pass
-			except Exception as replace_err: # Catch errors from _retry_with_lock_info or fsync/unlink
+			except Exception as replace_err: # Catch errors from retry_with_lock_info or fsync/unlink
 				reject_reason = f"File Replacement Failure: {replace_err}"
 				with print_lock: print(f"ERROR during replacement: {replace_err}")
 				# Attempt Rollback if backup was made
@@ -2196,7 +2209,7 @@ def clean_up(input_file: str, Outpt_fl: str, skip_it: bool = False, de_bug: bool
 						if final_path and final_path.exists(): # Check if final_path was assigned
 							final_path.unlink(missing_ok=True)
 						# Restore original back into place (retry too)
-						_retry_with_lock_info(
+						retry_with_lock_info(
 							action_desc=f"Restoring backup after failure\n   {backup} -> {in_path}",
 							func=backup.rename,
 							args=(in_path,),
@@ -2241,7 +2254,7 @@ def clean_up(input_file: str, Outpt_fl: str, skip_it: bool = False, de_bug: bool
 			if backup_made and backup and backup.exists() and not in_path.exists():
 				try:
 					# Use retry logic for final restore attempt as well
-					_retry_with_lock_info(
+					retry_with_lock_info(
 						action_desc=f"Restoring backup during final cleanup\n   {backup} -> {in_path}",
 						func=backup.rename,
 						args=(in_path,),

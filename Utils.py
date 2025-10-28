@@ -265,7 +265,7 @@ def errlog_block(input_file: str, header: str, body: str, max_lines: int = ERROR
 	except Exception:
 		print("\033[93m[warn]\033[0m could not write error log to script folder.")
 
-def _retry_with_lock_info(
+def retry_with_lock_info(
 	action_desc: str,
 	func: callable,
 	args: tuple,

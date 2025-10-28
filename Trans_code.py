@@ -21,9 +21,8 @@ import FFMpeg
 	# Imports all constants, globals (locks, etc.), and basic helpers
 from Utils import *
 
-ROOT_DIR			= r"C:\\Users\\Geo\\Desktop\\downloads"     # Main directory to scan
-ROOT_DIR			= r"F:\\Media\\Movie"     # Main directory to scan
-EXCEPT_DIR			= r"C:\\_temp"                           # Directory for failed/corrupt files
+ROOT_DIR			= r"C:\\Video Files Location"     # Main directory to scan
+EXCEPT_DIR			= r"C:\\Temporary Directory "     # Directory for failed/corrupt files
 # -----------------------------------------------------------------------------
 # File Scanning
 # -----------------------------------------------------------------------------
@@ -169,7 +168,7 @@ def process_file(file_info: Dict[str, Any], idx: int, total: int, task_id: str) 
 			# else: errod remains 1 from parse failure
 			# --- ARTIFACTS ON SKIP (Optional) ---
 			if ADD_ADDITIONAL and FORCE_ARTIFACTS_ON_SKIP and errod == 0: # Only run if ADD_ADDITIONAL is on, force is on, and parse didn't fail
-				with print_lock: print("\033[96m  .Artifacts-on-skip: Will create artifacts from source.\033[0m")
+			#	with print_lock: print("\033[96m  .Artifacts- from source.\033[0m")
 				# We need info from the source file
 				source_info_for_artifacts = {}
 				probe_success = False
@@ -195,11 +194,11 @@ def process_file(file_info: Dict[str, Any], idx: int, total: int, task_id: str) 
 						with print_lock: print(f"   [WARN] Could not probe source '{input_path_obj.name}' for skip-artifact info: {probe_err or 'No meta/Corrupt'}")
 					# Call artifact generation using the SOURCE path and probed info (if probe worked)
 					if probe_success:
-						with print_lock: print("\n[post] (skip) Starting artifact generation from source...")
+						with print_lock: print("\n[post] Start Artifact generation from source...")
 						# Call _post_encode_artifacts from _ffmpeg
 						FFMpeg._post_encode_artifacts(input_path_obj, source_info_for_artifacts, f"{task_id}_SKIP", de_bug=de_bug)
 					else:
-						with print_lock: print("\n[post] (skip) Skipping artifact generation due to source probe failure.")
+						with print_lock: print("\n[post] (skip) Skipping Artifact source probe failure.")
 				except Exception as art_e:
 					# Log errors during artifact generation but don't fail the main skip
 					with print_lock: print(f"\n   [WARN] Error during skip-artifact generation: {art_e}")
