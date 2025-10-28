@@ -1,441 +1,393 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
+
+# --- Standard Library Imports ---
 import os
 import re
 import sys
-import stat
 import time
-import math
-import stat
 import shutil
-import psutil
-import datetime
 import traceback
-import itertools
+import threading
 
-from typing import List, Optional
-from functools import cmp_to_key
+from typing				import Any, Dict, List, Tuple
+from pathlib			import Path
+from datetime			import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# External references from your code
-from FFMpeg import *
-from My_Utils import *
+# --- Our Project Imports ---
+	# Imports the entire FFmpeg engine
+import FFMpeg
+	# Imports all constants, globals (locks, etc.), and basic helpers
+from Utils import *
 
-Root = r"C:\\Users\\Geo\\Desktop\\downloads"
-Excepto = r"C:\_temp"
-TmpF_Ex: ".mp4" 	#.png or .jpg
+ROOT_DIR			= r"C:\\Users\\Geo\\Desktop\\downloads"     # Main directory to scan
+ROOT_DIR			= r"F:\\Media\\Movie"     # Main directory to scan
+EXCEPT_DIR			= r"C:\\_temp"                           # Directory for failed/corrupt files
+# -----------------------------------------------------------------------------
+# File Scanning
+# -----------------------------------------------------------------------------
 
-MultiThread = False  # XXX: It is set to True in the scan_folder # XXX:
-de_bug = False
+def scan_folder(root: str, xtnsio: List[str], sort_keys_cfg: List, use_threads: bool,
+				max_workers: int) -> List[Dict[str, Any]]:
 
-Log_File = f"__{os.path.basename(sys.argv[0]).replace('.py','')}_{time.strftime('%Y_%j_%H-%M-%S')}.log"
-valid_sort_keys = {
-	'size':		lambda x: x['size'],
-	'date':		lambda x: x['date'],
-	'name':		lambda x: x['name'],
-	'duration':	lambda x: x['duration'],
-	'extension':lambda x: x['extension'],
-}
-# Specify sorting keys and orders
-sort_keys = [
-	('size',	True  ),	# Sort by size True=descending False=ascending
-	('date',	False ),	# False = Newest First
-]
+	print(f"Scan: {root}\n Scaning folder Sort: {sort_keys_cfg} Start: {time.strftime('%H:%M:%S')}")
+	spinner = Spinner()
+	candidates: List[str] = []
+	file_list: List[Dict[str, Any]] = []
+	for dirpath, _, files in os.walk(root):
+		for one_file in files:
+			if Path(one_file).suffix.lower() in xtnsio:
+				candidates.append(os.path.join(dirpath, one_file))
+	total = len(candidates)
+	err = 0
 
-''' Global Variables '''
-glb_totfrms = 0
-glb_vidolen = 0
-vid_width = 0
-aud_smplrt = 0
-total_size = 0
-
-##>>============-------------------< Start >------------------==============<<##
-
-def metric(x, y, size_margin, leng_margin):
-	''' used for clustering '''
-	return (
-		0 if (
-			(1 - size_margin) * y[0] <= x[0] <= (1 + size_margin) * y[0] and
-			(1 - leng_margin) * y[1] <= x[1] <= (1 + leng_margin) * y[1]
-		) else 1
-	)
-
-##>>============-------------------<  End  >------------------==============<<##
-
-def scan_folder(root: str, xtnsio: List[str], sort_keys: Optional[List[Tuple[str, bool]]] = None,
-			   do_clustering: bool = False) -> Optional[List[Dict]]:
-	"""Scans a directory for files with specified extensions, extracts information
-	in parallel, and returns a sorted list of file information.
-
-	Args:
-		root (str): Path to the root directory.
-		xtnsio (List[str]): List of file extensions (lowercase).
-		sort_keys (Optional[List[Tuple[str, bool]]]): List of tuples containing sorting keys and their orders.
-			Each tuple is in the form (key_name, descending_order), where descending_order is a boolean.
-			Valid keys are 'name', 'size', 'extension', 'date', 'duration'.
-		do_clustering (bool, optional): Enables clustering (implementation not provided). Defaults to False.
-
-	Returns:
-		Optional[List[Dict]]: A list of dictionaries containing file information.
-		None on errors.
-	"""
-	str_t = time.perf_counter()
-	msj = f"{sys._getframe().f_code.co_name} Start: {time.strftime('%H:%M:%S')}"
-#	print(f"DEBUG: scan_folder called with root = {root}", flush=True)  # Add this de_bug print
-	print(f"Scan: {root}\tSize: {hm_sz(get_tree_size(root))}\n{msj}", flush=True)
-	spinner = Spinner(indent=0)
-	#   print(f"Extensions to scan: {xtnsio}")
-
-	if not root or not isinstance(root, str) or not os.path.isdir(root):
-		print(f"Invalid root directory: {root}")
-		return []
-	if not isinstance(xtnsio, (tuple, list)):
-		print(f"Invalid extension list: {xtnsio}")
-		return []
-
-	file_list = []
-
-	def is_file_accessible(file_path):
-		try:
-			with open(file_path, 'rb') as f:
-				f.read(1)
-			return True
-		except (IOError, OSError):
-			return False
-
-	def process_files(executor=None):
-		futures = []
-		for dirpath, _, files in os.walk(root):
-			for one_file in files:
-				f_path = os.path.join(dirpath, one_file)
-				if not is_file_accessible(f_path):
-					print(f"Skipping inaccessible file: {f_path}", flush=True)
-					continue
-				file_s = os.path.getsize(f_path)
-				if file_s < 10:
-					print(f"\nRemove empty file: {f_path} Size: { file_s }", flush=True )
-					os.remove(f_path)
-				_, ext = os.path.splitext(one_file)
-				if ext.lower() in xtnsio:
-					spinner.print_spin(f" {one_file} ")
+	with ThreadPoolExecutor(max_workers=max_workers if use_threads else 1) as executor:
+		# Use the ffprobe_run from _ffmpeg
+		futures = {executor.submit(FFMpeg.ffprobe_run, p, FFPROBE, de_bug, CHECK_CORRUPTION): p for p in candidates}
+		for i, fut in enumerate(as_completed(futures)):
+			f_path = futures[fut]
+			try:
+				file_stat = os.stat(f_path)
+				if file_stat.st_size < 10:
 					try:
-						if not os.access(f_path, os.W_OK) or not (os.stat(f_path).st_mode & stat.S_IWUSR):
-							print(f"Skip read-only file: {f_path}", flush=True)
-							continue
-						elif len(f_path) < 333:
-							# Runn ffprobe to extract
-							if executor:
-								future = executor.submit(ffprobe_run, f_path)
-								futures.append((f_path, file_s, ext, future))
-							else:
-								result = ffprobe_run(f_path)
-								if result is not None:
-									handle_result(f_path, file_s, ext, result)
-						else:
-							input(f"Error process_files {f_path}: {e}", flush=True)
-							raise
+						os.remove(f_path)
+						with print_lock: print(f"\033[93m :) Removed empty file: {f_path}\033[0m")
 					except Exception as e:
-						print(f"Error process_files {f_path}: {e}", flush=True)
-						continue
-
-		if executor:
-			for f_path, file_s, ext, future in futures:
-				try:
-					jsn_ou = future.result()
-					handle_result(f_path, file_s, ext, jsn_ou)
-				except Exception as e:
-					print(f"\n Error processing future for:\n {f_path}\n\n {e}\n")
-					traceback.format_exc()
-#					resp = input("Continue? (y/N): ").lower() != 'y'
-					if de_bug: exit()
-					if copy_move(f_path, Excepto, False, False):
-						print(f"Moved to {Excepto}")
-
-		spinner.stop()  # Ensure the spinner stops
-
-	def handle_result(f_path, file_s, ext, jsn_ou):
-		"""
-		Only do something if jsn_ou is valid and has the 'format' key.
-		Otherwise, log and skip.
-		"""
-		if not jsn_ou:
-			print(f"No valid JSON returned for {f_path}. Possibly ffprobe failed.")
-			return
-
-		mod_time = os.path.getmtime(f_path)
-		try:
-			mod_datetime = datetime.datetime.fromtimestamp(mod_time)
-		except (ValueError, OSError):
-			# If Windows doesn't like the timestamp (out of range, etc.), pick a default:
-			mod_datetime = datetime.datetime(1970, 1, 1)
-
-		duration = float(jsn_ou.get("format", {}).get("duration", 0.0))
-		file_info = {
-			'path':		f_path,
-			'name':		os.path.basename(f_path),
-			'extension': ext.lower(),
-			'size':		file_s,
-			'date':		mod_datetime,
-			'duration':	duration,
-			'metadata':	jsn_ou,
-		}
-		file_list.append(file_info)
-		if de_bug:
-			print(f"Collected file info: {file_info}")
-
-	MultiThread = True
-	if MultiThread:
-		with ThreadPoolExecutor() as executor:
-			process_files(executor)
-	else:
-		process_files()
-
-	# Sorting by the key specified (name, size, extension, date)
-	if sort_keys:
-		sort_keys = [(key, descending) for key, descending in sort_keys if key in valid_sort_keys]
-		if not sort_keys:
-			sort_keys = [('size', True)]
-	else:
-		sort_keys = [('size', True)]
-
-	key_funcs = [valid_sort_keys[key] for key, _ in sort_keys]
-	sort_orders = [descending for _, descending in sort_keys]
-
-	#   sorted_list = sorted(_lst, key=lambda item: item[1],    reverse=sort_order)
-	def compare_items(a, b):
-		for key_func, descending in zip(key_funcs, sort_orders):
-			a_key = key_func(a)
-			b_key = key_func(b)
-			if a_key != b_key:
-				if descending:
-					return -1 if a_key > b_key else 1
+						with print_lock: print(f"\033[93m !! Failed to remove file {f_path}: {e}\033[0m")
+					continue
+			except Exception:
+				continue
+			try:
+				metadata, is_corrupted, error_msg = fut.result()
+				if error_msg:
+					err += 1
+					with print_lock: print(f"\n\033[93m Warning: Could not probe '{f_path}':\nMeta Data{metadata}\nErr: {error_msg}. Skipping.\033[0m")
+				elif is_corrupted:
+					err += 1
+					with print_lock: print(f"\n\033[93m Error: File '{f_path}'\n{metadata}\n Moving to{EXCEPT_DIR}.\033[0m")
+					# copy_move is in utils.py
+					copy_move(f_path, EXCEPT_DIR, move=True)
 				else:
-					return -1 if a_key < b_key else 1
-		return 0  # All keys are equal
+					try:
+							file_mtime = datetime.fromtimestamp(file_stat.st_mtime)
+					except Exception as ts_err:
+						with print_lock: print(f"\n\033[93m[WARNING] Invalid timestamp for {f_path}: {ts_err}. Using default date.\033[0m")
+						file_mtime = datetime.fromtimestamp(0)
+					file_list.append({
+							"path": 	f_path,
+							"metadata":	metadata,
+							"size":		file_stat.st_size,
+							"name":		Path(f_path).name,
+							"date":		file_mtime,
+							"duration": float((metadata.get("format", {}) or {}).get("duration", 0.0) or 0.0)
+							})
+			except Exception as e:
+				err += 1
+				error_details = traceback.format_exc()
+				with print_lock: print(f"\n\033[91m[CRITICAL] Unhandled error scanning {f_path}: {e}\033[0m \n {error_details}")
+				try:
+					# errlog_block is in utils.py
+					errlog_block(f_path, "scan_folder CRITICAL error", error_details)
+				except Exception as log_e:
+					with print_lock: print(f"  (Additionally, failed to write to error log: {log_e})")
+				copy_move(f_path, EXCEPT_DIR, move=True)
 
-	sorted_list = sorted(file_list, key=cmp_to_key(compare_items))
+			spinner.print_spin(f"[scan] {100*(i+1)/total if total > 0 else 0:>3.1f}% Done - {err:>3} Err ✓ {os.path.basename(f_path)}")
 
-	# Prepare sorting order string for display
-	order_str = ', '.join([f"{key} ({'Desc' if desc else 'Asc'})" for key, desc in sort_keys])
+	spinner.stop()
+	if err > 0:
+		with print_lock: print(f"\033[93mWarning:\033[0m {err} files failed scanning (see per-file logs in script folder).")
 
-	end_t = time.perf_counter()
-	print(f"\nSort by: {order_str}\nScan Done: {time.strftime('%H:%M:%S')}\tTotal: {hm_time(end_t - str_t)}\n")
-	return sorted_list
-##>>============-------------------<  End  >------------------==============<<##
+	Sort_key = {
+		"size": lambda x: x["size"],
+		"date": lambda x: x["date"],
+		"name": lambda x: x["name"],
+		"duration": lambda x: x["duration"],
+		}
 
+	for key, descending in reversed(sort_keys_cfg):
+		if key in Sort_key:
+			file_list.sort(key=Sort_key[key], reverse=descending)
 
-def perform_clustering(data: List[List[float]], _lst: List[List]) -> None:
-	size_margin = 0.01
-	leng_margin = 0.01
-	clustering = DBSCAN(eps=0.01, min_samples=2, metric=metric, metric_params={'size_margin': size_margin, 'leng_margin': leng_margin}).fit(
-		data)
-	labels = clustering.labels_
+	return file_list
 
-	clusters = {}
-	for i, label in enumerate(labels):
-		if label not in clusters:
-			clusters[label] = []
-		clusters[label].append(_lst[i])
+# -----------------------------------------------------------------------------
+# Single File Orchestrator
+# -----------------------------------------------------------------------------
 
-	components = os.path.normpath(Root).split(os.sep)
-	use = components[2]
-	filename = f'_Zposiduble_{use}_.txt'
+def process_file(file_info: Dict[str, Any], idx: int, total: int, task_id: str) -> Tuple[int, int, int, int]:
+	"""
+	Processes a single media file: parse, execute FFmpeg, validate/replace,
+	and optionally create additional versions (even on skip).
+	Returns: (saved_bytes, processed, skipped, errors)
+	"""
+	# Use datetime.now()
+	str_t = datetime.now()
+	saved = procs = skipt = errod = 0
+	file_p = file_info["path"]
+	input_path_obj = Path(file_p) # Keep original path object
+	out_file_temp: Optional[str] = None # Path from ffmpeg_run
+	final_file_path: Optional[Path] = None # Path after clean_up moves it
+	# --- <<< ADD THIS FIX TO STOP INFINITE LOOP >>> ---
+	file_stem = input_path_obj.stem
+	# Check if the file stem ends with one of our artifact suffixes
+	if file_stem.endswith("_matrix") or \
+		file_stem.endswith(f"_short_{int(ADDITIONAL_SHORT_DUR)}s") or \
+		re.search(r"_fast_[\d\.]+x$", file_stem): # Matches _fast_2.0x, _fast_3.0x etc.
+		with print_lock:
+			print(f"\nSkipping file (already an artifact): {input_path_obj.name}")
+		skipt = 1
+		# This is a clean skip, so we return immediately
+		end_t = datetime.now(); duration_sec=(end_t-str_t).total_seconds()
+		with print_lock: print(f" -End: [{end_t.strftime('%H:%M:%S')}]\tTotal: {hm_tm(duration_sec)}")
+		return saved, procs, skipt, errod
+	with print_lock:
+		print(f"\n{file_p}\n +Start: [{str_t.strftime('%H:%M:%S')}]  File: {idx} of {total}, {hm_sz(file_info['size'])}")
 
-	with open(filename, "w", encoding='utf-8') as file:
-		file.write(f"Posible Doubles in {Root}!\n")
-		for label, cluster in clusters.items():
-			sizes = [info[1] for info in cluster]
-			lengths = [info[5] for info in cluster]
-			min_size, max_size = min(sizes), max(sizes)
-			min_length, max_length = min(lengths), max(lengths)
-
-			print(f'\nCluster {label} [Files: {len(cluster)}) | Size = Min: {hm_sz(min_size)} Max: {hm_sz(max_size)} | Leng = Min:{int(min_length)} Max:{int(max_length)} ]')
-			if 2 <= len(cluster) <= 4:
-				file.write(f"\nCluster {label} => [Size Max: {hm_sz(max_size)} | Lenght: {int(min_length)} ]\n")
-				for info in cluster:
-					print(f"+{info[0]}")
-					file.write(f"{info[0]}\n")
-			else:
-				for info in cluster:
-					print(f'[Size: {hm_sz(info[1])}\t\tLen: {int(info[5])}] - {info[0]}')
-
-##==============-------------------  End   -------------------==============##
-
-
-def process_file(file_info, cnt, fl_nmb):
-	msj = sys._getframe().f_code.co_name
-	str_t = time.perf_counter()
-
-	saved, procs, skipt, errod = 0, 0, 0, 0
-	skip_it = False
-
-	file_p	= file_info['path']
-	file_s	= file_info['size']
-	ext		= file_info['extension']
-	jsn_ou	= file_info['metadata']
-
-	# XXX:
-	de_bug = False # DEBUG
-	# XXX:
-	# Is it a file ?
-	if os.path.isfile(file_p):
-		#   print(f'\n{file_p}\n{hm_sz(file_s)}')
-		print(f'\n{file_p}\n {ordinal(cnt)} of {fl_nmb}, {ext}, {hm_sz(file_s)}')
-		if len(file_p) < 333:
-			free_disk_space = shutil.disk_usage(Root).free
-			free_temp_space = shutil.disk_usage(r"C:").free
-			if free_disk_space < (3 * file_s) or free_temp_space < (3 * file_s):
-				print(f'\nNot enough space on Drive: {hm_sz(free_disk_space)} free')
-				input("Not enough space on Drive")
-		else:
-			input("File name too long > 333")
-
+	try: # --- Main Try Block ---
+		# 1. Parse file info
 		try:
-			all_good, skip_it = parse_finfo(file_p, jsn_ou, de_bug)
-			if de_bug or ext != ".mp4":
-				skip_it = False
-			#   print (f"\nDebug: {de_bug}  Ext: {ext}\n")
-			#   print (f"\nFile: {file_p}\nFfmpeg: {all_good}\n")
-			if skip_it:
-				print(f"\033[91m   .Skip: >|  {msj} |<\033[0m")
-				skipt += 1
-
-			all_good = ffmpeg_run(file_p, all_good, skip_it, ffmpeg, de_bug)
-			if all_good:
-				saved += clean_up(file_p, all_good, skip_it, de_bug) or 0
-				procs += 1
-			elif not skip_it:
-				print(f"Ffmpeg failed for: {file_p}")
-				traceback.format_exc()
-				resp = input("Continue? (y/N): ").lower() != 'y'
-				if de_bug: exit()
-				if copy_move(file_p, Excepto, False, False):
-					time.sleep(5)
-
-		except ValueError as e:
-			if e.args[0] == "Skip It":
-				print(f"Go on: {e}")
-				return saved, procs, skipt, errod
-			errod += 1
-			msj = f" +: ValueError: {e}\n{os.path.dirname(file_p)}\n\t{os.path.basename(file_p)}\t{hm_sz(file_s)}\nMoved"
-			print(msj)
-			traceback.format_exc()
-			resp = input("Continue? (y/N): ").lower() != 'y'
-			if de_bug: exit()
-			if copy_move(file_p, Excepto, False, False):
-				print("Handeled ValueError")
-			else:
-				input("ValueError WTF")
-
+			# Call parse_finfo from _ffmpeg
+			ff_run_cmd, skip_it, captured_output_lines = FFMpeg.parse_finfo(file_p, file_info["metadata"], de_bug)
 		except Exception as e:
-			errod += 1
-			msj = f" +: Exception: {e}\n{os.path.dirname(file_p)}\n\t{os.path.basename(file_p)}\t{hm_sz(file_s)}\nCopied"
-			print(msj)
-			traceback.format_exc()
-			if de_bug: exit()
-			resp = input("Continue? (y/N): ").lower() != 'y'
-			if copy_move(file_p, Excepto, False, False):
-				print("Handeled Exception")
+			# If parse fails, treat as skipped with error
+			skip_it = True
+			errod = 1 # Mark error during parse
+			captured_output_lines = [f"CRITICAL ERROR IN parse_finfo for {file_p}: {e}", traceback.format_exc()]
+			try:
+				errlog_block(file_p, "parse_finfo CRITICAL error", traceback.format_exc())
+			except Exception: pass
+
+		for ln in captured_output_lines:
+			with print_lock: print(ln)
+		# 2. Handle Skip (or Parse Error)
+		if skip_it:
+			# Determine status based on whether parse failed
+			if errod == 0: # Normal skip
+				skipt = 1
+			# else: errod remains 1 from parse failure
+			# --- ARTIFACTS ON SKIP (Optional) ---
+			if ADD_ADDITIONAL and FORCE_ARTIFACTS_ON_SKIP and errod == 0: # Only run if ADD_ADDITIONAL is on, force is on, and parse didn't fail
+				with print_lock: print("\033[96m  .Artifacts-on-skip: Will create artifacts from source.\033[0m")
+				# We need info from the source file
+				source_info_for_artifacts = {}
+				probe_success = False
+				try:
+					# Probe the original file to get info needed for artifacts
+					# Call ffprobe_run from _ffmpeg
+					meta, is_corrupted, probe_err = FFMpeg.ffprobe_run(file_p, check_corruption=False) # Probe the source 'file_p'
+					if not probe_err and not is_corrupted and meta:
+						fmt = meta.get("format", {})
+						streams = meta.get("streams", [])
+						v_stream = next((s for s in streams if s.get("codec_type") == "video"), {})
+						a_stream = next((s for s in streams if s.get("codec_type") == "audio"), {})
+						source_info_for_artifacts = {
+							"dur_out": float(fmt.get("duration", 0.0)), # Use source duration
+							"w_enc": int(v_stream.get("width", 0)),     # Use source dimensions
+							"h_enc": int(v_stream.get("height", 0)),
+							"ach_out": int(a_stream.get("channels", 0)),# Check if source has audio channels
+							# Add "has_audio_on_source" for compatibility if needed by _post_encode_artifacts
+							"has_audio_on_source": int(a_stream.get("channels", 0)) > 0
+						}
+						probe_success = True
+					else:
+						with print_lock: print(f"   [WARN] Could not probe source '{input_path_obj.name}' for skip-artifact info: {probe_err or 'No meta/Corrupt'}")
+					# Call artifact generation using the SOURCE path and probed info (if probe worked)
+					if probe_success:
+						with print_lock: print("\n[post] (skip) Starting artifact generation from source...")
+						# Call _post_encode_artifacts from _ffmpeg
+						FFMpeg._post_encode_artifacts(input_path_obj, source_info_for_artifacts, f"{task_id}_SKIP", de_bug=de_bug)
+					else:
+						with print_lock: print("\n[post] (skip) Skipping artifact generation due to source probe failure.")
+				except Exception as art_e:
+					# Log errors during artifact generation but don't fail the main skip
+					with print_lock: print(f"\n   [WARN] Error during skip-artifact generation: {art_e}")
+					try:
+						errlog_block(file_p, "Skip Artifact Generation Error", f"{art_e}\n{traceback.format_exc()}")
+					except Exception: pass
+			# --- END ARTIFACTS ON SKIP ---
+			# Clean up SRIK for skipped file
+			try:
+				FFMpeg.srik_clear(file_p)
+			except Exception: pass
+			# Return directly from skip block
+			# (Finally block will still execute for timing)
+			return saved, procs, skipt, errod
+		# 3. Main processing logic (only runs if not skip_it)
+		# Call ffmpeg_run from _ffmpeg
+		out_file_temp = FFMpeg.ffmpeg_run(file_p, ff_run_cmd, file_info["duration"], skip_it, de_bug, task_id)
+		if not out_file_temp:
+			# 3a. FFmpeg failed
+			errod = 1
+			with print_lock: print(f"ffmpeg_run failed for: {file_p}")
+			copy_move(file_p, EXCEPT_DIR, move=True)
+			# Return directly after handling failure
+			# (Finally block will still execute)
+			return saved, procs, skipt, errod
+		else:
+			# 3b. FFmpeg succeeded, run cleanup/validation
+			# Call clean_up from _ffmpeg
+	#		savings_or_err = _ffmpeg.clean_up(file_p, out_file_temp, skip_it=False, de_bug=de_bug)
+			savings_or_err = FFMpeg.clean_up(file_p, out_file_temp, skip_it=False, de_bug=de_bug, task_id=task_id)
+			if savings_or_err < 0:
+				# clean_up reported an error/rejection
+				errod = 1
+				# clean_up already logged, deleted temp file, and potentially restored backup
+				# Return directly
+				# (Finally block will still execute)
+				return saved, procs, skipt, errod
 			else:
-				input("Exception WTF")
+				# clean_up was successful!
+				saved = savings_or_err
+				procs = 1
+				# Return final success state
+				# (Finally block will still execute)
+				return saved, procs, skipt, errod
 
-		end_t = time.perf_counter()
-		tot_t = end_t - str_t
-		print(f"  -End: {time.strftime('%H:%M:%S')}\tTotal: {hm_time(tot_t)}")
+	except Exception as e:
+		# 4. Catch-all for any *unexpected* errors in the main try block
+		with print_lock: print(f"\n[CRITICAL] Unhandled worker error for {file_p}: {e}\n{traceback.format_exc()}")
+		saved, procs, skipt, errod = 0, 0, 0, 1 # Force error state
+		try:
+			errlog_block(file_p, "process_file CRITICAL", traceback.format_exc())
+		except Exception: pass
+		# Cleanup potentially created temp file
+		if out_file_temp and Path(out_file_temp).exists():
+			try: Path(out_file_temp).unlink(missing_ok=True)
+			except Exception: pass
+		# Try to move original to exceptions dir
+		try:
+			copy_move(file_p, EXCEPT_DIR, move=True)
+		except Exception: pass
+		# Return error state directly
+		# (Finally block will still execute)
+		return saved, procs, skipt, errod
 
-	else:
-		print(f' -Missing: {hm_sz(file_s)}\t{file_p}')
-		errod += 1
-		time.sleep(1)
+	finally:
+		# 5. This block *always* runs AFTER the try or except block finishes (and before returning)
+		# Use datetime.now()
+		end_t = datetime.now()
+		duration_sec = (end_t - str_t).total_seconds()
+		with print_lock:
+			print(f" -End: [{end_t.strftime('%H:%M:%S')}]\tTotal: {hm_tm(duration_sec)}")
+		# NOTE: SRIK clear is now handled within the specific paths (skip, cleanup success/fail)
 
+	# This line should ideally not be reached if all paths return correctly above,
+	# but serves as a fallback. It might indicate a logic error if hit.
+	# It will return the state as it was left by the try/except block.
 	return saved, procs, skipt, errod
 
-##==============-------------------  End   -------------------==============##
+# -----------------------------------------------------------------------------
+# Progress Reporter Thread
+# -----------------------------------------------------------------------------
 
-def main():
-	str_t = time.perf_counter()
-	print("sys._getframe().f_code.co_name")
-	with Tee(sys.stdout, open(Log_File, 'w', encoding='utf-8')) as qa:
-		if not Root:
-			print("Root directory not provided", flush=True)
-			return
-		if not os.path.exists(Excepto):
-			print(f"Creating dir: {Excepto}", flush=True)
-			os.mkdir(Excepto)
-		print(f"{psutil.cpu_count()} CPU's\t ¯\\_(%)_/¯", flush=True)
-		print(f"Python version: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}", flush=True)
-		print(f"Script absolute path: {os.path.abspath(__file__)}", flush=True)
-		print(f"Main Start: {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
-		print("-" * 70, flush=True)
+class ProgressReporter(threading.Thread):
+		def __init__(self, get_summary, interval: float = 2.0):
+				super().__init__(daemon=True)
+				self._get_summary = get_summary
+				self._interval = interval
+				self._stop = threading.Event()
+				self.last_lines_printed = 0
 
-		ffmpeg_version_output = ""
+		def stop(self) -> None:
+				self._stop.set()
+				clear_sequence = self.last_lines_printed * ("\033[F" + "\033[K")
+				sys.stderr.write(clear_sequence)
+				sys.stderr.flush()
 
+		def run(self) -> None:
+				while not self._stop.wait(self._interval):
+						# Call progress_get_snapshot from _ffmpeg
+						snap = FFMpeg.progress_get_snapshot()
+						q, d, ok, sk, er = self._get_summary()
+						ts = time.strftime("%H:%M:%S")
+						lines = [f"{ts} [Work Queue] ToDo:{q:<4d} Done:{d:<4d} OK:{ok:<4d} Skip:{sk:<4d} Err:{er:<4d}"]
+						for tid, st in sorted(snap.items()):
+								lines.append(f"-=>[{tid}]|Frames:{st.get('frame',0):>7}|Speed:{st.get('speed',0):>5.2f}x|{st.get('percent',0):>5.1f}%  ")
+						clear_sequence = self.last_lines_printed * ("\033[F" + "\033[K")
+						sys.stderr.write(clear_sequence + "\n".join(lines) + "\n")
+						sys.stderr.flush()
+						self.last_lines_printed = len(lines)
+
+# -----------------------------------------------------------------------------
+# Main
+# -----------------------------------------------------------------------------
+
+def main(argv: Optional[List[str]] = None) -> int:
+	strt_m = datetime.now()
+	print(f"\n+Main Start: [{time.strftime('%H:%M:%S')}]")
+	os.makedirs(EXCEPT_DIR, exist_ok=True)
+	print("-" * 70, flush=True)
+
+	for p in RUN_TMP.glob("*"):
 		try:
-			if not os.path.isfile(ffmpeg):
-				raise FileNotFoundError(f"FFmpeg not found at '{ffmpeg}'.")
-			if not os.path.isfile(ffprob):
-				raise FileNotFoundError(f"FFprobe not found at '{ffprob}'.")
+			p.unlink()
+		except Exception:
+			pass
 
-			result = SP.run([ffmpeg, "-version"], stdout=SP.PIPE, stderr=SP.PIPE)
-			if result.returncode == 0:
-				version_info = result.stdout.decode("utf-8")
-				match = re.search(r"ffmpeg version (\d+\.\d+\.\d+)", version_info)
-				if match:
-					ffmpeg_version_output = f"Ffmpeg version: {match.group(1)} "
-				else:
-					ffmpeg_version_output = f"Warning: Could not extract the desired ffmpeg version from output:\n{version_info}"
-			else:
-				ffmpeg_version_output = f"Error running ffmpeg -version:\n{result.stderr.decode('utf-8')}"
+	fl_lst = scan_folder(ROOT_DIR, File_extn, sort_keys_cfg, SCAN_PARALLEL, MAX_SCAN_WORKRS)
+	fl_nmb = len(fl_lst)
 
-		except FileNotFoundError as e:
-			ffmpeg_version_output = f"Error: {e}"
-		except Exception as e:
-			ffmpeg_version_output = f"An unexpected error occurred: {e}"
+	print("-" * 70, flush=True)
+	saved = 0
+	procs = 0
+	skipt = 0
+	errod = 0
 
-		print(ffmpeg_version_output, flush=True)
+	def get_summary() -> Tuple[int, int, int, int, int]:
+		completed = procs + skipt + errod
+		todo = fl_nmb - completed
+		return (todo, completed, procs, skipt, errod)
 
-		saved = procs = skipt = errod = total_time = 0
+	if WORK_PARALLEL and fl_nmb > 0 and MAX_WORKERS >= 1:
+		reporter = ProgressReporter(get_summary)
+		reporter.start()
+		try:
+			with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+				futures = {
+					executor.submit(process_file, fi, i + 1, fl_nmb, f"T{(i % MAX_WORKERS) + 1}"): fi
+						for i, fi in enumerate(fl_lst)
+				}
+				for future in as_completed(futures):
+					try:
+						s, p, skc, e = future.result()
+						saved += s
+						procs += p
+						skipt += skc
+						errod += e
+						msg = f":):|To_do: {fl_nmb - (procs + skipt + errod)} |OK: {procs} |Skip: {skipt} |Err: {errod} |Saved: {hm_sz(saved)} |"
+						with print_lock: print(msg)
+					except Exception as exc:
+						errod += 1
+						print(f"\n[CRITICAL] Worker for {futures[future]['path']} generated: {exc}\n{traceback.format_exc()}")
+		finally:
+			reporter.stop()
+			reporter.join(timeout=5)
+	else:
+		for i, each in enumerate(fl_lst):
+			s, p, skc, e = process_file(each, i + 1, fl_nmb, "T1")
+			saved += s
+			procs += p
+			skipt += skc
+			errod += e
+			msg = f"  |To_do: {fl_nmb - (procs + skipt + errod)}|OK: {procs} |Err: {errod} |Skipt: {skipt} |Saved: {hm_sz(saved)} |"
+			with print_lock:
+				print(msg)
 
-		fl_lst = scan_folder(Root, File_extn, sort_keys=sort_keys, do_clustering=False)
-		fl_nmb = len(fl_lst)
-		counter = itertools.count(1)
+	end_t = datetime.now()
+	total = (end_t - strt_m).total_seconds()
+	print(f"\n-Main Done: [{time.strftime('%H:%M:%S')}]\tTotal Time: [{hm_tm(total)}]")
+	print(f" Files: {fl_nmb}\tProcessed: {procs}\tSkipped : {skipt}\tErrors : {errod}\n Saved in Total: {hm_sz(saved)}\n")
 
-		def process_all_files():
-			nonlocal saved, procs, skipt, errod
-			if MultiThread:
-				with ThreadPoolExecutor(max_workers=4) as executor:
-					future_to_file = {executor.submit(process_file, each, next(counter), fl_nmb): each for each in fl_lst}
-					for future in as_completed(future_to_file):
-						each = future_to_file[future]
-						try:
-							s, p, sk, e = future.result()
-							saved += s
-							procs += p
-							skipt += sk
-							errod += e
-						except Exception as exc:
-							print(f"Generated an exception: {exc}")
-			else:
-				for each in fl_lst:
-					cnt = next(counter)
-					s, p, sk, e = process_file(each, cnt, fl_nmb)
-					saved += s
-					procs += p
-					skipt += sk
-					errod += e
+	if PAUSE_ON_EXIT:
+		try:
+			input("All Done :)")
+		except EOFError:
+			pass
+	return 0
 
-		process_all_files()
-
-		end_t = time.perf_counter()
-		total_time = end_t - str_t
-		print(f"\n Done: {time.strftime('%H:%M:%S')}\t Total Time: {hm_time(total_time)}", flush=True)
-		print(f" Files: {fl_nmb}\tProcessed: {procs}\tSkipped : {skipt}\tErrors : {errod}\n Saved in Total: {hm_sz( abs(saved) )}\n", flush=True)
-
-	input('All Done :)')
-	exit()
-##==============-------------------  End   -------------------==============##
-
-
-# Call main function
 if __name__ == "__main__":
-	main()
-##>>============-------------------<  End  >------------------==============##
+	with Tee(Log_File):
+		print (Rev)
+		sys.exit(main())
