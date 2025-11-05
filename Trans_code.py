@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+
 from __future__ import annotations
 
 # --- Standard Library Imports ---
@@ -6,7 +7,6 @@ import os
 import re
 import sys
 import time
-import shutil
 import traceback
 import threading
 
@@ -16,19 +16,23 @@ from datetime			import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- Our Project Imports ---
-	# Imports the entire FFmpeg engine
-import FFMpeg
-	# Imports all constants, globals (locks, etc.), and basic helpers
-from Utils import *
+import FFMpeg			# Imports the entire FFmpeg engine
+from Utils import *		# Imports all constants, globals (locks, etc.), and basic helpers
 
-ROOT_DIR			= r"C:\\Video Files Location"     # Main directory to scan
-EXCEPT_DIR			= r"C:\\Temporary Directory "     # Directory for failed/corrupt files
+
+Log_File = str(WORK_DIR / f"__{Path(sys.argv[0]).stem}_{time.strftime('%Y_%j_%H-%M-%S')}.log")
+
+ROOT_DIR			= r"C:\\Users\\Geo\\Desktop\\downloads"	# Main directory to scan
+#ROOT_DIR			= r"F:\\Media\\Movie"	# Main directory to scan
+
+EXCEPT_DIR			= r"C:\\_temp"							# Directory for failed/corrupt files
+sort_keys_cfg		= [("size", True), ("date", False)]		# Example: Smallest first, then newest
 # -----------------------------------------------------------------------------
 # File Scanning
 # -----------------------------------------------------------------------------
 
-def scan_folder(root: str, xtnsio: List[str], sort_keys_cfg: List, use_threads: bool,
-				max_workers: int) -> List[Dict[str, Any]]:
+def scan_folder(root: str, xtnsio: Collection[str], sort_keys_cfg: Collection, use_threads: bool, max_workers: int
+	) -> List[Dict[str, Any]]:
 
 	print(f"Scan: {root}\n Scaning folder Sort: {sort_keys_cfg} Start: {time.strftime('%H:%M:%S')}")
 	spinner = Spinner()
@@ -42,7 +46,7 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys_cfg: List, use_threads: 
 	err = 0
 
 	with ThreadPoolExecutor(max_workers=max_workers if use_threads else 1) as executor:
-		# Use the ffprobe_run from _ffmpeg
+		# Use the ffprobe_run from FFMpeg
 		futures = {executor.submit(FFMpeg.ffprobe_run, p, FFPROBE, de_bug, CHECK_CORRUPTION): p for p in candidates}
 		for i, fut in enumerate(as_completed(futures)):
 			f_path = futures[fut]
@@ -69,7 +73,7 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys_cfg: List, use_threads: 
 					copy_move(f_path, EXCEPT_DIR, move=True)
 				else:
 					try:
-							file_mtime = datetime.fromtimestamp(file_stat.st_mtime)
+						file_mtime = datetime.fromtimestamp(file_stat.st_mtime)
 					except Exception as ts_err:
 						with print_lock: print(f"\n\033[93m[WARNING] Invalid timestamp for {f_path}: {ts_err}. Using default date.\033[0m")
 						file_mtime = datetime.fromtimestamp(0)
@@ -98,13 +102,11 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys_cfg: List, use_threads: 
 	if err > 0:
 		with print_lock: print(f"\033[93mWarning:\033[0m {err} files failed scanning (see per-file logs in script folder).")
 
-	Sort_key = {
-		"size": lambda x: x["size"],
-		"date": lambda x: x["date"],
-		"name": lambda x: x["name"],
-		"duration": lambda x: x["duration"],
-		}
-
+	Sort_key = {"size":		lambda x: x["size"],
+				"date":		lambda x: x["date"],
+				"name":		lambda x: x["name"],
+				"duration": lambda x: x["duration"],
+				}
 	for key, descending in reversed(sort_keys_cfg):
 		if key in Sort_key:
 			file_list.sort(key=Sort_key[key], reverse=descending)
@@ -115,16 +117,17 @@ def scan_folder(root: str, xtnsio: List[str], sort_keys_cfg: List, use_threads: 
 # Single File Orchestrator
 # -----------------------------------------------------------------------------
 
-def process_file(file_info: Dict[str, Any], idx: int, total: int, task_id: str) -> Tuple[int, int, int, int]:
+def process_file(file_info: Dict[str, Any], idx: int, total: int, task_id: str
+	) -> Tuple[int, int, int, int]:
 	"""
 	Processes a single media file: parse, execute FFmpeg, validate/replace,
 	and optionally create additional versions (even on skip).
 	Returns: (saved_bytes, processed, skipped, errors)
 	"""
 	# Use datetime.now()
-	str_t = datetime.now()
-	saved = procs = skipt = errod = 0
-	file_p = file_info["path"]
+	str_t	= datetime.now()
+	saved	= procs = skipt = errod = 0
+	file_p	= file_info["path"]
 	input_path_obj = Path(file_p) # Keep original path object
 	out_file_temp: Optional[str] = None # Path from ffmpeg_run
 	final_file_path: Optional[Path] = None # Path after clean_up moves it
@@ -134,28 +137,23 @@ def process_file(file_info: Dict[str, Any], idx: int, total: int, task_id: str) 
 	if file_stem.endswith("_matrix") or \
 		file_stem.endswith(f"_short_{int(ADDITIONAL_SHORT_DUR)}s") or \
 		re.search(r"_fast_[\d\.]+x$", file_stem): # Matches _fast_2.0x, _fast_3.0x etc.
-		with print_lock:
-			print(f"\nSkipping file (already an artifact): {input_path_obj.name}")
+		with print_lock:	print(f"\nSkipping file (already an artifact): {input_path_obj.name}")
 		skipt = 1
 		# This is a clean skip, so we return immediately
 		end_t = datetime.now(); duration_sec=(end_t-str_t).total_seconds()
 		with print_lock: print(f" -End: [{end_t.strftime('%H:%M:%S')}]\tTotal: {hm_tm(duration_sec)}")
 		return saved, procs, skipt, errod
-	with print_lock:
-		print(f"\n{file_p}\n +Start: [{str_t.strftime('%H:%M:%S')}]  File: {idx} of {total}, {hm_sz(file_info['size'])}")
-
+	with print_lock: print(f"\n{file_p}\n +Start: [{str_t.strftime('%H:%M:%S')}]  File: {idx} of {total}, {hm_sz(file_info['size'])}")
 	try: # --- Main Try Block ---
 		# 1. Parse file info
 		try:
-			# Call parse_finfo from _ffmpeg
 			ff_run_cmd, skip_it, captured_output_lines = FFMpeg.parse_finfo(file_p, file_info["metadata"], de_bug)
 		except Exception as e:
 			# If parse fails, treat as skipped with error
 			skip_it = True
 			errod = 1 # Mark error during parse
 			captured_output_lines = [f"CRITICAL ERROR IN parse_finfo for {file_p}: {e}", traceback.format_exc()]
-			try:
-				errlog_block(file_p, "parse_finfo CRITICAL error", traceback.format_exc())
+			try:	errlog_block(file_p, "parse_finfo CRITICAL error", traceback.format_exc())
 			except Exception: pass
 
 		for ln in captured_output_lines:
@@ -174,7 +172,7 @@ def process_file(file_info: Dict[str, Any], idx: int, total: int, task_id: str) 
 				probe_success = False
 				try:
 					# Probe the original file to get info needed for artifacts
-					# Call ffprobe_run from _ffmpeg
+					# Call ffprobe_run from FFMpeg
 					meta, is_corrupted, probe_err = FFMpeg.ffprobe_run(file_p, check_corruption=False) # Probe the source 'file_p'
 					if not probe_err and not is_corrupted and meta:
 						fmt = meta.get("format", {})
@@ -182,10 +180,10 @@ def process_file(file_info: Dict[str, Any], idx: int, total: int, task_id: str) 
 						v_stream = next((s for s in streams if s.get("codec_type") == "video"), {})
 						a_stream = next((s for s in streams if s.get("codec_type") == "audio"), {})
 						source_info_for_artifacts = {
-							"dur_out": float(fmt.get("duration", 0.0)), # Use source duration
-							"w_enc": int(v_stream.get("width", 0)),     # Use source dimensions
-							"h_enc": int(v_stream.get("height", 0)),
-							"ach_out": int(a_stream.get("channels", 0)),# Check if source has audio channels
+							"dur_out":	float(fmt.get("duration", 0.0)), # Use source duration
+							"w_enc":	  int(v_stream.get("width", 0)),     # Use source dimensions
+							"h_enc":	  int(v_stream.get("height", 0)),
+							"ach_out":	  int(a_stream.get("channels", 0)),# Check if source has audio channels
 							# Add "has_audio_on_source" for compatibility if needed by _post_encode_artifacts
 							"has_audio_on_source": int(a_stream.get("channels", 0)) > 0
 						}
@@ -195,26 +193,24 @@ def process_file(file_info: Dict[str, Any], idx: int, total: int, task_id: str) 
 					# Call artifact generation using the SOURCE path and probed info (if probe worked)
 					if probe_success:
 						with print_lock: print("\n[post] Start Artifact generation from source...")
-						# Call _post_encode_artifacts from _ffmpeg
+						# Call _post_encode_artifacts from FFMpeg
 						FFMpeg._post_encode_artifacts(input_path_obj, source_info_for_artifacts, f"{task_id}_SKIP", de_bug=de_bug)
 					else:
 						with print_lock: print("\n[post] (skip) Skipping Artifact source probe failure.")
 				except Exception as art_e:
 					# Log errors during artifact generation but don't fail the main skip
 					with print_lock: print(f"\n   [WARN] Error during skip-artifact generation: {art_e}")
-					try:
-						errlog_block(file_p, "Skip Artifact Generation Error", f"{art_e}\n{traceback.format_exc()}")
+					try: errlog_block(file_p, "Skip Artifact Generation Error", f"{art_e}\n{traceback.format_exc()}")
 					except Exception: pass
 			# --- END ARTIFACTS ON SKIP ---
 			# Clean up SRIK for skipped file
-			try:
-				FFMpeg.srik_clear(file_p)
+			try: FFMpeg.srik_clear(file_p)
 			except Exception: pass
 			# Return directly from skip block
 			# (Finally block will still execute for timing)
 			return saved, procs, skipt, errod
 		# 3. Main processing logic (only runs if not skip_it)
-		# Call ffmpeg_run from _ffmpeg
+		# Call ffmpeg_run from FFMpeg
 		out_file_temp = FFMpeg.ffmpeg_run(file_p, ff_run_cmd, file_info["duration"], skip_it, de_bug, task_id)
 		if not out_file_temp:
 			# 3a. FFmpeg failed
@@ -226,14 +222,11 @@ def process_file(file_info: Dict[str, Any], idx: int, total: int, task_id: str) 
 			return saved, procs, skipt, errod
 		else:
 			# 3b. FFmpeg succeeded, run cleanup/validation
-			# Call clean_up from _ffmpeg
-	#		savings_or_err = _ffmpeg.clean_up(file_p, out_file_temp, skip_it=False, de_bug=de_bug)
+			# Call clean_up from FFMpeg
 			savings_or_err = FFMpeg.clean_up(file_p, out_file_temp, skip_it=False, de_bug=de_bug, task_id=task_id)
-			if savings_or_err < 0:
+			if savings_or_err == -1:
 				# clean_up reported an error/rejection
 				errod = 1
-				# clean_up already logged, deleted temp file, and potentially restored backup
-				# Return directly
 				# (Finally block will still execute)
 				return saved, procs, skipt, errod
 			else:
@@ -256,8 +249,7 @@ def process_file(file_info: Dict[str, Any], idx: int, total: int, task_id: str) 
 			try: Path(out_file_temp).unlink(missing_ok=True)
 			except Exception: pass
 		# Try to move original to exceptions dir
-		try:
-			copy_move(file_p, EXCEPT_DIR, move=True)
+		try: copy_move(file_p, EXCEPT_DIR, move=True)
 		except Exception: pass
 		# Return error state directly
 		# (Finally block will still execute)
@@ -268,8 +260,7 @@ def process_file(file_info: Dict[str, Any], idx: int, total: int, task_id: str) 
 		# Use datetime.now()
 		end_t = datetime.now()
 		duration_sec = (end_t - str_t).total_seconds()
-		with print_lock:
-			print(f" -End: [{end_t.strftime('%H:%M:%S')}]\tTotal: {hm_tm(duration_sec)}")
+		with print_lock: print(f" -End: [{end_t.strftime('%H:%M:%S')}]\tTotal: {hm_tm(duration_sec)}")
 		# NOTE: SRIK clear is now handled within the specific paths (skip, cleanup success/fail)
 
 	# This line should ideally not be reached if all paths return correctly above,
@@ -292,38 +283,63 @@ class ProgressReporter(threading.Thread):
 		def stop(self) -> None:
 				self._stop.set()
 				clear_sequence = self.last_lines_printed * ("\033[F" + "\033[K")
-				sys.stderr.write(clear_sequence)
-				sys.stderr.flush()
+				try:
+					with print_lock:
+						sys.stderr.write(clear_sequence)
+						sys.stderr.flush()
+				except Exception:
+					pass  # Suppress errors if stderr is closed
 
 		def run(self) -> None:
 				while not self._stop.wait(self._interval):
-						# Call progress_get_snapshot from _ffmpeg
+					try:
+						# Call progress_get_snapshot from FFMpeg
 						snap = FFMpeg.progress_get_snapshot()
 						q, d, ok, sk, er = self._get_summary()
 						ts = time.strftime("%H:%M:%S")
 						lines = [f"{ts} [Work Queue] ToDo:{q:<4d} Done:{d:<4d} OK:{ok:<4d} Skip:{sk:<4d} Err:{er:<4d}"]
 						for tid, st in sorted(snap.items()):
 								lines.append(f"-=>[{tid}]|Frames:{st.get('frame',0):>7}|Speed:{st.get('speed',0):>5.2f}x|{st.get('percent',0):>5.1f}%  ")
+
 						clear_sequence = self.last_lines_printed * ("\033[F" + "\033[K")
-						sys.stderr.write(clear_sequence + "\n".join(lines) + "\n")
-						sys.stderr.flush()
-						self.last_lines_printed = len(lines)
+						with print_lock:
+							sys.stderr.write(clear_sequence + "\n".join(lines) + "\n")
+							sys.stderr.flush()
+
+					except Exception as e:
+						# If reporter fails, just print error and stop thread
+						with print_lock: print(f"[FATAL] ProgressReporter failed: {e}")
+						self.last_lines_printed = 0 # Reset to avoid clearing error
+						break # Stop thread
 
 # -----------------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------------
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: Optional[List[str]] = None
+	) -> int:
 	strt_m = datetime.now()
 	print(f"\n+Main Start: [{time.strftime('%H:%M:%S')}]")
+
+	# --- NEW: Fail-fast check for binaries ---
+	if not os.path.isfile(FFMPEG) or not os.path.isfile(FFPROBE):
+		print("\033[91m[CRITICAL ERROR]\033[0m FFmpeg or FFprobe binaries not found.")
+		print(f"  FFMPEG Path: {FFMPEG}")
+		print(f"  FFPROBE Path: {FFPROBE}")
+		print("  Please install FFmpeg and ensure they are in your system PATH")
+		print("  or set the correct paths in Utils.py.")
+		if PAUSE_ON_EXIT:
+			try: input("Press Enter to exit.")
+			except EOFError: pass
+		return 1 # Exit with an error code
+	# --- END NEW ---
+
 	os.makedirs(EXCEPT_DIR, exist_ok=True)
 	print("-" * 70, flush=True)
 
 	for p in RUN_TMP.glob("*"):
-		try:
-			p.unlink()
-		except Exception:
-			pass
+		try: p.unlink()
+		except Exception: pass
 
 	fl_lst = scan_folder(ROOT_DIR, File_extn, sort_keys_cfg, SCAN_PARALLEL, MAX_SCAN_WORKRS)
 	fl_nmb = len(fl_lst)
@@ -371,8 +387,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 			skipt += skc
 			errod += e
 			msg = f"  |To_do: {fl_nmb - (procs + skipt + errod)}|OK: {procs} |Err: {errod} |Skipt: {skipt} |Saved: {hm_sz(saved)} |"
-			with print_lock:
-				print(msg)
+			with print_lock: print(msg)
 
 	end_t = datetime.now()
 	total = (end_t - strt_m).total_seconds()
@@ -380,10 +395,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 	print(f" Files: {fl_nmb}\tProcessed: {procs}\tSkipped : {skipt}\tErrors : {errod}\n Saved in Total: {hm_sz(saved)}\n")
 
 	if PAUSE_ON_EXIT:
-		try:
-			input("All Done :)")
-		except EOFError:
-			pass
+		try: input("All Done :)")
+		except EOFError: pass
 	return 0
 
 if __name__ == "__main__":
