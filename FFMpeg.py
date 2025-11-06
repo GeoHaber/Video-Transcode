@@ -298,15 +298,28 @@ class VideoContext:
 	estimated_video_bitrate: int = 0
 
 def _ideal_hevc_bps(w: int, h: int, fps: float) -> int:
-	if w <= 0 or h <= 0:
+	"""
+	Calculates the ideal bitrate.
+	- If both w and h are 0, returns a constant.
+	- If only one is 0, infers the other assuming a 16:9 aspect ratio.
+	"""
+	# 1. Handle the only case where we must return the constant
+	if w <= 0 and h <= 0:
 		return 2_000_000
-	return int(HEVC_BPP * w * h * (fps or 24.0))
+	# 2. Define our assumed aspect ratio (16:9)
+	ASPECT_RATIO = 16 / 9
+	# If w is invalid (0), calculate it from h. Otherwise, use w.
+	safe_w = w if w > 0 else h * ASPECT_RATIO
+	# If h is invalid (0), calculate it from w. Otherwise, use h.
+	safe_h = h if h > 0 else safe_w / ASPECT_RATIO
+	# 4. Clean the FPS
+	clean_fps = min((fps or 24.0), 30) # Capping at 30 as in your last example
+	# 5. Run the calculation with our "safe" values
+	return int(HEVC_BPP * safe_w * safe_h * clean_fps)
 
 def _parse_fps(avg_frame_rate: str) -> float:
-	try:
-		return float(Fraction(avg_frame_rate))
-	except Exception:
-		return 24.0
+	try:				return float(Fraction(avg_frame_rate))
+	except Exception:	return 24.0
 
 def compute_aspect_ratio(width: int, height: int) -> Tuple[str, float]:
 	if width <= 0 or height <= 0: raise ValueError("Width and height must be positive")
@@ -468,12 +481,12 @@ def parse_video(streams_in: List[Dict[str, Any]], context: VideoContext, de_bug:
 				if s.get("codec_type") != "video":
 					logs.append(f"\033[93m  ?!Warning: Skipping non-video stream index {s.get('index')}\033[0m") # <-- MODIFIED: Append to logs
 					continue
-				codec = s.get("codec_name", "")
-				pix_fmt = s.get("pix_fmt", "")
-				is_10bit = "10" in str(pix_fmt) or "p010" in str(pix_fmt)
-				w = int(s.get("width", 0))
-				h = int(s.get("height", 0))
+				codec		= s.get("codec_name", "")
+				pix_fmt		= s.get("pix_fmt", "")
+				w			= int(s.get("width", 0))
+				h			= int(s.get("height", 0))
 				fps = _parse_fps(s.get("avg_frame_rate", ""))
+				is_10bit	= "10" in str(pix_fmt) or "p010" in str(pix_fmt)
 				try:
 					aspect_str, _ = compute_aspect_ratio(w, h)
 				except Exception:
@@ -502,43 +515,42 @@ def parse_video(streams_in: List[Dict[str, Any]], context: VideoContext, de_bug:
 						skip_all = False
 						j = 0
 						while j < len(flags):
-								opt = flags[j]
-								# Apply stream specifier to relevant opts
-								if opt in STREAM_SPECIFIC_OPTS: opt_with_idx = f"{opt}:{out_idx}"
-								else: opt_with_idx = opt
+							opt = flags[j]
+							# Apply stream specifier to relevant opts
+							if opt in STREAM_SPECIFIC_OPTS: opt_with_idx = f"{opt}:{out_idx}"
+							else: opt_with_idx = opt
 
-								nxt = flags[j + 1] if (j + 1 < len(flags) and not flags[j + 1].startswith("-")) else None
-								if nxt is not None:
-										ff_video.extend([opt_with_idx, nxt])
-										j += 2
-								else:
-										ff_video.append(opt_with_idx)
-										j += 1
+							nxt = flags[j + 1] if (j + 1 < len(flags) and not flags[j + 1].startswith("-")) else None
+							if nxt is not None:
+								ff_video.extend([opt_with_idx, nxt])
+								j += 2
+							else:
+								ff_video.append(opt_with_idx)
+								j += 1
 
 						vf_chain: List[str] = []
 						if is_interlaced:
-								vf_chain.append("bwdif=mode=send_field:parity=auto:deint=all")
-								status += " +Deinterlace" # Append to status from get_reencode
+							vf_chain.append("bwdif=mode=send_field:parity=auto:deint=all")
+							status += " +Deinterlace" # Append to status from get_reencode
 						if scaler:
-								vf_chain.append(scaler)
+							vf_chain.append(scaler)
 						if vf_chain:
-								ff_video.extend([f"-filter:v:{out_idx}", ",".join(vf_chain)])
+							ff_video.extend([f"-filter:v:{out_idx}", ",".join(vf_chain)])
 
-				log_msg = (
-						f"\033[91m   |<V:{s['index']:2}>|{(codec or 'n/a'):^8}|{w}x{h}|{aspect_str}|"
-						f"{fps:.2f} fps|{'10-bit' if is_10bit else '8-bit'}|"
-						f"{'HDR' if is_hdr else 'SDR'}|"
-						f"{'Interlaced' if is_interlaced else 'Progressive'}|"
-						f"{'VFR' if is_vfr else 'CFR'}|"
-						f"Bitrt: {hm_sz(context.estimated_video_bitrate, 'bps')} vs Ideal {hm_sz(ideal, 'bps')}| {status}\033[0m"
-				)
+				log_msg = ( f"\033[91m   |<V:{s['index']:2}>|{(codec or 'n/a'):^8}|{w}x{h}|{aspect_str}|"
+							f"{fps:.2f} fps|{'10-bit' if is_10bit else '8-bit'}|"
+							f"{'HDR' if is_hdr else 'SDR'}|"
+							f"{'Interlaced' if is_interlaced else 'Progressive'}|"
+							f"{'VFR' if is_vfr else 'CFR'}|"
+							f"Bitrt: {hm_sz(context.estimated_video_bitrate, 'bps')} vs Ideal {hm_sz(ideal, 'bps')}| {status}\033[0m"
+						)
 				logs.append(log_msg) # <-- MODIFIED: Append to logs
 				out_idx += 1
 
 		if skip_all and out_idx > 0:
-				logs.append("\033[91m  .Skip: Video streams are optimal.\033[0m") # <-- MODIFIED: Append to logs
+			logs.append("\033[91m  .Skip: Video streams are optimal.\033[0m") # <-- MODIFIED: Append to logs
 		elif out_idx == 0:
-				logs.append("\033[93m  ?!Warning: No valid video streams were mapped.\033[0m") # <-- MODIFIED: Append to logs
+			logs.append("\033[93m  ?!Warning: No valid video streams were mapped.\033[0m") # <-- MODIFIED: Append to logs
 
 		return ff_video, skip_all, logs # <-- MODIFIED: Return logs
 
@@ -547,7 +559,7 @@ def parse_audio(streams_in: List[Dict[str, Any]], context: VideoContext, de_bug:
 
 		logs: List[str] = [] # <-- MODIFIED: Log list
 		if not streams_in:
-				return [], True, []
+			return [], True, []
 
 		opts: List[str] = []
 		out_idx = 0
@@ -556,14 +568,14 @@ def parse_audio(streams_in: List[Dict[str, Any]], context: VideoContext, de_bug:
 		undetermined_lang_count = 0
 
 		def score(s: Dict[str, Any]) -> int:
-				tags = s.get("tags", {}) or {}
-				sc = 100 if tags.get("language") == Default_lng else 0
-				sc += 50 if s.get("disposition", {}).get("default") else 0
-				sc += int(s.get("channels", 0)) * 10
-				title = str(tags.get("title", "") or "").lower()
-				if "commentary" in title:
-						sc -= 1000
-				return sc
+			tags = s.get("tags", {}) or {}
+			sc = 100 if tags.get("language") == Default_lng else 0
+			sc += 50 if s.get("disposition", {}).get("default") else 0
+			sc += int(s.get("channels", 0)) * 10
+			title = str(tags.get("title", "") or "").lower()
+			if "commentary" in title:
+				sc -= 1000
+			return sc
 
 		best_stream = max(streams_in, key=score) if streams_in else None
 
@@ -594,12 +606,9 @@ def parse_audio(streams_in: List[Dict[str, Any]], context: VideoContext, de_bug:
 					actions.append("Copy")
 				else:
 					reason: List[str] = []
-					if codec != "aac":
-						reason.append(f"{codec}->aac")
-					if ch not in {2, 6}:
-						reason.append(f"{ch}ch")
-					if sr not in {0, 48000}:
-						reason.append(f"{sr}Hz->48kHz")
+					if codec != "aac":			reason.append(f"{codec}->aac")
+					if ch not in {2, 6}:		reason.append(f"{ch}ch")
+					if sr not in {0, 48000}:	reason.append(f"{sr}Hz->48kHz")
 
 					per_stream_opts.extend([
 						f"-c:a:{out_idx}", "aac",
@@ -618,22 +627,18 @@ def parse_audio(streams_in: List[Dict[str, Any]], context: VideoContext, de_bug:
 
 				is_best = (s is best_stream)
 				needs_disposition_change = (is_best != bool(disp.get("default")))
-				if needs_disposition_change:
-					any_disposition_change_needed = True
+				if needs_disposition_change:		any_disposition_change_needed = True
 
 				if is_best:
-					if needs_disposition_change:
-						actions.append("Set Default")
+					if needs_disposition_change:	actions.append("Set Default")
 					per_stream_opts.extend([f"-disposition:a:{out_idx}", "default"])
 				else:
-					if needs_disposition_change:
-						actions.append("Clear Default")
+					if needs_disposition_change:	actions.append("Clear Default")
 					per_stream_opts.extend([f"-disposition:a:{out_idx}", "0"])
 
 				opts.extend(per_stream_opts)
-				logs.append( # <-- MODIFIED: Append to logs
-						f"\033[92m   |<A:{idx:2}>|{codec:^8}|{lang:<3}|Br:{hm_sz(br,'bps'):<10}|Ch:{ch}|SR:{sr}Hz| {'|'.join(actions)}\033[0m"
-				)
+				logs.append((	f"\033[92m   |<A:{idx:2}>|{codec:^8}|{lang:<3}|Br:{hm_sz(br,'bps'):<10}|Ch:{ch}|SR:{sr}Hz| "
+								f"{'|'.join(actions)}\033[0m"))
 				out_idx += 1
 
 		if undetermined_lang_count > 0:
@@ -973,12 +978,11 @@ def parse_finfo(input_file: str, metadata: Dict[str, Any], de_bug: bool = False
 		raw_title = (tags.get("title") or "").strip()
 		title = raw_title or Path(input_file).stem
 
-		try:				raw_comment = _extract_comment_tag(metadata)
+		try:			raw_comment = _extract_comment_tag(metadata)
 		except Exception:	raw_comment = (tags.get("comment") or "").strip()
 
 		skip_f = (raw_comment == SKIP_KEY)
-
-		try:				srik_update(input_file, plan={"skip_key_found": bool(skip_f)})
+		try:			srik_update(input_file, plan={"skip_key_found": bool(skip_f)})
 		except Exception:	pass
 
 		# --- STEP 1: Build and PRINT the header FIRST ---
@@ -1970,16 +1974,14 @@ def _post_encode_artifacts(
 			if final_path.is_file() and final_path.stat().st_size >= min_size:
 				with print_lock: print(f"   [{task_id_base}] Skipping {label}: {final_path.name} already exists.")
 				return "skip"
-		except Exception:
-			pass  # treat as not present
+		except Exception:	pass  # treat as not present
 
 		tmp = final_path.parent / f".__tmp_{final_path.name}"
 
 		try:
 			if tmp.exists():
 				tmp.unlink(missing_ok=True)
-		except Exception:
-			pass
+		except Exception:	pass
 
 		ok = False
 		try:
@@ -2050,23 +2052,23 @@ def _post_encode_artifacts(
 	artifact_jobs: Dict[str, Tuple[bool, Path, int, Callable[[Path], bool], str]] = {
 		# "key": (ENABLE_TOGGLE, final_path, min_size, build_function, label_for_logs)
 		"matrix": ( ADD_ARTIFACT_MATRIX,
-			final_file_path.with_name(f"{base_name}_matrix.png"),
-			100,
-			_build_matrix,
-			"Thumbnail matrix",
-		),
+					final_file_path.with_name(f"{base_name}_matrix.png"),
+					100,
+					_build_matrix,
+					"Thumbnail matrix",
+					),
 		"speed": ( ADD_ARTIFACT_SPEED,
-			final_file_path.with_name(f"{base_name}_fast_{ADDITIONAL_SPEED_FACTOR:.1f}x.mp4"),
-			1024,
-			_build_speed,
-			f"Speed-up ({ADDITIONAL_SPEED_FACTOR:.1f}x)",
-		),
+					final_file_path.with_name(f"{base_name}_fast_{ADDITIONAL_SPEED_FACTOR:.1f}x.mp4"),
+					1024,
+					_build_speed,
+					f"Speed-up ({ADDITIONAL_SPEED_FACTOR:.1f}x)",
+					),
 		"short": ( ADD_ARTIFACT_SHORT,
-			final_file_path.with_name(f"{base_name}_short_{int(ADDITIONAL_SHORT_DUR)}s.mp4"),
-			1024,
-			_build_short,
-			f"Short version ({int(ADDITIONAL_SHORT_DUR)}s)",
-		),
+					final_file_path.with_name(f"{base_name}_short_{int(ADDITIONAL_SHORT_DUR)}s.mp4"),
+					1024,
+					_build_short,
+					f"Short version ({int(ADDITIONAL_SHORT_DUR)}s)",
+				),
 	}
 
 	# Determine which to run: explicit list overrides toggles

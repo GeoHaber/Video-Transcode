@@ -32,10 +32,8 @@ Rev ="""
 def _get_script_dir() -> Path:
 	if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
 		return Path(sys.executable).resolve().parent
-	try:
-		return Path(__file__).resolve().parent
-	except NameError:
-		return Path.cwd()
+	try:				return Path(__file__).resolve().parent
+	except NameError:	return Path.cwd()
 
 SCRIPT_DIR = _get_script_dir()
 WORK_DIR: Path = Path(os.environ.get("ONE_TRANS_WORK_DIR") or str(SCRIPT_DIR)).resolve()
@@ -49,8 +47,7 @@ def _cleanup_run_tmp() -> None:
 	try:
 		if RUN_TMP.exists():
 			shutil.rmtree(RUN_TMP, ignore_errors=True)
-	except Exception:
-		pass
+	except Exception:	pass
 
 atexit.register(_cleanup_run_tmp)
 
@@ -61,13 +58,13 @@ progress_state: Dict[str, Dict[str, float | str]] = {}
 # ------------------------------ Config / Constants (Defined Directly) ------------- #
 
 # --- Script Behavior ---
-de_bug				= False # Set to True for verbose debugging output
-PAUSE_ON_EXIT		= True  # Set to True to pause console before exiting
+de_bug					= False # Set to True for verbose debugging output
+PAUSE_ON_EXIT			= True  # Set to True to pause console before exiting
 
 # --- File Handling ---
-File_extn			= {".av1",".m4v",".mkv",".mov",".mp4",".ts",".mts"}
-TMPF_EX				= ".mp4"                                 # Output container format
-SKIP_KEY			= "| <¯\\_(ツ)_/¯> |"                    # Metadata comment to mark processed files
+File_extn				= {".av1",".m4v",".mkv",".mov",".mp4",".ts",".mts"}
+TMPF_EX					= ".mp4"                                 # Output container format
+SKIP_KEY				= "| <¯\\_(ツ)_/¯> |"                    # Metadata comment to mark processed files
 
 # --- Encoding Policy ---
 Default_lng				= "eng"     # Default language for audio/subtitle selection
@@ -106,9 +103,9 @@ RENAME_BACKOFF_FACTOR   = 1.0   # Multiplier for subsequent delays (1.0 = linear
 ADD_ADDITIONAL          = True # Master flag to enable artifact creation
 FORCE_ARTIFACTS_ON_SKIP = True # Create artifacts even if main file is skipped
 # --- NEW: Per-artifact toggles ---
-ADD_ARTIFACT_MATRIX      = True
-ADD_ARTIFACT_SPEED       = True
-ADD_ARTIFACT_SHORT       = True
+ADD_ARTIFACT_MATRIX     = True
+ADD_ARTIFACT_SPEED      = True
+ADD_ARTIFACT_SHORT      = True
 # --- END NEW ---
 
 # Settings for specific artifacts
@@ -126,8 +123,8 @@ ADDITIONAL_QUALITY_CRF  = 24    # CRF for speed_up video re-encode
 ADDITIONAL_PRESET       = "faster" # Preset for speed_up video re-encode
 ALLOW_GROWTH_SAME_RES_PCT = 35.0
 
-CHECK_CORRUPTION	= False     # Enable slower, more thorough corruption check during scan
-IS_WIN              = platform.system() == "Windows"
+CHECK_CORRUPTION		= False     # Enable slower, more thorough corruption check during scan
+IS_WIN					= platform.system() == "Windows"
 CREATE_NEW_PROCESS_GROUP = 0x00000200 if IS_WIN else 0
 
 FFMPEG  = shutil.which("ffmpeg")  or r"C:\Program Files\ffmpeg\bin\ffmpeg.exe"
@@ -257,8 +254,7 @@ def _errlog_target_path(input_file: str) -> Path:
 	return WORK_DIR / f"_{Path(input_file).stem}_errors.log"
 
 def errlog_block(input_file: str, header: str, body: str, max_lines: int = ERROR_LOG_MAX_LINES) -> None:
-	if not ERROR_LOGS_ENABLED:
-		return
+	if not ERROR_LOGS_ENABLED: 	return
 	ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 	lines = (body or "").splitlines()
 	if max_lines and len(lines) > max_lines:

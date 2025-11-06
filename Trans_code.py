@@ -23,8 +23,6 @@ from Utils import *		# Imports all constants, globals (locks, etc.), and basic h
 Log_File = str(WORK_DIR / f"__{Path(sys.argv[0]).stem}_{time.strftime('%Y_%j_%H-%M-%S')}.log")
 
 ROOT_DIR			= r"C:\\Users\\Geo\\Desktop\\downloads"	# Main directory to scan
-#ROOT_DIR			= r"F:\\Media\\Movie"	# Main directory to scan
-
 EXCEPT_DIR			= r"C:\\_temp"							# Directory for failed/corrupt files
 sort_keys_cfg		= [("size", True), ("date", False)]		# Example: Smallest first, then newest
 # -----------------------------------------------------------------------------
