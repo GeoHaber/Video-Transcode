@@ -29,43 +29,41 @@ from Utils import *
 # Process management (Windows Job / POSIX groups)
 # -----------------------------------------------------------------------------
 
+
 if IS_WIN:
 	import ctypes
 	kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
 	PROCESS_ALL_ACCESS = 0x1F0FFF
 
 	class JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
-		_fields_ = [
-					("PerProcessUserTimeLimit", ctypes.c_longlong),
-					("PerJobUserTimeLimit", ctypes.c_longlong),
-					("LimitFlags", ctypes.c_uint32),
-					("MinimumWorkingSetSize", ctypes.c_size_t),
-					("MaximumWorkingSetSize", ctypes.c_size_t),
-					("ActiveProcessLimit", ctypes.c_uint32),
-					("Affinity", ctypes.c_size_t),
-					("PriorityClass", ctypes.c_uint32),
-					("SchedulingClass", ctypes.c_uint32),
-		]
+		_fields_ = [("PerProcessUserTimeLimit",	ctypes.c_longlong),
+					("PerJobUserTimeLimit",		ctypes.c_longlong),
+					("LimitFlags",				ctypes.c_uint32),
+					("MinimumWorkingSetSize",	ctypes.c_size_t),
+					("MaximumWorkingSetSize",	ctypes.c_size_t),
+					("ActiveProcessLimit",		ctypes.c_uint32),
+					("Affinity",				ctypes.c_size_t),
+					("PriorityClass",			ctypes.c_uint32),
+					("SchedulingClass",			ctypes.c_uint32),
+				]
 
 	class IO_COUNTERS(ctypes.Structure):
-		_fields_ = [
-					("ReadOperationCount", ctypes.c_ulonglong),
-					("WriteOperationCount", ctypes.c_ulonglong),
-					("OtherOperationCount", ctypes.c_ulonglong),
-					("ReadTransferCount", ctypes.c_ulonglong),
-					("WriteTransferCount", ctypes.c_ulonglong),
-					("OtherTransferCount", ctypes.c_ulonglong),
-			]
+		_fields_ = [("ReadOperationCount",		ctypes.c_ulonglong),
+					("WriteOperationCount",		ctypes.c_ulonglong),
+					("OtherOperationCount",		ctypes.c_ulonglong),
+					("ReadTransferCount",		ctypes.c_ulonglong),
+					("WriteTransferCount",		ctypes.c_ulonglong),
+					("OtherTransferCount",		ctypes.c_ulonglong),
+				]
 
 	class JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
-		_fields_ = [
-					("BasicLimitInformation", JOBOBJECT_BASIC_LIMIT_INFORMATION),
-					("IoInfo", IO_COUNTERS),
-					("ProcessMemoryLimit", ctypes.c_size_t),
-					("JobMemoryLimit", ctypes.c_size_t),
-					("PeakProcessMemoryUsed", ctypes.c_size_t),
-					("PeakJobMemoryUsed", ctypes.c_size_t),
-		]
+		_fields_ = [("BasicLimitInformation",	JOBOBJECT_BASIC_LIMIT_INFORMATION),
+					("IoInfo",					IO_COUNTERS),
+					("ProcessMemoryLimit",		ctypes.c_size_t),
+					("JobMemoryLimit",			ctypes.c_size_t),
+					("PeakProcessMemoryUsed",	ctypes.c_size_t),
+					("PeakJobMemoryUsed",		ctypes.c_size_t),
+				]
 
 	class _WinJob:
 		JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
@@ -73,8 +71,7 @@ if IS_WIN:
 
 		def __init__(self) -> None:
 			self.hJob = kernel32.CreateJobObjectW(None, None)
-			if not self.hJob:
-				raise OSError("CreateJobObjectW failed")
+			if not self.hJob:		raise OSError("CreateJobObjectW failed")
 
 			info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
 			info.BasicLimitInformation.LimitFlags = self.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
@@ -99,8 +96,8 @@ if IS_WIN:
 
 		def close(self) -> None:
 			if self.hJob:
-					kernel32.CloseHandle(self.hJob)
-					self.hJob = None
+				kernel32.CloseHandle(self.hJob)
+				self.hJob = None
 else:
 	_WinJob = None  # type: ignore
 
@@ -117,7 +114,7 @@ class ChildProcessManager:
 			if self._stopping.is_set():	return
 			self._stopping.set()
 			# Use print_lock for thread-safe logging to console
-			with print_lock:	print(f"\n[signal] Received {signum}. Terminating children...")
+			safe_print(f"\n[signal] Received {signum}. Terminating children...")
 			self.terminate_all()
 
 		try:
@@ -125,7 +122,7 @@ class ChildProcessManager:
 			signal.signal(signal.SIGTERM, handler)
 		except Exception as e:
 			# Use print_lock for thread-safe logging to console
-			with print_lock:	print(f"[warning] Could not install signal handlers: {e}")
+			safe_print(f"[warning] Could not install signal handlers: {e}")
 
 	def _attach_job(self, proc: sp.Popen) -> None:
 		if IS_WIN and self._win_job:
@@ -133,8 +130,7 @@ class ChildProcessManager:
 			except Exception:	pass
 
 	def register(self, proc: sp.Popen) -> None:
-		with self._lock:
-			self._procs.append(proc)
+		with self._lock:		self._procs.append(proc)
 		self._attach_job(proc)
 
 	def unregister(self, proc: sp.Popen) -> None:
@@ -147,7 +143,7 @@ class ChildProcessManager:
 		if not procs:		return
 
 		# Use print_lock for thread-safe logging to console
-		with print_lock:	print(f"Terminating {len(procs)} tracked processes...")
+		safe_print(f"Terminating {len(procs)} tracked processes...")
 		if IS_WIN:
 			for p in procs:
 				try:				p.send_signal(signal.CTRL_BREAK_EVENT)
@@ -165,7 +161,7 @@ class ChildProcessManager:
 		for p in procs:
 			if p.poll() is None:
 				# Use print_lock for thread-safe logging to console
-				with print_lock:	print(f"Process {p.pid} did not terminate, sending SIGKILL.")
+				safe_print(f"Process {p.pid} did not terminate, sending SIGKILL.")
 				try:
 					if IS_WIN:		p.kill()
 					else:			os.killpg(os.getpgid(p.pid), signal.SIGKILL)
@@ -221,9 +217,9 @@ def srik_update(path: str | Path, *,source: Optional[Dict[str, Any]] = None,
 		k = _srik_key(path)
 		with _SRIK_LOCK:
 				entry = _GLOBAL_SRIK.get(k, {})
-				if source is not None:	entry["source"]	= source
-				if plan is not None:	entry["plan"]	= plan
-				if output is not None:	entry["output"]	= output
+				if source	is not None:	entry["source"]	= source
+				if plan		is not None:	entry["plan"]	= plan
+				if output	is not None:	entry["output"]	= output
 				_GLOBAL_SRIK[k] = entry
 
 def srik_get(path: str | Path) -> Dict[str, Any]:
@@ -262,8 +258,7 @@ def ffprobe_run(input_file: str,	execu: Optional[str] = None,	de_bug: bool = Fal
 		if proc.returncode != 0:	error_msg = f"ffprobe failed with {proc.returncode}.\nStderr: {err.strip()}"
 		elif out and out.strip().startswith("{"):
 			metadata = json.loads(out)
-			if err and err.strip():
-				errlog_block(input_file, "ffprobe stderr (non-fatal)", err)
+			if err and err.strip():	errlog_block(input_file, "ffprobe stderr (non-fatal)", err)
 		else:						error_msg = "ffprobe did not return valid JSON."
 	except sp.TimeoutExpired:
 		error_msg = f"ffprobe timed out after {PROBE_TIMEOUT_S} seconds."
@@ -304,8 +299,7 @@ def _ideal_hevc_bps(w: int, h: int, fps: float) -> int:
 	- If only one is 0, infers the other assuming a 16:9 aspect ratio.
 	"""
 	# 1. Handle the only case where we must return the constant
-	if w <= 0 and h <= 0:
-		return 2_000_000
+	if w <= 0 and h <= 0:	return 2_000_000
 	# 2. Define our assumed aspect ratio (16:9)
 	ASPECT_RATIO = 16 / 9
 	# If w is invalid (0), calculate it from h. Otherwise, use w.
@@ -336,230 +330,204 @@ def compute_aspect_ratio(width: int, height: int) -> Tuple[str, float]:
 
 def get_reencode_settings_based_on_source(
 	codec: str, w: int, h: int, br: int, is_10b: bool, fps: float
-	) -> Tuple[bool, List[str], str, Optional[str], int, List[str]]: # <-- MODIFIED: Added List[str] for logs
+	) -> Tuple[bool, List[str], str, Optional[str], int, List[str]]:
 	"""
 	Determines video encoding settings based on compliance and target bitrate.
-	MODIFIED: Correctly sets target_bps to ideal_bps if source is bloated,
-	otherwise caps at source bitrate.
-	MODIFIED: Returns log lines instead of printing.
+	Returns: (needs_reencode, ffmpeg_flags, status_msg, scaler_string, ideal_bitrate, logs)
 	"""
-	logs: List[str] = [] # <-- MODIFIED: Log list
+	logs: List[str] = []
+	SKIP_HEVC_IF_EFFICIENT = True
 
 	# Sanitize inputs
 	if w <= 0 or h <= 0:
 		logs.append(f"   |WARN: Invalid source dimensions {w}x{h}, using fallback.")
 		w_src, h_src = 1920, 1080
-	else:
-		w_src, h_src = w, h
-	if fps <= 0: fps = 24.0
+	else:			w_src, h_src = w, h
+	if fps <= 0:	fps = 24.0
 
 	# Calculate scaling targets and ideal bitrate
-	needs_scaling = (w_src > 2600 or h_src > 1188)
-	target_h = 1080 if needs_scaling else h_src
+	scale_trigger = (w_src > 2600 or h_src > 1188)
+	target_h = 1080 if scale_trigger else h_src
 	target_w = int(round(target_h * (w_src / h_src)))
-	if target_w % 2: target_w += 1
+	if target_w % 2:	target_w += 1
+
+	# Final scaling decision: only if dimensions actually change and source isn't already smaller
+	needs_scaling = (
+		scale_trigger and
+		(target_w != w_src or target_h != h_src) and
+		(w_src > target_w or h_src > target_h)
+	)
+	if scale_trigger and not needs_scaling:
+		logs.append(f"   |Skip: Scaling triggered but dimensions unchanged or already smaller ({w_src}x{h_src})|")
 
 	ideal_bps = _ideal_hevc_bps(target_w, target_h, fps)
-	ideal_bps_log = ideal_bps
-
-	# --- START: CORRECTED BITRATE LOGIC ---
 	max_allowed_bps = ideal_bps * SIZE_OK_MARGIN
 	is_bloated = (br > 0 and br > max_allowed_bps)
 
-	if is_bloated:
-		# Source is bloated, target the ideal bitrate.
-		target_bps = ideal_bps
-	elif br > 0:
-		# Source is efficient (at or below ideal*slack), target the (even lower) source bitrate.
-		target_bps = br
-	else:
-		# Source bitrate is unknown, just target ideal.
-		target_bps = ideal_bps
-
+	# Determine target bitrate
+	if is_bloated:	target_bps = ideal_bps
+	elif br > 0:	target_bps = br
+	else:			target_bps = ideal_bps
 	target_bps = max(100_000, int(target_bps))
-	# --- END: CORRECTED BITRATE LOGIC ---
 
-	# Log bitrates
-	br_display		= hm_sz(br,         'bps') if br > 0 else "N/A"
-	ideal_display	= hm_sz(ideal_bps,  'bps')
+	# Log bitrate comparison
+	br_display		= hm_sz(br, 'bps') if br > 0 else "N/A"
+	ideal_display	= hm_sz(ideal_bps, 'bps')
 	target_display	= hm_sz(target_bps, 'bps')
-#	logs.append(f"   |Bitrates| Source: {br_display} | Ideal: {ideal_display} | Target: {target_display}") # <-- MODIFIED: Append to logs
-	if is_bloated:
-		ratio = br / max(1.0, ideal_bps)
-		logs.append(f"   |Source: {br_display} > {target_display}|App: {ratio:.1f}x Smaller.") # <-- MODIFIED: Append to logs
-	elif br > 0:
-		logs.append(f"   |Source: {br_display} <= {target_display}|Target app Source.") # <-- MODIFIED: Append to logs
+	if br > 0 and ideal_bps > 0:
+		percent_change = round(((br - ideal_bps) / ideal_bps) * 100)
+		change_type = "increase" if percent_change < 0 else "reduction"
+		logs.append(f"   |Source: {br_display} vs Ideal: {ideal_display}|App: {abs(percent_change)}% BitRate {change_type}")
+	elif br > 0:	logs.append(f"   |Source: {br_display} <= {target_display}|Target & Source similar.")
+	else:			logs.append(f"   |Source bitrate unavailable|")
+	# Optional: log bitrate slack margin
+#	logs.append(f"   |Slack Margin: {int(SIZE_OK_MARGIN * 100)}%| Max Allowed: {hm_sz(max_allowed_bps, 'bps')}")
 
-	# Check reasons: codec, then scaling, then bitrate
+	# Determine reencode reasons
 	reasons = []
 	is_hevc = (codec or "").lower() == "hevc"
-	if not is_hevc:     reasons.append("Not HEVC")
-	if needs_scaling:   reasons.append(f"Scaling ({w_src}x{h_src} -> {target_w}x{target_h})")
-	if is_bloated:      reasons.append("Bitrate High") # Use the flag we already calculated
+	if not is_hevc:		reasons.append("Not HEVC")
+	if needs_scaling:	reasons.append(f"Scaling ({w_src}x{h_src} -> {target_w}x{target_h})")
+	if is_bloated:		reasons.append("Bitrate High")
 
-	has_primary_reasons = bool(reasons) # Do we need to re-encode anyway?
+	has_primary_reasons = bool(reasons)
 	target_is_10bit = False
 
-	if is_10b: target_is_10bit = True  # 1. Keep 10-bit if source is 10-bit
-	elif has_primary_reasons and ALWAYS_10BIT and HW_10BIT_ENCOD:
-		target_is_10bit = True  # 2. Upgrade to 10-bit if ALWAYS_10BIT is on AND we are re-encoding anyway
-	elif has_primary_reasons and any(r != "Bitrate High" for r in reasons) and HW_10BIT_ENCOD:
-		# 3. Upgrade to 10-bit if re-encoding for compliance (Codec/Scaling)
-		#    (This honors the "keep 8-bit if only bitrate" rule when ALWAYS_10BIT is False)
+	# Optimization: skip reencode if HEVC + efficient bitrate + no scaling
+	if SKIP_HEVC_IF_EFFICIENT and is_hevc and br > 0 and br < ideal_bps and not needs_scaling:
+		logs.append(f"   |Skip: HEVC + bitrate below ideal ({br_display} < {ideal_display})|")
+		status = "=> Copy (HEVC + Efficient Bitrate)|#COPY"
+		return False, [], status, None, ideal_bps, logs
+
+	# Bit depth logic
+	if is_10b:
 		target_is_10bit = True
-	# 4. Else: stays 8-bit (if no primary reasons, or only bitrate reason and ALWAYS_10BIT is false)
+	elif has_primary_reasons and ALWAYS_10BIT and HW_10BIT_ENCOD:
+		target_is_10bit = True
+	elif has_primary_reasons and any(r != "Bitrate High" for r in reasons) and HW_10BIT_ENCOD:
+		target_is_10bit = True
 
-	# Now, check if a bit depth change *itself* is the ONLY reason
 	bit_depth_change_needed = (is_10b != target_is_10bit)
-
 	if bit_depth_change_needed and not has_primary_reasons:
-		# This is the UFC file case: No other reason, but bit depth *would* change.
-		change_desc = f"Upgrade 8->10bit" if target_is_10bit else f"Downgrade 10->8bit (unexpected)"
+		change_desc = "Upgrade 8->10bit" if target_is_10bit else "Downgrade 10->8bit (unexpected)"
+		logs.append(f"   |Bit Depth Change: {change_desc} (non-triggering)")
+		if "Downgrade" in change_desc:	reasons.append(change_desc)
 
-		# --- MODIFICATION: This is the logic from your previous request to PREVENT 8->10bit only encodes ---
-		if "Upgrade 8->10bit" in change_desc:
-			 # Do not add the reason, we want to skip this.
-			 pass
-		else:
-			 reasons.append(change_desc) # Still add reason for downgrades (unexpected)
-		# --- END MODIFICATION ---
-
-	# If no reasons, copy
+	# If no reasons, skip reencode
 	if not reasons:
-		status = "=> Copy (Compliant & Bitrate OK)"
-		logs.append(f"   |To do: {status}") # <-- MODIFIED: Append to logs
-		return False, [], status, None, ideal_bps_log, logs # <-- MODIFIED: Return logs
+		status = "=> Copy (Compliant & Bitrate OK) |#COPY"
+		logs.append(f"   |To do: {status}")
+		return False, [], status, None, ideal_bps, logs
 
 	# Re-encode: build flags
-	encod_mod = "hw"  # Hardcoded to QSV
-	if encod_mod == "sw":
-		encoder		= "libx265"
-		preset_tag	= "medium"
-	else:
-		encoder		= "hevc_qsv"
-		preset_tag	= "slow"
+	encod_mod		= "hw"
+	encoder			= "hevc_qsv"	if encod_mod == "hw" else "libx265"
+	preset_tag		= "slow"		if encod_mod == "hw" else "medium"
+	target_pix_fmt	= "p010le"		if target_is_10bit	 else "yuv420p"
+	target_profile	= "main10"		if target_is_10bit	 else "main"
 
-	target_pix_fmt = "p010le" if target_is_10bit else "yuv420p"
-	target_profile = "main10" if target_is_10bit else "main"
+	flags = [	"-c:v", encoder,
+				"-preset", preset_tag,
+				"-b:v", f"{max(1, target_bps // 1000)}k",
+				"-profile:v", target_profile,
+				"-maxrate", f"{max(1, int(target_bps * 1.9) // 1000)}k",
+				"-bufsize", f"{max(1, int(target_bps * 3  ) // 1000)}k",
+			]
 
-	flags = [
-		"-c:v", encoder,
-		"-preset", preset_tag,
-		"-b:v", f"{max(1, target_bps // 1000)}k",
-		"-profile:v", target_profile,
-		# Optional VBR constraints
-		"-maxrate", f"{max(1, int(target_bps * 1.5) // 1000)}k",
-		"-bufsize", f"{max(1, int(target_bps * 2.0) // 1000)}k",
-	]
-
-	# Video filters (always include format)
 	vf_filters = []
-	if needs_scaling:
-		vf_filters.append(f"scale=-2:{target_h}:flags=spline")
+	if needs_scaling: 	vf_filters.append(f"scale=-2:{target_h}:flags=spline")
 	vf_filters.append(f"format={target_pix_fmt}")
 	scaler_string = ",".join(vf_filters)
 
-	status = f"=> Re-encode ({encod_mod} Target: {hm_sz(target_bps, 'bps')}) | Reasons: {', '.join(reasons)}"
-#	logs.append(f"   |To do: {status}") # <-- MODIFIED: Append to logs
-
-	return True, flags, status, scaler_string, ideal_bps_log, logs # <-- MODIFIED: Return logs
+	status = f"=> Re-encode ({encod_mod} Target: {hm_sz(target_bps, 'bps')})|Reasons: {', '.join(reasons)}|#REENCODE"
+	return True, flags, status, scaler_string, ideal_bps, logs
 
 def parse_video(streams_in: List[Dict[str, Any]], context: VideoContext, de_bug: bool
 	) -> Tuple[List[str], bool, List[str]]: # <-- MODIFIED: Returns logs
 
-		ff_video: List[str] = []
-		skip_all = True
-		out_idx = 0
-		logs: List[str] = [] # <-- MODIFIED: Log list
-		# --- BUG FIX: Added -maxrate and -bufsize to this set ---
-		STREAM_SPECIFIC_OPTS = {"-c:v", "-b:v", "-profile:v", "-maxrate", "-bufsize"}
+	ff_video: List[str] = []
+	skip_all = True
+	out_idx = 0
+	logs: List[str] = [] # <-- MODIFIED: Log list
+	STREAM_SPECIFIC_OPTS = {"-c:v", "-b:v", "-profile:v", "-maxrate", "-bufsize"}
 
-		for s in streams_in:
-				if s.get("disposition", {}).get("attached_pic"):
-					logs.append("\033[91m   .Skip: Attached picture stream.\033[0m") # <-- MODIFIED: Append to logs
-					continue
-				if s.get("codec_type") != "video":
-					logs.append(f"\033[93m  ?!Warning: Skipping non-video stream index {s.get('index')}\033[0m") # <-- MODIFIED: Append to logs
-					continue
-				codec		= s.get("codec_name", "")
-				pix_fmt		= s.get("pix_fmt", "")
-				w			= int(s.get("width", 0))
-				h			= int(s.get("height", 0))
-				fps = _parse_fps(s.get("avg_frame_rate", ""))
-				is_10bit	= "10" in str(pix_fmt) or "p010" in str(pix_fmt)
-				try:
-					aspect_str, _ = compute_aspect_ratio(w, h)
-				except Exception:
-					aspect_str = "N/A"
-				field_order = str(s.get("field_order", "progressive")).lower()
-				is_interlaced = field_order != "progressive"
-				color_transfer = str(s.get("color_transfer", "")).lower()
-				is_hdr = "2084" in color_transfer or "hlg" in color_transfer
-				avg_fps_str = s.get("avg_frame_rate", "0/0")
-				r_fps_str = s.get("r_frame_rate", "0/0")
-				is_vfr = avg_fps_str != r_fps_str and avg_fps_str != "0/0" and r_fps_str != "0/0"
+	for s in streams_in:
+		if s.get("disposition", {}).get("attached_pic"):
+			logs.append("\033[91m   .Skip: Attached picture stream.\033[0m") # <-- MODIFIED: Append to logs
+			continue
+		if s.get("codec_type") != "video":
+			logs.append(f"\033[93m  ?!Warning: Skipping non-video stream index {s.get('index')}\033[0m") # <-- MODIFIED: Append to logs
+			continue
+		codec		=     s.get("codec_name", "")
+		pix_fmt		=     s.get("pix_fmt", "")
+		w			= int(s.get("width", 0))
+		h			= int(s.get("height", 0))
+		fps =  _parse_fps(s.get("avg_frame_rate", ""))
+		is_10bit	= "10" in str(pix_fmt) or "p010" in str(pix_fmt)
+		try:				aspect_str, _ = compute_aspect_ratio(w, h)
+		except Exception:	aspect_str = "N/A"
+		field_order		= str(s.get("field_order", "progressive")).lower()
+		is_interlaced	= field_order != "progressive"
+		color_transfer	= str(s.get("color_transfer", "")).lower()
+		is_hdr = "2084" in color_transfer or "hlg" in color_transfer
+		avg_fps_str = s.get("avg_frame_rate", "0/0")
+		r_fps_str = s.get("r_frame_rate", "0/0")
+		is_vfr = avg_fps_str != r_fps_str and avg_fps_str != "0/0" and r_fps_str != "0/0"
 
-				# <-- MODIFIED: Capture logs from helper
-				needs, flags, status, scaler, ideal, bitrate_logs = get_reencode_settings_based_on_source(
-						codec, w, h, context.estimated_video_bitrate, is_10bit, fps
-				)
-				logs.extend(bitrate_logs) # <-- MODIFIED: Add helper logs
+		# <-- MODIFIED: Capture logs from helper
+		needs, flags, status, scaler, ideal, bitrate_logs = get_reencode_settings_based_on_source(
+				codec, w, h, context.estimated_video_bitrate, is_10bit, fps
+		)
+		logs.extend(bitrate_logs) # <-- MODIFIED: Add helper logs
 
-				ff_video.extend(["-map", f"0:{s['index']}"])
+		ff_video.extend(["-map", f"0:{s['index']}"])
 
-				# Status is now generated by get_reencode_settings_based_on_source
-				if not needs:
-						ff_video.extend([f"-c:v:{out_idx}", "copy"])
-						if is_interlaced: status += " \033[93m[WARN: Interlaced]\033[0m"
+		# Status is now generated by get_reencode_settings_based_on_source
+		if not needs:
+			ff_video.extend([f"-c:v:{out_idx}", "copy"])
+			if is_interlaced: status += " \033[93m[WARN: Interlaced]\033[0m"
+		else:
+			skip_all = False
+			j = 0
+			while j < len(flags):
+				opt = flags[j]
+				# Apply stream specifier to relevant opts
+				if opt in STREAM_SPECIFIC_OPTS: opt_with_idx = f"{opt}:{out_idx}"
+				else: opt_with_idx = opt
+				nxt = flags[j + 1] if (j + 1 < len(flags) and not flags[j + 1].startswith("-")) else None
+				if nxt is not None:
+					ff_video.extend([opt_with_idx, nxt])
+					j += 2
 				else:
-						skip_all = False
-						j = 0
-						while j < len(flags):
-							opt = flags[j]
-							# Apply stream specifier to relevant opts
-							if opt in STREAM_SPECIFIC_OPTS: opt_with_idx = f"{opt}:{out_idx}"
-							else: opt_with_idx = opt
+					ff_video.append(opt_with_idx)
+					j += 1
+			vf_chain: List[str] = []
+			if is_interlaced:
+				vf_chain.append("bwdif=mode=send_field:parity=auto:deint=all")
+				status += " +Deinterlace" # Append to status from get_reencode
+			if scaler:		vf_chain.append(scaler)
+			if vf_chain:	ff_video.extend([f"-filter:v:{out_idx}", ",".join(vf_chain)])
 
-							nxt = flags[j + 1] if (j + 1 < len(flags) and not flags[j + 1].startswith("-")) else None
-							if nxt is not None:
-								ff_video.extend([opt_with_idx, nxt])
-								j += 2
-							else:
-								ff_video.append(opt_with_idx)
-								j += 1
+		log_msg = ( f"\033[91m   |<V:{s['index']:2}>|{(codec or 'n/a'):^8}|{w}x{h}|{aspect_str}|"
+					f"{fps:.2f} fps|{'10-bit' if is_10bit else '8-bit'}|"
+					f"{'HDR' if is_hdr else 'SDR'}|"
+					f"{'Interlaced' if is_interlaced else 'Progressive'}|"
+					f"{'VFR' if is_vfr else 'CFR'}|"
+					f"Bitrt: {hm_sz(context.estimated_video_bitrate, 'bps')} vs Ideal {hm_sz(ideal, 'bps')}| {status}\033[0m"
+				)
+		logs.append(log_msg) # <-- MODIFIED: Append to logs
+		out_idx += 1
 
-						vf_chain: List[str] = []
-						if is_interlaced:
-							vf_chain.append("bwdif=mode=send_field:parity=auto:deint=all")
-							status += " +Deinterlace" # Append to status from get_reencode
-						if scaler:
-							vf_chain.append(scaler)
-						if vf_chain:
-							ff_video.extend([f"-filter:v:{out_idx}", ",".join(vf_chain)])
+	if skip_all and out_idx > 0:	logs.append("\033[91m  .Skip: Video streams are optimal.\033[0m") # <-- MODIFIED: Append to logs
+	elif out_idx == 0:				logs.append("\033[93m  ?!Warning: No valid video streams were mapped.\033[0m") # <-- MODIFIED: Append to logs
 
-				log_msg = ( f"\033[91m   |<V:{s['index']:2}>|{(codec or 'n/a'):^8}|{w}x{h}|{aspect_str}|"
-							f"{fps:.2f} fps|{'10-bit' if is_10bit else '8-bit'}|"
-							f"{'HDR' if is_hdr else 'SDR'}|"
-							f"{'Interlaced' if is_interlaced else 'Progressive'}|"
-							f"{'VFR' if is_vfr else 'CFR'}|"
-							f"Bitrt: {hm_sz(context.estimated_video_bitrate, 'bps')} vs Ideal {hm_sz(ideal, 'bps')}| {status}\033[0m"
-						)
-				logs.append(log_msg) # <-- MODIFIED: Append to logs
-				out_idx += 1
-
-		if skip_all and out_idx > 0:
-			logs.append("\033[91m  .Skip: Video streams are optimal.\033[0m") # <-- MODIFIED: Append to logs
-		elif out_idx == 0:
-			logs.append("\033[93m  ?!Warning: No valid video streams were mapped.\033[0m") # <-- MODIFIED: Append to logs
-
-		return ff_video, skip_all, logs # <-- MODIFIED: Return logs
+	return ff_video, skip_all, logs # <-- MODIFIED: Return logs
 
 def parse_audio(streams_in: List[Dict[str, Any]], context: VideoContext, de_bug: bool = False
 	) -> Tuple[List[str], bool, List[str]]: # <-- MODIFIED: Returns logs
 
 		logs: List[str] = [] # <-- MODIFIED: Log list
-		if not streams_in:
-			return [], True, []
+		if not streams_in:		return [], True, []
 
 		opts: List[str] = []
 		out_idx = 0
@@ -573,27 +541,24 @@ def parse_audio(streams_in: List[Dict[str, Any]], context: VideoContext, de_bug:
 			sc += 50 if s.get("disposition", {}).get("default") else 0
 			sc += int(s.get("channels", 0)) * 10
 			title = str(tags.get("title", "") or "").lower()
-			if "commentary" in title:
-				sc -= 1000
+			if "commentary" in title:	sc -= 1000
 			return sc
 
 		best_stream = max(streams_in, key=score) if streams_in else None
 
 		for s in streams_in:
-				idx = s["index"]
-				codec = (s.get("codec_name") or "").lower()
-				lang = (s.get("tags", {}) or {}).get("language", "und")
-				ch = int(s.get("channels", 0))
-				br = int(s.get("bit_rate", 0) or 0)
-				disp = s.get("disposition", {})
-				sr = int(s.get("sample_rate", 0))
-				if lang == "und":
-					undetermined_lang_count += 1
+				idx		= s["index"]
+				codec	= (s.get("codec_name") or "").lower()
+				lang	= (s.get("tags", {}) or {}).get("language", "und")
+				ch		= int(s.get("channels", 0))
+				br		= int(s.get("bit_rate", 0) or 0)
+				disp	= s.get("disposition", {})
+				sr		= int(s.get("sample_rate", 0))
+				if lang == "und":		undetermined_lang_count += 1
 
 				is_compliant = (codec == "aac" and ch in {2, 6} and sr in {0, 48000})
 				needs_recode = not is_compliant
-				if needs_recode:
-					any_recode_needed = True
+				if needs_recode:	any_recode_needed = True
 
 				per_stream_opts: List[str] = ["-map", f"0:{idx}"]
 				actions: List[str] = []
@@ -610,11 +575,9 @@ def parse_audio(streams_in: List[Dict[str, Any]], context: VideoContext, de_bug:
 					if ch not in {2, 6}:		reason.append(f"{ch}ch")
 					if sr not in {0, 48000}:	reason.append(f"{sr}Hz->48kHz")
 
-					per_stream_opts.extend([
-						f"-c:a:{out_idx}", "aac",
-						f"-ar:a:{out_idx}", "48000",
-						f"-metadata:s:a:{out_idx}", f"language={lang}"
-					])
+					per_stream_opts.extend([f"-c:a:{out_idx}", "aac",
+											f"-ar:a:{out_idx}", "48000",
+											f"-metadata:s:a:{out_idx}", f"language={lang}" ])
 
 					if ch >= 6:
 						bitrate = "384k"
@@ -627,7 +590,7 @@ def parse_audio(streams_in: List[Dict[str, Any]], context: VideoContext, de_bug:
 
 				is_best = (s is best_stream)
 				needs_disposition_change = (is_best != bool(disp.get("default")))
-				if needs_disposition_change:		any_disposition_change_needed = True
+				if needs_disposition_change:	any_disposition_change_needed = True
 
 				if is_best:
 					if needs_disposition_change:	actions.append("Set Default")
@@ -637,7 +600,7 @@ def parse_audio(streams_in: List[Dict[str, Any]], context: VideoContext, de_bug:
 					per_stream_opts.extend([f"-disposition:a:{out_idx}", "0"])
 
 				opts.extend(per_stream_opts)
-				logs.append((	f"\033[92m   |<A:{idx:2}>|{codec:^8}|{lang:<3}|Br:{hm_sz(br,'bps'):<10}|Ch:{ch}|SR:{sr}Hz| "
+				logs.append((	f"\033[92m   |<A:{idx:2}>|{codec:^6}|{lang:<3}|Br:{hm_sz(br,'bps'):<10}|Ch:{ch}|SR:{sr}Hz| "
 								f"{'|'.join(actions)}\033[0m"))
 				out_idx += 1
 
@@ -675,8 +638,7 @@ for k, vals in _LANG_ALIASES.items():
 
 def _tokens_after_stem(sub_path: Path, video_stem: str) -> List[str]:
 		remainder = sub_path.stem[len(video_stem):].lstrip(".-_ ")
-		if not remainder:
-				return []
+		if not remainder:		return []
 		return [t for t in re.split(r"[.\-_ ]+", remainder) if t]
 
 def _guess_lang3_from_filename(sub_path: Path, video_stem: str) -> Optional[str]:
@@ -789,14 +751,11 @@ def add_subtl_from_file(input_file: str
 		# --- NEW: Determine disposition for the chosen file ---
 		tokens = {t.lower() for t in _tokens_after_stem(chosen, stem)}
 		disposition = "default" # Start by assuming default
-		if "forced" in tokens:
-			disposition = "forced"
-		elif "sdh" in tokens or "cc" in tokens:
-			disposition = "0" # SDH/CC tracks are for accessibility, not default
+		if "forced" in tokens: 					disposition = "forced"
+		elif "sdh" in tokens or "cc" in tokens:	disposition = "0" # SDH/CC tracks are for accessibility, not default
 
 		logs.append(f"\033[94m  .Adding subtitle: {chosen.name} (Lang: {default_lng}, Disp: {disposition})\033[0m") # <-- MODIFIED: Append to logs
-		return [
-				"-i", str(chosen),
+		return ["-i", str(chosen),
 				"-map", "1:0",
 				"-c:s:0", "mov_text",
 				"-metadata:s:s:0", f"language={default_lng}",
@@ -821,117 +780,159 @@ def add_subtl_from_file(input_file: str
 	tokens = {t.lower() for t in _tokens_after_stem(best_path, stem)}
 	disposition = "0" # Default to 'off' for non-direct matches
 
-	if "forced" in tokens:
-		disposition = "forced"
+	if "forced" in tokens: 	disposition = "forced"
 	elif lang3 == default_lng and "sdh" not in tokens and "cc" not in tokens:
 		disposition = "default"
 
 	logs.append(f"\033[94m  .Adding subtitle: {best_path.name} (Lang: {lang3}, Disp: {disposition})\033[0m") # <-- MODIFIED: Append to logs
-	return [
-			"-i", str(best_path),
+	return ["-i", str(best_path),
 			"-map", "1:0",
 			"-c:s:0", "mov_text",
 			"-metadata:s:s:0", f"language={lang3}",
 			"-disposition:s:0", disposition
 	], False, logs # <-- MODIFIED: Return logs
 
-def parse_subtl(sub_streams: List[Dict[str, Any]], context: VideoContext, de_bug: bool = False
-	) -> Tuple[List[str], bool, List[str]]: # <-- MODIFIED: Returns logs
+def parse_subtl(
+	sub_streams: List[Dict[str, Any]],
+	context: "VideoContext",
+	de_bug: bool = False,
+	workdir: Union[Path, bool] = False,
+	use_color: bool = True,
+) -> Tuple[List[str], bool, List[str]]:
+	"""
+	Parse subtitle streams and build ffmpeg commands, skip flag and logs.
 
-		logs: List[str] = [] # <-- MODIFIED: Log list
-		TEXT_CODECS = {"mov_text", "subrip", "srt", "ass", "ssa", "webvtt", "text"}
-		input_file = context.input_file
-		default_language = Default_lng
+	Returns: (ffmpeg_commands, can_skip_processing, logs)
+	- ffmpeg_commands: list of ffmpeg args to map & encode/subtitle metadata
+	- can_skip_processing: True if no re-encode/disposition change required
+	- logs: list of human-readable log lines
+	"""
+	logs: List[str] = []
+	TEXT_CODECS = {"mov_text", "subrip", "srt", "ass", "ssa", "webvtt", "text"}
+	input_file = context.input_file
+	default_language = Default_lng
 
-		text_streams = [s for s in sub_streams if str(s.get("codec_name", "")).lower() in TEXT_CODECS]
+	def codec_name(s: Dict[str, Any]) -> str:
+		return str(s.get("codec_name", "") or "").lower()
 
-		if not text_streams:
-			logs.append("\033[94m  .No embedded subtitles, checking for external files.\033[0m") # <-- MODIFIED: Append to logs
-			sidecar_cmds, sidecar_skip, sidecar_logs = add_subtl_from_file(input_file)
-			logs.extend(sidecar_logs)
-			return sidecar_cmds, sidecar_skip, logs
+	def style(msg: str, color: str = "94") -> str:
+		return f"\033[{color}m{msg}\033[0m" if use_color else msg
 
-		SCORE = {"IS_FORCED": -500, "IS_SDH": 10, "IS_DEFAULT": 100, "LANG_MATCH": 1000}
+	sub_streams_sorted = sorted(sub_streams, key=lambda s: int(s.get("index", 0)))
+	text_streams = [s for s in sub_streams_sorted if codec_name(s) in TEXT_CODECS]
+	non_compliant = [s for s in sub_streams_sorted if codec_name(s) not in TEXT_CODECS]
 
-		def get_score(stream: Dict[str, Any]) -> int:
-				tags = stream.get("tags", {})
-				disp = stream.get("disposition", {})
-				title = str(tags.get("title", "")).lower()
-				score = 0
-				lang = tags.get("language", "und")
-				if lang == default_language: 	score += SCORE["LANG_MATCH"]
-				if disp.get("default"):			score += SCORE["IS_DEFAULT"]
-				if "sdh" in title:				score += SCORE["IS_SDH"]
-				if disp.get("forced"):			score += SCORE["IS_FORCED"]
-				return score
+	for s in non_compliant:
+		idx = s.get("index", "?")
+		codec = s.get("codec_name") or "unknown"
+		tags = s.get("tags") or {}
+		lang = tags.get("language") or tags.get("lang") or "und"
+		title = tags.get("title") or tags.get("comment") or "No Title"
+		logs.append(f'   |<S:{int(idx):2}>|{codec:^6}|{lang:<3}|' + (f'title:"{title}"|' if title.strip() else '')	+ '\t Not Compliant' )
+	if not text_streams:
+		logs.append(style("  .No compatible subtitles, check for external files."))
+		sidecar_cmds, sidecar_skip, sidecar_logs = add_subtl_from_file(input_file)
+		logs.extend(sidecar_logs)
+		return sidecar_cmds, sidecar_skip, logs
 
-		default_track = max(text_streams, key=get_score) if text_streams else None
+	SCORE = {"IS_FORCED": -500, "IS_SDH": 10, "IS_DEFAULT": 100, "LANG_MATCH": 1000}
 
-		ffmpeg_commands: List[str] = []
-		any_codec_change_needed = False
-		any_disposition_change_needed = False
-		undetermined_lang_count = 0
+	def get_score(stream: Dict[str, Any]) -> int:
+		tags = stream.get("tags", {}) or {}
+		disp = stream.get("disposition", {}) or {}
+		title = str(tags.get("title", "")).lower()
+		lang = tags.get("language", "und")
+		score = 0
+		if lang == default_language: score += SCORE["LANG_MATCH"]
+		if disp.get("default"):      score += SCORE["IS_DEFAULT"]
+		if "sdh" in title:           score += SCORE["IS_SDH"]
+		if disp.get("forced"):       score += SCORE["IS_FORCED"]
+		return score * 10000 - int(stream.get("index", 0))
 
-		for i, stream in enumerate(text_streams):
-				in_index		= stream["index"]
-				codec		= str(stream.get("codec_name", "")).lower()
-				lang	= stream.get("tags", {}).get("language", "und")
-				is_new_default = (stream is default_track)
-				was_original_default = bool(stream.get("disposition", {}).get("default"))
-				if lang == "und":	undetermined_lang_count += 1
+	default_track = max(text_streams, key=get_score)
 
-				needs_codec_change = (codec != "mov_text")
-				if needs_codec_change:		any_codec_change_needed = True
+	ffmpeg_commands: List[str] = []
+	any_codec_change_needed = False
+	any_disposition_change_needed = False
+	undetermined_lang_count = 0
 
-				needs_disposition_change = (is_new_default != was_original_default)
-				if needs_disposition_change:	any_disposition_change_needed = True
+	for out_idx, stream in enumerate(text_streams):
+		idx = int(stream["index"])
+		codec = stream.get("codec_name") or "???"
+		tags = stream.get("tags") or {}
+		lang = tags.get("language") or tags.get("lang") or "und"
+		title = tags.get("title") or tags.get("comment") or ""
 
-				ffmpeg_commands.extend([
-						"-map", f"0:{in_index}",
-						f"-c:s:{i}", "mov_text" if needs_codec_change else "copy",
-						f"-disposition:s:{i}", "default" if is_new_default else "0",
-						f"-metadata:s:s:{i}", f"language={lang}",
-				])
+		if lang == "und":
+			undetermined_lang_count += 1
 
-				actions: List[str] = []
-				if needs_codec_change:
-						actions.append("Re-encode")
-				else:
-						actions.append("Copy")
+		is_new_default = (int(default_track.get("index")) == idx)
+		was_default_before = bool(stream.get("disposition", {}).get("default"))
 
-				if is_new_default and not was_original_default:
-						actions.append("Set Default")
-				elif not is_new_default and was_original_default:
-						actions.append("Clear Default")
-				elif is_new_default:
-						actions.append("Keep Default")
-				else:
-						actions.append("Not Default")
+		needs_codec_change = (codec.lower() != "mov_text")
+		needs_disposition_change = (is_new_default != was_default_before)
 
-				logs.append(f"\033[94m   |<S:{in_index:2}>|{codec:^8}|{lang:<3}| {'|'.join(actions)}\033[0m" )
+		any_codec_change_needed |= needs_codec_change
+		any_disposition_change_needed |= needs_disposition_change
 
-		if undetermined_lang_count > 0:
-				plural = "s have" if undetermined_lang_count > 1 else " has"
-				logs.append( f"\033[93m   ?!Warning: {undetermined_lang_count} mapped subtitle stream{plural} undetermined language ('und').\033[0m" )
+		ffmpeg_commands.extend([
+			"-map", f"0:{idx}",
+			f"-c:s:{out_idx}", "mov_text" if needs_codec_change else "copy",
+			f"-disposition:s:{out_idx}", "default" if is_new_default else "0",
+			f"-metadata:s:s:{out_idx}", f"language={lang}",
+		])
 
-		can_skip_processing = (not any_codec_change_needed) and (not any_disposition_change_needed)
-		if can_skip_processing:
-				logs.append("\033[94m  .Skip: Subtitles correct (format + disposition).\033[0m") # <-- MODIFIED: Append to logs
+		actions = [
+			"Re-encode" if needs_codec_change else "Copy",
+			"Set Default" if is_new_default and not was_default_before else
+			"Clear Default" if not is_new_default and was_default_before else
+			"Keep Default" if is_new_default else "Not Default"
+		]
 
-		return ffmpeg_commands, can_skip_processing, logs # <-- MODIFIED: Return logs
+		logs.append(style( f'   |<S:{idx:2}>|{codec:^6}|{lang:<3}|' + (f'title:"{title}|" ' if title.strip() else '') + "|".join(actions) ))
+
+	if undetermined_lang_count > 0:
+		plural = "streams have" if undetermined_lang_count > 1 else "stream has"
+		logs.append(style(f"   ?!Warning: {undetermined_lang_count} mapped subtitle {plural} undetermined language ('und').", color="93" ))
+
+	can_skip_processing = not any_codec_change_needed and not any_disposition_change_needed
+	if can_skip_processing:
+		logs.append(style("  .Skip: Subtitles correct (format + disposition)."))
+
+	if workdir:
+		try:
+			report = {
+				"input": str(input_file),
+				"text_stream_count": len(text_streams),
+				"non_compliant_count": len(non_compliant),
+				"non_compliant": [{
+					"index":	 s.get("index"),
+					"codec":	 s.get("codec_name"),
+					"lang":		(s.get("tags") or {}).get("language") or (s.get("tags") or {}).get("lang") or "und",
+					"title":	(s.get("tags") or {}).get("title")    or (s.get("tags") or {}).get("comment") or ""
+				} for s in non_compliant]
+			}
+			workdir = Path(workdir)
+			workdir.mkdir(parents=True, exist_ok=True)
+			rp = workdir / "subs_report.json"
+			rp.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf8")
+			logs.append(f"  Subtitle report written to: {rp}")
+		except Exception as e:	logs.append(f"  Warning: failed to write subtitle report: {e}")
+
+	return ffmpeg_commands, can_skip_processing, logs
+
 
 def _extract_comment_tag(meta: Dict[str, Any]
 	) -> str:
 		candidates: List[str] = []
-		fmt_tags = (meta.get("format", {}) or {}).get("tags", {}) or {}
-		streams = meta.get("streams", []) or []
+		fmt_tags	= (meta.get("format", {}) or {}).get("tags", {}) or {}
+		streams		=  meta.get("streams", []) or []
 		vid0_tags = next(((s.get("tags", {}) or {}) for s in streams if s.get("codec_type") == "video"), {})
 		for d in (fmt_tags, vid0_tags):
 			for k, v in (d or {}).items():
 				if (k or "").lower() in ("comment", "©cmt", "description", "desc"):
 					val = str(v or "").strip()
-					if val:
-						candidates.append(val)
+					if val:		candidates.append(val)
 		return candidates[0] if candidates else ""
 
 #
@@ -971,7 +972,7 @@ def parse_finfo(input_file: str, metadata: Dict[str, Any], de_bug: bool = False
 			noun = "streams" if len(missing) > 1 else "stream"
 			verb = "were" if len(missing) > 1 else "was"
 			warn = f"\033[96m !Warning: No {kind} {noun} {verb} found.\n Move: {input_file}\n To: {EXCEPT_DIR}\033[0m"
-			with print_lock: print(warn) # Print this error immediately
+			safe_print(warn) # Print this error immediately
 			return [], True, [warn] # Return the error message
 
 		tags = fmt.get("tags", {}) or {}
@@ -996,7 +997,7 @@ def parse_finfo(input_file: str, metadata: Dict[str, Any], de_bug: bool = False
 		if skip_f:	header += f"\n  .Skip: Format OK"
 		else:		header += f" |Comment: '{raw_comment or ''}' (Will add SKIP_KEY in remux)"
 
-		with print_lock: print(f"\033[96m{header}\033[0m") # <-- PRINT HEADER
+		safe_print(f"\033[96m{header}\033[0m") # <-- PRINT HEADER
 
 		skip_flags: List[bool] = [skip_f]
 
@@ -1058,7 +1059,7 @@ def parse_finfo(input_file: str, metadata: Dict[str, Any], de_bug: bool = False
 
 		# --- STEP 3: PRINT the captured stream logs in order ---
 		for ln in all_stream_logs:
-			with print_lock: print(ln)
+			safe_print(ln)
 
 		# --- STEP 4: Build and PRINT the FINAL summary logs ---
 		# 1. Check for non-stream-copy reasons to process
@@ -1075,13 +1076,13 @@ def parse_finfo(input_file: str, metadata: Dict[str, Any], de_bug: bool = False
 						needs_hvc1_tag = True # It's HEVC but not hvc1
 			except Exception as e:
 				# Print warning immediately
-				with print_lock: print(f"\033[93m   ?!Warning: Error during hvc1 tag check: {e}\033[0m")
+				safe_print(f"\033[93m   ?!Warning: Error during hvc1 tag check: {e}\033[0m")
 
 		# 3. Determine if processing is *really* needed
 		if final_skip and not needs_container_change and not needs_hvc1_tag:
 			# This is a TRUE skip. No work needed at all.
 			# Print summary immediately
-			with print_lock: print("\033[96m  .Skip: File compliant, already processed, and has skip key.\033[0m")
+			safe_print("\033[96m  .Skip: File compliant, already processed, and has skip key.\033[0m")
 			if FORCE_ARTIFACTS_ON_SKIP:
 				try:
 					has_audio = len(s_by_type.get("audio", [])) > 0
@@ -1105,7 +1106,7 @@ def parse_finfo(input_file: str, metadata: Dict[str, Any], de_bug: bool = False
 			if needs_hvc1_tag:            process_reasons.append("hvc1 tag")
 
 			# Print summary immediately
-			with print_lock: print(f"\033[96m  .Processing Required ({', '.join(process_reasons)}) for: {Path(input_file).name}\033[0m")
+			safe_print(f"\033[96m  .Processing Required ({', '.join(process_reasons)}) for: {Path(input_file).name}\033[0m")
 
 			# 5. Update SRIK plan with remux-only info
 			if is_remux_only_job:
@@ -1130,7 +1131,7 @@ def parse_finfo(input_file: str, metadata: Dict[str, Any], de_bug: bool = False
 			srik_update(input_file, source=source_info, plan=plan_info)
 		except Exception as e:
 			if de_bug:
-				with print_lock: print(f"DEBUG: Failed to seed/update SRIK in parse_finfo: {e}")
+				safe_print(f"DEBUG: Failed to seed/update SRIK in parse_finfo: {e}")
 			try:
 				srik_update(input_file, plan={"skip_processing": final_skip, "skip_key_found": bool(skip_f)})
 			except Exception:	pass
@@ -1172,7 +1173,7 @@ def progress_remove(task_id: str) -> None:
 def progress_get_snapshot() -> Dict[str, Dict[str, float | str]]:
 	with progress_lock: return {k: dict(v) for k, v in progress_state.items()}
 
-def update_progress(line: str, task_id: str, debug: bool = False) -> None:
+def update_progress(line: str, task_id: str, de_bug: bool = False) -> None:
 	line = line.strip()
 	if not line or not (line.startswith(('frame=', 'size=', 'Lsize=')) or 'bitrate=' in line or 'speed=' in line):
 		return
@@ -1228,8 +1229,8 @@ def update_progress(line: str, task_id: str, debug: bool = False) -> None:
 						"eta":			eta_str
 						})
 	except Exception as e:
-		if debug:
-			with print_lock: print(f"\nWarning: Error parsing progress line: '{line}' - {e}", file=sys.stderr)
+		if de_bug:
+			safe_print(f"\nWarning: Error parsing progress line: '{line}' - {e}", file=sys.stderr)
 
 # -----------------------------------------------------------------------------
 # Encoding Execution (2-stage pipeline)
@@ -1241,7 +1242,7 @@ def _run_ffmpeg_live(cmd: List[str], task_id: str = "T1", timeout: int = STAGE_T
 	if de_bug:
 		# Use shlex.quote for safer command string representation
 		cmd_str = " ".join(shlex.quote(a) for a in cmd)
-		with print_lock: print(f"\n--- [DEBUG] FFmpeg Command ({task_id}) ---\n{cmd_str}\n------------------------------\n")
+		safe_print(f"\n--- [DEBUG] FFmpeg Command ({task_id}) ---\n{cmd_str}\n------------------------------\n")
 
 	proc: Optional[sp.Popen] = None
 	# Simplified type hint
@@ -1258,20 +1259,18 @@ def _run_ffmpeg_live(cmd: List[str], task_id: str = "T1", timeout: int = STAGE_T
 			for line in iter(pipe.readline, ''):
 				q.put(line)
 				line_list.append(line) # Store for tail log
-		except ValueError:
+		except ValueError:			pass
 			# Ignore ValueError: I/O operation on closed file (can happen during shutdown)
-			pass
 		except Exception as e:
 			# Log other reader errors if debugging
 			if de_bug:
-				with print_lock: print(f"DEBUG [{task_id}]: stderr reader thread exception: {e}")
+				safe_print(f"DEBUG [{task_id}]: stderr reader thread exception: {e}")
 		finally:
-			try:
-				pipe.close() # Ensure pipe is closed
+			try: 	pipe.close() # Ensure pipe is closed
 			except Exception: pass
 			q.put(None) # Signal EOF for the main thread
 			if de_bug:
-				with print_lock: print(f"DEBUG [{task_id}]: Reader thread finished.")
+				safe_print(f"DEBUG [{task_id}]: Reader thread finished.")
 	try:
 		# --- <<< ADDED: Get label, register task, and set duration >>> ---
 		label = task_id # Default label
@@ -1280,8 +1279,7 @@ def _run_ffmpeg_live(cmd: List[str], task_id: str = "T1", timeout: int = STAGE_T
 			i_index = cmd.index("-i")
 			if i_index + 1 < len(cmd):
 				label = Path(cmd[i_index + 1]).name
-		except Exception:
-			pass # Stick with default label if "-i" not found
+		except Exception:	pass # Stick with default label if "-i" not found
 
 		progress_register(task_id, label=label)
 		if duration and duration > 0:
@@ -1291,12 +1289,12 @@ def _run_ffmpeg_live(cmd: List[str], task_id: str = "T1", timeout: int = STAGE_T
 		# --- Start Process ---
 		proc = _popen_managed(cmd, stdout=sp.DEVNULL, stderr=sp.PIPE, bufsize=1)
 		if de_bug:
-			with print_lock: print(f"DEBUG [{task_id}]: FFmpeg process started (PID: {proc.pid}).")
+			safe_print(f"DEBUG [{task_id}]: FFmpeg process started (PID: {proc.pid}).")
 		# --- Start Reader Thread ---
 		reader_thread_handle = threading.Thread(target=reader_thread, args=(proc.stderr, stderr_q, stderr_lines_all), daemon=True)
 		reader_thread_handle.start()
 		if de_bug:
-			with print_lock: print(f"DEBUG [{task_id}]: stderr reader thread started.")
+			safe_print(f"DEBUG [{task_id}]: stderr reader thread started.")
 		start_time = time.time()
 		last_progress_print_time = 0.0
 		# --- Main Loop ---
@@ -1305,7 +1303,7 @@ def _run_ffmpeg_live(cmd: List[str], task_id: str = "T1", timeout: int = STAGE_T
 			# --- Check Timeout ---
 			if now - start_time > timeout:
 				# --- FIX: TARGETED KILL ---
-				with print_lock: print(f"\n\033[93m[timeout]\033[0m FFmpeg ({task_id}) exceeded {timeout}s; terminating this job...")
+				safe_print(f"\n\033[93m[timeout]\033[0m FFmpeg ({task_id}) exceeded {timeout}s; terminating this job...")
 				# Prefer a targeted kill so we don't affect other encodes
 				try:
 					if IS_WIN:
@@ -1313,8 +1311,7 @@ def _run_ffmpeg_live(cmd: List[str], task_id: str = "T1", timeout: int = STAGE_T
 						proc.kill()
 					else:
 						os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-				except Exception:
-					pass
+				except Exception:		pass
 				# --- END FIX ---
 				break # Exit loop, finally block will handle wait/cleanup
 
@@ -1322,7 +1319,7 @@ def _run_ffmpeg_live(cmd: List[str], task_id: str = "T1", timeout: int = STAGE_T
 			proc_status = proc.poll()
 			if proc_status is not None:
 				if de_bug:
-					with print_lock: print(f"DEBUG [{task_id}]: Process ended independently with status {proc_status}.")
+					safe_print(f"DEBUG [{task_id}]: Process ended independently with status {proc_status}.")
 				# Process ended on its own, wait for reader EOF signal naturally
 				clean_exit_signal = True # Mark potential clean exit
 				# Loop continues until EOF is read from queue
@@ -1331,7 +1328,7 @@ def _run_ffmpeg_live(cmd: List[str], task_id: str = "T1", timeout: int = STAGE_T
 				line = stderr_q.get(timeout=0.2) # Wait up to 200ms for a line
 				if line is None: # EOF signal from reader
 					if de_bug:
-						with print_lock: print(f"DEBUG [{task_id}]: Received EOF from reader.")
+						safe_print(f"DEBUG [{task_id}]: Received EOF from reader.")
 					clean_exit_signal = True # Mark clean exit via EOF
 					break # Exit main loop normally
 				# --- Process Line & Update Progress ---
@@ -1345,7 +1342,7 @@ def _run_ffmpeg_live(cmd: List[str], task_id: str = "T1", timeout: int = STAGE_T
 						size_bytes	= st.get('size_bytes', 0); frame = st.get('frame', 0)
 						speed		= st.get('speed', 0.0); percent = st.get('percent', 0.0)
 						eta			= st.get('eta', '--:--:--') # Get ETA from update_progress
-						disp = (f"\r   [{task_id}]|Encode|"
+						disp = (f"\r   [{task_id}].Encode|"
 								f"Size:{hm_sz(size_bytes):>8}|"
 								f"Frames:{frame:>7}|"
 								f"Fps:{fps:>4}|"
@@ -1355,17 +1352,15 @@ def _run_ffmpeg_live(cmd: List[str], task_id: str = "T1", timeout: int = STAGE_T
 								f"ETA:{eta}| ") # Add ETA to display
 					sys.stderr.write(disp); sys.stderr.flush()
 					last_progress_print_time = now
-			except queue.Empty:
-				# Queue was empty, just continue loop (check timeout/process status again)
-				pass
+			except queue.Empty:	pass		# Queue was empty, just continue loop (check timeout/process status again)
 			except Exception as q_err:
 				# Catch unexpected errors during queue read/progress update
-				with print_lock: print(f"\n   [{task_id}] ERROR in progress loop: {q_err}")
+				safe_print(f"\n   [{task_id}] ERROR in progress loop: {q_err}")
 				clean_exit_signal = False # Not a clean exit
 				break # Exit loop on error
 	except Exception as e:
 		# --- Catch errors during setup ---
-		with print_lock: print(f"\n   [{task_id}] CRITICAL error in _run_ffmpeg_live setup: {e}\n{traceback.format_exc()}")
+		safe_print(f"\n   [{task_id}] CRITICAL error in _run_ffmpeg_live setup: {e}\n{traceback.format_exc()}")
 		if proc: PROC_MGR.unregister(proc) # Ensure unregister if proc exists
 		try:
 			errlog_block("<unknown-input>", f"ffmpeg exec exception [{task_id}]", " ".join(cmd) + f"\n\n{e}\n{traceback.format_exc()}")
@@ -1382,7 +1377,7 @@ def _run_ffmpeg_live(cmd: List[str], task_id: str = "T1", timeout: int = STAGE_T
 			if current_status is None:
 				# If loop didn't exit cleanly (timeout, error), ensure termination
 				if not clean_exit_signal:
-					with print_lock: print(f"   [{task_id}]: Ensuring FFmpeg process termination after loop exit...")
+					safe_print(f"   [{task_id}]: Ensuring FFmpeg process termination after loop exit...")
 					# --- FIX: Use targeted kill in finally block as well ---
 					try:
 						if IS_WIN: proc.kill()
@@ -1393,31 +1388,30 @@ def _run_ffmpeg_live(cmd: List[str], task_id: str = "T1", timeout: int = STAGE_T
 				try:
 					proc.wait(timeout=5.0)
 				except sp.TimeoutExpired:
-					with print_lock: print(f"   [{task_id}] WARNING: FFmpeg did not terminate cleanly after wait.")
+					safe_print(f"   [{task_id}] WARNING: FFmpeg did not terminate cleanly after wait.")
 					try: proc.kill() # Last resort kill
 					except Exception: pass
 				except Exception as wait_err:
-					with print_lock: print(f"   [{task_id}] WARNING: Error during final process wait: {wait_err}")
+					safe_print(f"   [{task_id}] WARNING: Error during final process wait: {wait_err}")
 			final_rc = proc.poll() # Get final exit code
 			PROC_MGR.unregister(proc) # Final unregister guaranteed
 		# Ensure reader thread is joined
 		if reader_thread_handle and reader_thread_handle.is_alive():
 			if de_bug:
-				with print_lock: print(f"DEBUG [{task_id}]: Waiting for reader thread to join in finally...")
+				safe_print(f"DEBUG [{task_id}]: Waiting for reader thread to join in finally...")
 			reader_thread_handle.join(timeout=2.0)
 			if reader_thread_handle.is_alive():
-				with print_lock: print(f"   [{task_id}] WARNING: Reader thread did not join cleanly.")
+				safe_print(f"   [{task_id}] WARNING: Reader thread did not join cleanly.")
 		# Drain queue one last time after thread join/process wait
 		try:
 			while True:
 				line = stderr_q.get_nowait()
 				if line is None: break # EOF marker
 				# Could append to stderr_lines_all here if needed, but tail already captured in reader
-		except queue.Empty:
-			pass
+		except queue.Empty:	pass
 		except Exception as drain_err:
 			if de_bug:
-				with print_lock: print(f"DEBUG [{task_id}]: Error draining queue in finally: {drain_err}")
+				safe_print(f"DEBUG [{task_id}]: Error draining queue in finally: {drain_err}")
 		# Clear progress line from terminal
 		with print_lock:
 			sys.stderr.write("\r" + " " * 120 + "\r") # Wider clear
@@ -1428,7 +1422,7 @@ def _run_ffmpeg_live(cmd: List[str], task_id: str = "T1", timeout: int = STAGE_T
 		rc_to_return = final_rc if final_rc is not None else 1 # Default to error if unknown
 		tail = "".join(stderr_lines_all[-60:]) # Get last 60 lines collected by reader
 		if de_bug:
-			with print_lock: print(f"DEBUG [{task_id}]: Exiting _run_ffmpeg_live finally block with rc={rc_to_return}.")
+			safe_print(f"DEBUG [{task_id}]: Exiting _run_ffmpeg_live finally block with rc={rc_to_return}.")
 		return rc_to_return, tail
 
 # --- MODIFIED: Added 'duration' AND 'add_hvc1_tag' params ---
@@ -1438,34 +1432,30 @@ def _faststart_remux(inp: Path, out: Path, task_id: str = "T1", duration: Option
 	Can also add the hvc1 video tag.
 	"""
 	if out.exists():
-		try:
-			out.unlink(missing_ok=True) # Use missing_ok=True for cleaner deletion
-		except Exception as e:
+		try:		out.unlink(missing_ok=True) # Use missing_ok=True for cleaner deletion
+		except Exception as e:			safe_print(f"   [{task_id}] WARNING: Could not delete existing output {out.name}: {e}")
 			# Use print_lock for thread safety
-			with print_lock: print(f"   [{task_id}] WARNING: Could not delete existing output {out.name}: {e}")
 			# Continue even if deletion failed, ffmpeg -y will handle it
 
 	cmd2 = [FFMPEG, "-y", "-hide_banner",
 			"-i", str(inp),
 			"-map_metadata", "-1",	# clear; don't import source tags
-			"-map", "0",			# copy all streams
+			"-map", "0:v?",			# <--- THIS IS THE FIX
+			"-map", "0:a?",			# <--- THIS IS THE FIX
+			"-map", "0:s?",			# <--- THIS IS THE FIX
 			"-c", "copy",
 	]
 
 	# --- NEW: Add hvc1 tag if requested ---
 	if add_hvc1_tag:	cmd2.extend(["-tag:v", "hvc1"])
 
-	cmd2.extend([
-			"-movflags", "+faststart+use_metadata_tags", # Ensure faststart and modern tags
-			"-metadata", f"comment={SKIP_KEY}",
-			str(out)
-	])
+	cmd2.extend([	"-movflags", "+faststart+use_metadata_tags", # Ensure faststart and modern tags
+					"-metadata", f"comment={SKIP_KEY}",	str(out)	])
 
 	# Use print_lock for thread safety
 	log_action = "Stage-2 remux (+faststart,use_metadata_tags & SKIP_KEY)"
-	if add_hvc1_tag:
-		log_action += " (+hvc1 tag)"
-	with print_lock: print(f"\n   [{task_id}] {log_action}")
+	if add_hvc1_tag:	log_action += " (+hvc1 tag)"
+	safe_print(f"\n   [{task_id}] {log_action}")
 
 	# Pass distinct task ID suffix (_FS)
 	# --- MODIFIED: Pass 'duration' to _run_ffmpeg_live ---
@@ -1563,7 +1553,7 @@ def run_encode_then_faststart(encode_cmd: List[str], src_path: Path, final_mp4_p
 	cmd1 += ["-movflags", "+faststart", str(stage1_path)]
 
 	# --- Stage 1 Execution ---
-	with print_lock: print(f"   [{task_id}] Stage-1 encode -> MP4")
+	safe_print(f"   [{task_id}] Stage-1 encode -> MP4")
 	# --- MODIFIED: Pass 'duration' ---
 	rc1, tail1 = _run_ffmpeg_live(cmd1, task_id=task_id, timeout=STAGE_TIMEOUT_S, duration=duration)
 
@@ -1573,7 +1563,7 @@ def run_encode_then_faststart(encode_cmd: List[str], src_path: Path, final_mp4_p
 
 	# --- Handle Stage 1 Failure ---
 	if rc1 != 0:
-		with print_lock: print(f"[{task_id}] FFmpeg (stage-1) failed with code {rc1}"); print(tail1)
+		safe_print(f"[{task_id}] FFmpeg (stage-1) failed with code {rc1}"); print(tail1)
 		errlog_block(str(src_path), f"ffmpeg stage-1 rc={rc1} [{task_id}]", " ".join(cmd1) + "\n\n" + (tail1 or ""))
 
 		# --- Sanitize Attempt (if applicable) ---
@@ -1581,10 +1571,10 @@ def run_encode_then_faststart(encode_cmd: List[str], src_path: Path, final_mp4_p
 		if allow_sanitize and any(p in (tail1 or "").lower() for p in SUSPECT):
 			sanitize_src = RUN_TMP / f"__sanitize_{src_path.stem}_{token}.mkv"
 			cmd_san = [FFMPEG, "-y", "-hide_banner", "-fflags", "+genpts", "-i", str(src_path), "-map", "0", "-map_metadata", "0", "-c", "copy", str(sanitize_src)]
-			with print_lock: print(f"[{task_id}] Sanitize remux attempt -> {sanitize_src.name}")
+			safe_print(f"[{task_id}] Sanitize remux attempt -> {sanitize_src.name}")
 			rcs, tailS = _run_ffmpeg_live(cmd_san, task_id=f"{task_id}_SAN", timeout=max(1200, STAGE_TIMEOUT_S // 8), duration=duration) # Pass duration here too
 			if rcs == 0 and sanitize_src.exists() and sanitize_src.stat().st_size > 1024:
-				with print_lock: print(f"[{task_id}] Sanitize remux OK. Retrying encode from sanitized source.")
+				safe_print(f"[{task_id}] Sanitize remux OK. Retrying encode from sanitized source.")
 				# Recursively call self with sanitized source, disallowing further sanitization
 				# --- MODIFIED: Pass 'duration' to recursive call ---
 				ok_retry = run_encode_then_faststart(encode_cmd, sanitize_src, final_mp4_path, task_id, allow_sanitize=False, duration=duration)
@@ -1607,12 +1597,10 @@ def run_encode_then_faststart(encode_cmd: List[str], src_path: Path, final_mp4_p
 	ok2, _ = _faststart_remux(stage1_path, final_mp4_path, task_id, duration=duration, add_hvc1_tag=False) # Pass original task_id
 
 	# --- Final Cleanup ---
-	try:
-		stage1_path.unlink(missing_ok=True)
+	try:	stage1_path.unlink(missing_ok=True)
 	except Exception as e:
 		# Log if cleanup fails, but don't fail the whole function
-		if de_bug:
-			with print_lock: print(f"DEBUG [{task_id}]: Failed to delete stage1 file {stage1_path}: {e}")
+		if de_bug:	safe_print(f"DEBUG [{task_id}]: Failed to delete stage1 file {stage1_path}: {e}")
 
 	return ok2
 
@@ -1644,31 +1632,27 @@ def ffmpeg_run(input_file: str,	ff_com: List[str], duration: float, skip_it: boo
 			# This is a remux-only job (for skip key, container, or hvc1)
 			# We don't need the 2-step encode.
 			add_hvc1 = plan_info.get("remux_add_hvc1", False)
-			with print_lock: print(f"   [{task_id}] Detected remux-only job, bypassing 2-stage encode.")
+			safe_print(f"   [{task_id}] Detected remux-only job, bypassing 2-stage encode.")
 			ok, _ = _faststart_remux(src_path, out_file, task_id, duration=duration, add_hvc1_tag=add_hvc1)
 			return str(out_file) if ok else None
 	except Exception as e:
-		if de_bug:
-			with print_lock: print(f"DEBUG: Error checking for remux-only job: {e}")
+		if de_bug:	safe_print(f"DEBUG: Error checking for remux-only job: {e}")
 		# Fall through to standard encode path on error
 
 	# If not a remux-only job, or ff_com is empty (e.g., parse_finfo error),
 	# proceed with 2-stage encode or skip.
-	if not ff_com:
-		return None
+	if not ff_com:	return None
 
 	# --- MODIFIED: Pass 'duration' to run_encode_then_faststart ---
 	ok = run_encode_then_faststart(ff_com, src_path, out_file, task_id, allow_sanitize=True, uniq=uniq, duration=duration)
 
-	if ok:
-		return str(out_file)
+	if ok:	return str(out_file)
 
 	errlog_block(input_file, f"ffmpeg encode failed [{task_id}]", "Args: " + " ".join(ff_com))
 	try:
 		if out_file.exists():
 			out_file.unlink()
-	except OSError:
-		pass
+	except OSError:		pass
 
 	return None
 
@@ -1676,36 +1660,27 @@ def ffmpeg_run(input_file: str,	ff_com: List[str], duration: float, skip_it: boo
 # Replacement + Validation + Artifacts
 # -----------------------------------------------------------------------------
 
-def _avg_bitrate(sz_bytes: Optional[int | float], dur_sec: Optional[float]) -> float:
-	size_bits = float(sz_bytes or 0) * 8.0
-	duration = float(dur_sec or 0.0)
-	return size_bits / duration if duration > 0 else 0.0
-
 def _artifact_run(cmd: List[str], task_id: str) -> bool:
 	"""
 	Lightweight FFmpeg runner for artifacts; no interactive HUD.
 	Returns True on rc==0.
 	"""
-	if de_bug:
-		with print_lock: print(f"[{task_id}] run: {' '.join(shlex.quote(c) for c in cmd)}")
+	if de_bug:	safe_print(f"[{task_id}] run: {' '.join(shlex.quote(c) for c in cmd)}")
 	try:
 		proc = _popen_managed(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
-		try:
-			_, err = proc.communicate(timeout=max(120, REMUX_TIMEOUT_S // 4))
-		finally:
-			PROC_MGR.unregister(proc)
+		try:		_, err = proc.communicate(timeout=max(120, REMUX_TIMEOUT_S // 4))
+		finally:	PROC_MGR.unregister(proc)
 		if proc.returncode != 0:
 			with print_lock:
 				print(f"[{task_id}] ffmpeg failed rc={proc.returncode}")
-				if err:
-					print(err[-800:].decode(errors="ignore") if isinstance(err, bytes) else str(err)[-800:])
+				if err:		print(err[-800:].decode(errors="ignore") if isinstance(err, bytes) else str(err)[-800:])
 				return False
 		return True
 	except sp.TimeoutExpired:
-		with print_lock: print(f"[{task_id}] ffmpeg timeout.")
+		safe_print(f"[{task_id}] ffmpeg timeout.")
 		return False
 	except Exception as e:
-		with print_lock: print(f"[{task_id}] ffmpeg exception: {e}")
+		safe_print(f"[{task_id}] ffmpeg exception: {e}")
 		return False
 # --- Helper Function for Speed Up ---
 
@@ -1714,8 +1689,7 @@ def _ff_atempo_chain(factor: float) -> str:
 	Build a legal atempo chain for FFmpeg.
 	Each 'atempo' filter must be between 0.5 and 2.0.
 	"""
-	if factor <= 0.0:
-		return "atempo=1.0"
+	if factor <= 0.0:	return "atempo=1.0"
 	filters = []
 	temp_factor = float(factor)
 	# --- FIX: Use correct 2.0/0.5 logic ---
@@ -1753,9 +1727,9 @@ def matrix_it(
 	try:
 		# --- Parameter and Input Info Validation ---
 		if duration is None or duration <= 1.0 or width is None or width <= 0 or height is None or height <= 0:
-			with print_lock: print(f"   [{task_id_base}] ERROR: Insufficient info (duration/width/height) for matrix."); return False
+			safe_print(f"   [{task_id_base}] ERROR: Insufficient info (duration/width/height) for matrix."); return False
 		if columns < 1 or rows < 1 or not (0 <= start_skip_percent < 50) or not (0 <= end_skip_percent < 50):
-			with print_lock: print(f"   [{task_id_base}] ERROR: Invalid matrix parameters."); return False
+			safe_print(f"   [{task_id_base}] ERROR: Invalid matrix parameters."); return False
 
 		num_thumbs = columns * rows
 		ext = output_image_path.suffix.lower();
@@ -1766,11 +1740,11 @@ def matrix_it(
 		end_time = duration * (1 - end_skip_percent / 100.0)
 
 		if start_time >= end_time:
-			with print_lock: print(f"   [{task_id_base}] ERROR: Start time % ({start_skip_percent}%) >= end time % ({100-end_skip_percent}%). Skipping matrix."); return False
+			safe_print(f"   [{task_id_base}] ERROR: Start time % ({start_skip_percent}%) >= end time % ({100-end_skip_percent}%). Skipping matrix."); return False
 
 		effective_duration = end_time - start_time
 		if effective_duration <= 0:
-			with print_lock: print(f"   [{task_id_base}] ERROR: Zero or negative effective duration for matrix."); return False
+			safe_print(f"   [{task_id_base}] ERROR: Zero or negative effective duration for matrix."); return False
 
 		interval = effective_duration / num_thumbs if num_thumbs > 0 else 0
 		thumb_height = int(round(thumb_width * height / width / 2) * 2) if width > 0 else int(round(thumb_width * 9/16 / 2) * 2)
@@ -1790,7 +1764,7 @@ def matrix_it(
 								"-an", str(thumb_file), ]
 
 				if not _artifact_run(extract_cmd, task_id=f"{task_id_base}_T{i}"):
-					with print_lock: print(f"   [{task_id_base}] ERROR: Failed extracting thumb {i+1} at {time_pos:.2f}s.")
+					safe_print(f"   [{task_id_base}] ERROR: Failed extracting thumb {i+1} at {time_pos:.2f}s.")
 					extraction_ok = False; break
 
 			if not extraction_ok: return False
@@ -1807,13 +1781,13 @@ def matrix_it(
 						"-frames:v", "1", str(output_image_path) ]
 
 			if not _artifact_run(tile_cmd, task_id=f"{task_id_base}_TILE"):
-				with print_lock: print(f"   [{task_id_base}] ERROR: tiling thumbnails failed.")
+				safe_print(f"   [{task_id_base}] ERROR: tiling thumbnails failed.")
 				return False
 
 		return True # Success
 
 	except Exception as e:
-		with print_lock: print(f"   [{task_id_base}] ERROR in matrix_it: {e}")
+		safe_print(f"   [{task_id_base}] ERROR in matrix_it: {e}")
 		try: errlog_block(str(input_path), "matrix_it exception", f"{e}\n{traceback.format_exc()}")
 		except Exception: pass
 		return False
@@ -1823,10 +1797,10 @@ def speed_up( input_path: Path, factor: float, output_path: Path, task_id: str,
 	duration: Optional[float] = None
 ) -> bool:
 	"""Changes video and audio speed, with conditional downscale (no upscaling) and fast encode."""
-	with print_lock: print(f"   [{task_id}] Creating {factor:.2f}x speed version...")
+	safe_print(f"   [{task_id}] Creating {factor:.2f}x speed version...")
 
 	if factor <= 0:
-		with print_lock: print(f"   [{task_id}] ERROR: Speed factor must be positive."); return False
+		safe_print(f"   [{task_id}] ERROR: Speed factor must be positive."); return False
 
 	TARGET_MAX_WIDTH = 960  # adjust to taste (960/1280/1920)
 
@@ -1874,19 +1848,19 @@ def short_ver( input_path: Path, output_path: Path, task_id: str,
 	start_skip_percent: float   = ADDITIONAL_SHORT_SKP_STRT
 ) -> bool:
 	"""Creates a short clip by re-encoding, skipping a start percentage, with conditional downscale."""
-	with print_lock: print(f"   [{task_id}] Creating {clip_duration:.1f}s short version (re-encoding, skipping {start_skip_percent:.1f}%)...")
+	safe_print(f"   [{task_id}] Creating {clip_duration:.1f}s short version (re-encoding, skipping {start_skip_percent:.1f}%)...")
 
 	if duration is None or duration <= 0:
-		with print_lock: print(f"   [{task_id}] ERROR: Cannot calculate start skip without total duration."); return False
+		safe_print(f"   [{task_id}] ERROR: Cannot calculate start skip without total duration."); return False
 	if clip_duration <= 0 or not (0 <= start_skip_percent < 100):
-		with print_lock: print(f"   [{task_id}] ERROR: Invalid clip duration or skip percentage."); return False
+		safe_print(f"   [{task_id}] ERROR: Invalid clip duration or skip percentage."); return False
 
 	start_time_sec = duration * (start_skip_percent / 100.0)
 	actual_clip_duration = clip_duration
 	if start_time_sec + clip_duration > duration:
 		actual_clip_duration = duration - start_time_sec
 		if actual_clip_duration <= 0.01:
-			with print_lock: print(f"   [{task_id}] ERROR: Start skip ({start_skip_percent}%) results in zero or negative duration clip."); return False
+			safe_print(f"   [{task_id}] ERROR: Start skip ({start_skip_percent}%) results in zero or negative duration clip."); return False
 
 	TARGET_MAX_WIDTH = 1280
 
@@ -1916,11 +1890,10 @@ def short_ver( input_path: Path, output_path: Path, task_id: str,
 		str(output_path)
 	]
 
-	rc, tail = _run_ffmpeg_live(cmd, task_id=task_id, timeout=REMUX_TIMEOUT_S * 2, duration=actual_clip_duration)
-	success = (rc == 0)
-
+	success = _artifact_run(cmd, task_id=task_id) # Use the lightweight runner
 	if not success:
-		errlog_block(str(input_path), f"short_ver (re-encode) failed [{task_id}]", " ".join(cmd) + f"\n\n{tail or ''}")
+		errlog_block(str(input_path), f"short_ver (re-encode) failed [{task_id}]", " ".join(cmd))
+	rc, tail = _run_ffmpeg_live(cmd, task_id=task_id, timeout=REMUX_TIMEOUT_S * 2, duration=actual_clip_duration)
 
 	return success
 
@@ -1944,20 +1917,20 @@ def _post_encode_artifacts(
 
 	# ---------- Guards ----------
 	if not final_file_path or not final_file_path.exists():
-		with print_lock: print(f"   [{task_id_base}] Skipping artifacts: final file missing.")
+		safe_print(f"   [{task_id_base}] Skipping artifacts: final file missing.")
 		return
 	if not output_info:
-		with print_lock: print(f"   [{task_id_base}] Skipping artifacts: missing output info.")
+		safe_print(f"   [{task_id_base}] Skipping artifacts: missing output info.")
 		return
 
 	# Respect global master switch + skip policy
 	if not ADD_ADDITIONAL:
 		# Don't print if main_was_skipped, as that's the normal path
 		if not main_was_skipped:
-			with print_lock: print(f"   [{task_id_base}] Artifacts disabled (ADD_ADDITIONAL=False).")
+			safe_print(f"   [{task_id_base}] Artifacts disabled (ADD_ADDITIONAL=False).")
 		return
 	if main_was_skipped and not FORCE_ARTIFACTS_ON_SKIP:
-		with print_lock: print(f"   [{task_id_base}] Main job skipped; artifacts disabled unless FORCE_ARTIFACTS_ON_SKIP=True.")
+		safe_print(f"   [{task_id_base}] Main job skipped; artifacts disabled unless FORCE_ARTIFACTS_ON_SKIP=True.")
 		return
 
 	base_name = final_file_path.stem
@@ -1972,22 +1945,20 @@ def _post_encode_artifacts(
 		# Fast idempotent skip
 		try:
 			if final_path.is_file() and final_path.stat().st_size >= min_size:
-				with print_lock: print(f"   [{task_id_base}] Skipping {label}: {final_path.name} already exists.")
+				safe_print(f"   [{task_id_base}] Skipping {label}: {final_path.name} already exists.")
 				return "skip"
 		except Exception:	pass  # treat as not present
 
 		tmp = final_path.parent / f".__tmp_{final_path.name}"
 
 		try:
-			if tmp.exists():
-				tmp.unlink(missing_ok=True)
+			if tmp.exists():	tmp.unlink(missing_ok=True)
 		except Exception:	pass
 
 		ok = False
-		try:
-			ok = bool(builder(tmp))
+		try:	ok = bool(builder(tmp))
 		except Exception as e:
-			with print_lock: print(f"   [{task_id_base}] ERROR creating {label}: {e}")
+			safe_print(f"   [{task_id_base}] ERROR creating {label}: {e}")
 			try: errlog_block(str(final_file_path), f"{label} build exception", f"{e}\n{traceback.format_exc()}")
 			except Exception: pass
 
@@ -1997,25 +1968,23 @@ def _post_encode_artifacts(
 					# Use retry_with_lock_info for the atomic replace
 					retry_with_lock_info(
 						f"finalize {final_path.name}",
-						func=tmp.replace,
-						args=(final_path,),
-						de_bug=de_bug
+						func	=tmp.replace,
+						args	=(final_path,),
+						de_bug	=de_bug
 					)
-					with print_lock: print(f"   [{task_id_base}] {label} created: {final_path.name}")
+					safe_print(f"   [{task_id_base}] {label} created: {final_path.name}")
 					return "ok"
 				else:
-					with print_lock: print(f"   [{task_id_base}] ERROR {label}: output too small or missing after build.")
+					safe_print(f"   [{task_id_base}] ERROR {label}: output too small or missing after build.")
 			except Exception as e:
-				with print_lock: print(f"   [{task_id_base}] ERROR finalizing {label}: {e}")
+				safe_print(f"   [{task_id_base}] ERROR finalizing {label}: {e}")
 				try: errlog_block(str(final_file_path), f"{label} finalize exception", f"{e}\n{traceback.format_exc()}")
 				except Exception: pass
 
 		# cleanup tmp
 		try:
-			if tmp.exists():
-				tmp.unlink(missing_ok=True)
-		except Exception:
-			pass
+			if tmp.exists():	tmp.unlink(missing_ok=True)
+		except Exception:		pass
 		return "fail"
 
 	def _build_matrix(tmp: Path) -> bool:
@@ -2052,10 +2021,10 @@ def _post_encode_artifacts(
 	artifact_jobs: Dict[str, Tuple[bool, Path, int, Callable[[Path], bool], str]] = {
 		# "key": (ENABLE_TOGGLE, final_path, min_size, build_function, label_for_logs)
 		"matrix": ( ADD_ARTIFACT_MATRIX,
-					final_file_path.with_name(f"{base_name}_matrix.png"),
+					final_file_path.with_name(f"{base_name}_matrix_{ADDITIONAL_MATRIX_COLS}x{ADDITIONAL_MATRIX_ROWS}.png"),
 					100,
 					_build_matrix,
-					"Thumbnail matrix",
+					f"Create {ADDITIONAL_MATRIX_COLS}x{ADDITIONAL_MATRIX_ROWS} image matrix",
 					),
 		"speed": ( ADD_ARTIFACT_SPEED,
 					final_file_path.with_name(f"{base_name}_fast_{ADDITIONAL_SPEED_FACTOR:.1f}x.mp4"),
@@ -2088,313 +2057,276 @@ def _post_encode_artifacts(
 	results: Dict[str, str] = {}
 	ok_like = 0
 
-	if not plan: # Don't print summary if nothing was planned
-		return
+	if not plan: 	return # Don't print summary if nothing was planned
 
 	for name in plan:
 		enabled, path_out, min_size, builder, label = artifact_jobs[name]
 		status = _make_artifact(path_out, min_size, builder, label)
 		results[label] = status
-		if status in ("ok", "skip"):
-			ok_like += 1
+		if status in ("ok", "skip"):  ok_like += 1
 
 	with print_lock:
 		parts = [f"{lbl.split(' ')[0]}={st}" for (lbl, st) in results.items()]
 		print(f"-> [{task_id_base}] Finished Additional Versions — {ok_like}/{len(plan)} ok  |  " + "  ·  ".join(parts))
 
 
-def clean_up(input_file: str, Outpt_fl: str, skip_it: bool = False, de_bug: bool = False, task_id: str = "CLEAN"
-	) -> int:
+def clean_up(
+	input_file: str,
+	output_file: str,
+	skip_it: bool = False,
+	de_bug: bool = False,
+	task_id: str = "CLEAN",
+	*,
+	main_was_skipped: bool = False,
+) -> int:
 	"""
-	Validates output against source and plan: core checks first, then size checks.
-	Replaces original if all checks pass using retry logic. Returns savings or -1.
+	Validate output, then atomically replace the source if checks pass.
+	Returns bytes saved (positive/negative) or -1 on failure.
+	Steps:
+		1) short-circuit skip
+		2) existence + stat
+		3) fetch SRIK source/plan + ffprobe output
+		4) core validation (duration/resolution/audio)
+		5) size guards (too small / too big)
+		6) rename source->backup, move output->final, fsync
+		8) post-encode artifacts
+		9) delete backup
+	Always clears SRIK (finally).
 	"""
+
 	if skip_it:
-		try: srik_clear(input_file)
+		try: srik_clear(input_file)  # best effort
 		except Exception: pass
 		return -1
 
-	in_path = Path(input_file)
-	out_path = Path(Outpt_fl)
-	in_size = 0
-	out_size = 0
-	savings = 0
-	validation_passed = False
-	reject_reason: Optional[str] = None
-	source_info: Dict[str, Any] = {}
-	plan_info: Dict[str, Any] = {}
-	output_info: Dict[str, Any] = {}
-	backup_made = False  # Initialize here
-	backup: Optional[Path] = None # Initialize here
-	final_path: Optional[Path] = None # Initialize here
+	in_path  = Path(input_file)
+	out_path = Path(output_file)
 
-	try: # --- Main Try Block Starts ---
-		if not out_path.exists():
-			reject_reason = f"Output file missing: {Outpt_fl}"
-			return -1
-		if not in_path.exists():
-			reject_reason = f"Input file missing during cleanup: {input_file}"
-			return -1
+	def log(msg: str) -> None:
+		if de_bug:
+			safe_print(f"DEBUG: {msg}")
 
-		in_stat = in_path.stat()
-		out_stat = out_path.stat()
-		in_size = in_stat.st_size
-		out_size = out_stat.st_size
-
-		# --- 2. Fetch Plan Data & Probe Output ---
-		data_fetch_error: Optional[str] = None
-		try: # --- Inner Try for Data Fetching ---
-			srik_data = srik_get(input_file)
-			source_info = srik_data.get("source", {})
-			plan_info = srik_data.get("plan", {})
-			if not source_info or not plan_info:
-				data_fetch_error = "Missing planning data (SRIK) for validation"
-
-			if not data_fetch_error:
-				out_meta, _, probe_err = ffprobe_run(str(out_path), check_corruption=False)
-				if probe_err or not out_meta:
-					data_fetch_error = f"Failed to re-probe output file: {probe_err or 'No metadata'}"
-				else:
-					out_fmt = out_meta.get("format", {})
-					out_streams = out_meta.get("streams", [])
-					out_v = next((s for s in out_streams if s.get("codec_type") == "video"), {})
-					out_a = next((s for s in out_streams if s.get("codec_type") == "audio"), {})
-					output_info = {
-						"size_out": out_size,
-						"w_enc":		int(out_v.get("width", 0)),
-						"h_enc":		int(out_v.get("height", 0)),
-						"ach_out":		int(out_a.get("channels", 0)),
-						"asr_out":		int(out_a.get("sample_rate", 0)),
-						"acodec_out":	str(out_a.get("codec_name", "")).lower(),
-						"dur_out":		float(out_fmt.get("duration", 0.0)),
-					}
-		except Exception as e:
-			data_fetch_error = f"Exception during validation prep: {e}"
-		# --- End Inner Try for Data Fetching ---
-
-		if data_fetch_error:
-			reject_reason = data_fetch_error
-
-		# --- 3. Core Validation Checks ---
-		if not reject_reason:
-			validation_details: List[str] = []
-			# Duration Check
-			dur_in	= float(source_info.get("dur_in", 0.0))
-			dur_out	= float(output_info.get("dur_out", 0.0))
-			if dur_in > 1.0:
-				tol = max(DURATION_TOLERANCE_ABS, DURATION_TOLERANCE_PCT * dur_in)
-				dt	= abs(dur_in - dur_out)
-				if dt > tol:
-					validation_details.append(f"Duration mismatch (Diff:{dt:.1f}s > Tol:{tol:.1f}s)")
-			# Resolution Check
-			w_in	= int(source_info.get("w_in", 0))
-			h_in	= int(source_info.get("h_in", 0))
-			w_o		= int(output_info.get("w_enc", 0))
-			h_o		= int(output_info.get("h_enc", 0))
-			if w_o <= 0 or h_o <= 0:
-				validation_details.append("Output video dimensions invalid (<=0)")
-			elif (w_o > w_in or h_o > h_in) and (w_in > 0 and h_in > 0):
-				if w_o > w_in * 1.01 or h_o > h_in * 1.01:
-					validation_details.append(f"Output appears upscaled ({w_o}x{h_o} > {w_in}x{h_in})")
-			elif bool(plan_info.get("expect_downscale")):
-				target_h = 1080
-				height_tolerance = target_h * 0.02
-				if abs(h_o - target_h) > height_tolerance:
-					validation_details.append(f"Expected downscale, output height wrong ({h_o} vs target {target_h})")
-				elif w_in > 0 and h_in > 0:
-					original_ar = w_in / h_in
-					output_ar = w_o / h_o
-					ar_tolerance = 0.05
-					if abs(original_ar - output_ar) > ar_tolerance:
-						validation_details.append(f"Aspect ratio changed (In:{original_ar:.2f}, Out:{output_ar:.2f})")
-			# Audio Policy Check
-			ap = plan_info.get("audio_policy", {"codec": "aac", "sr": 48000, "channels": [2, 6]})
-			ac = output_info.get("acodec_out", "")
-			ch = int(output_info.get("ach_out", 0))
-			sr = int(output_info.get("asr_out", 0))
-			if not (ac == ap["codec"] and ch in set(ap["channels"]) and (sr in (0, ap["sr"]))):
-				validation_details.append(f"Audio policy fail (Got {ac}/{ch}ch/{sr}Hz)")
-			if validation_details:
-				reject_reason = "Core validation failed: " + "; ".join(validation_details)
-
-		# --- 4. Size Validation Checks ---
-		if not reject_reason:
-			# "Too Small" Check
-			min_allowed_size_ratio = MIN_SIZE_RATIO_DEFAULT
-			calculated_dynamic_ratio = False
-			try:
-				dur_in2 = float(source_info.get("dur_in", 0.0)) # Use float
-				target_bps = int(plan_info.get("ideal_bps", 0)) # Use int
-				if dur_in2 > 0 and target_bps > 0 and in_size > 0:
-					original_bps = _avg_bitrate(in_size, dur_in2)
-					if original_bps > 0 and target_bps < original_bps * 0.7:
-						expected_ratio = (target_bps / original_bps) * 0.7
-						min_allowed_size_ratio = max(MIN_SIZE_RATIO_FLOOR, expected_ratio)
-						calculated_dynamic_ratio = True
-			except Exception:
-				pass # Ignore errors, use default
-			min_allowed_size = in_size * min_allowed_size_ratio
-			if out_size < min_allowed_size:
-				ratio_reason = f"target ratio ({min_allowed_size_ratio:.2f})" if calculated_dynamic_ratio else f"default ratio ({min_allowed_size_ratio:.2f})"
-				reject_reason = (
-					f"Output file too small ({hm_sz(out_size)} < {min_allowed_size_ratio*100:.0f}% "
-					f"of input {hm_sz(in_size)}) - below minimum {hm_sz(min_allowed_size)} based on {ratio_reason}"
-				)
-			# "Too Large" Check (only if not already rejected)
-			if not reject_reason:
-				savings = in_size - out_size # Calculate savings
-				file_grew = savings < 0
-				if file_grew and AUTO_SIZE_GUARD and not FORCE_BIGGER:
-					ratio = round((100 * savings / in_size), 1) if in_size > 0 else 0.0
-					inflation_percent = -ratio
-					inflation_bytes = -savings
-					grew_too_much_pct = (INFLATE_MAX_BY is not None and inflation_percent > INFLATE_MAX_BY)
-					grew_too_much_abs = (MAX_ABS_GROW_MB is not None and inflation_bytes > (MAX_ABS_GROW_MB * 1024 * 1024))
-					if grew_too_much_pct or grew_too_much_abs:
-						reject_reason = f"Output file grew too large (>{INFLATE_MAX_BY}% or >{MAX_ABS_GROW_MB}MB)"
-
-		# --- 5. Determine if Validation Passed Overall ---
-		if not reject_reason:
-			validation_passed = True
-
-		# --- 6. Proceed with Replacement IF Validation Passed ---
-		if validation_passed:
-			# Re-calculate savings just to be sure
-			savings = in_size - out_size
-			ratio = round((100 * savings / in_size), 1) if in_size > 0 else 0.0
-			change_str = f"Saved {ratio:.1f}%" if savings >= 0 else f"Lost {-ratio:.1f}%"
-			with print_lock: print(f"\n  .Size Was: {hm_sz(in_size)} Is: {hm_sz(out_size)} ({change_str})")
-			if de_bug:
-				with print_lock: print(f"DEBUG: Proceeding to replace; savings: {savings} bytes.")
-			final_path = in_path.with_suffix(TMPF_EX) # Assign to final_path
-			backup = in_path.with_suffix(f".{in_path.suffix.lstrip('.')}.orig_{RUN_TOKEN}")
-			# backup_made needs to be defined before the inner try
-			backup_made = False
-			try: # --- Inner Try for Rename/Move/Artifacts ---
-				# 1) Rename original -> backup (with retry)
-				retry_with_lock_info(
-					action_desc=f"Renaming original to backup\n   {in_path} -> {backup}",
-					func=in_path.rename,
-					args=(backup,),
-					de_bug=de_bug
-				)
-				backup_made = True # Mark success *after* call returns
-				if de_bug:
-					with print_lock: print(f"DEBUG: Renamed original to backup: {backup.name}")
-				# 2) Move new output -> final (with retry)
-				retry_with_lock_info(
-					action_desc=f"Moving new file to final location\n   {out_path} -> {final_path}",
-					func=shutil.move,
-					args=(str(out_path), str(final_path)),
-					de_bug=de_bug
-				)
-				if de_bug:
-					with print_lock: print(f"DEBUG: Moved new file to final destination: {final_path.name}")
-				# 3) Try fsync (best effort)
-				try:
-					dir_fd = os.open(str(final_path.parent), os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))
-					os.fsync(dir_fd)
-					os.close(dir_fd)
-				except Exception as fs_err:
-					if de_bug:
-						with print_lock: print(f"DEBUG: fsync failed or skipped: {fs_err}")
-				# 4) Delete backup (best effort)
-				try: backup.unlink(missing_ok=True)
-				except Exception as del_err:
-					with print_lock: print(f" ?!Warning: Failed to delete backup file {backup.name}: {del_err}")
-
-				# --- 5) ARTIFACTS (MODIFIED CALL) ---
-				# This is the new, context-aware call.
-				# We run this *after* the file is successfully in its final place.
-				try:
-					_post_encode_artifacts(
-						final_file_path=final_path,
-						output_info=output_info,
-						task_id_base=task_id,
-						main_was_skipped=False, # This was a processed file
-						de_bug=de_bug
-					)
-				except Exception as art_e:
-					# Don't fail the whole encode if artifacts fail
-					try: errlog_block(str(final_path), "post artifacts exception", f"{art_e}\n{traceback.format_exc()}")
-					except Exception: pass
-				# --- END MODIFIED CALL ---
-
-			except Exception as replace_err: # Catch errors from retry_with_lock_info or fsync/unlink
-				reject_reason = f"File Replacement Failure: {replace_err}"
-				with print_lock: print(f"ERROR during replacement for {input_file}: {replace_err}" )
-				# Attempt Rollback if backup was made
-				if backup_made and backup.exists():
-					try:
-						if final_path and final_path.exists(): # Check if final_path was assigned
-							final_path.unlink(missing_ok=True)
-						# Restore original back into place (retry too)
-						retry_with_lock_info(
-							action_desc=f"Restoring backup after failure\n   {backup} -> {in_path}",
-							func=backup.rename,
-							args=(in_path,),
-							de_bug=de_bug
-						)
-						with print_lock: print(f"Successfully rolled back: Restored {in_path.name}")
-					except Exception as restore_err:
-						reject_reason += f"\nCRITICAL ROLLBACK FAILED for {in_path.name}: {restore_err}"
-						with print_lock: print(f"CRITICAL ROLLBACK FAILED for {in_path.name}: {restore_err}" )
-						try: errlog_block(input_file, "CRITICAL ROLLBACK FAILURE", reject_reason)
-						except Exception: pass
-			# --- End Inner Try for Rename/Move/Artifacts ---
-	# --- Outer Exception Handling ---
-	except FileNotFoundError as fnf_err:
-		reject_reason = f"File missing during clean_up validation: {fnf_err}"
-		with print_lock: print(reject_reason)
-	except Exception as e:
-		reject_reason = f"An unexpected error occurred in clean_up: {e}\n{traceback.format_exc()}"
-		with print_lock: print(f"Unexpected error in clean_up for {input_file}" )
-
-	finally: # --- Finally Block Starts ---
-		if reject_reason:
-			with print_lock:
-				print(f"\n--- 👎 VALIDATION FAILURE/ERROR for {input_file} 👎 ---")
-				print(f"   Reason: {reject_reason.splitlines()[0]}") # Print first line of reason
-			# Delete output file if it exists
-			if out_path is not None and out_path.exists():
-				try:
-					out_path.unlink()
-					with print_lock: print(f"   Deleted rejected output file: {out_path.name}")
-				except Exception as del_e:
-					with print_lock: print(f"   ERROR: Failed to delete rejected output file {out_path.name}: {del_e}")
-			try: errlog_block(input_file, "Cleanup Failure/Rejection", reject_reason)
-			except Exception: pass # Avoid errors during error logging
-			# Ensure backup is restored if necessary (final check)
-			if backup_made and backup and backup.exists() and not in_path.exists():
-				try:
-					# Use retry logic for final restore attempt as well
-					retry_with_lock_info(
-						action_desc=f"Restoring backup during final cleanup\n   {backup} -> {in_path}",
-						func=backup.rename,
-						args=(in_path,),
-						de_bug=de_bug,
-						attempts=3, # Fewer attempts for cleanup rollback
-						base_wait=1.0
-					)
-					with print_lock: print(f"INFO: Restored backup during final cleanup: {in_path.name}")
-				except Exception as final_restore_err:
-					with print_lock: print(f"   CRITICAL: Failed final restore {backup.name}: {final_restore_err}" )
-					try:
-						errlog_block(input_file, "CRITICAL FINAL ROLLBACK FAILURE", f"Could not restore {backup.name}: {final_restore_err}")
-					except Exception:
-						pass # Avoid errors during final error logging
-
-		# Always clear SRIK
+	def fail(reason: str) -> int:
+		# Unified rejection path; no SRIK here (handled in finally).
+		with print_lock:
+			print(f"\n--- 👎 VALIDATION FAILURE/ERROR for {input_file} 👎 ---")
+			print(f"    Reason: {reason.splitlines()[0]}")
 		try:
-			srik_clear(input_file)
-		except Exception as srik_e: # Use different variable name
-			if de_bug:
-				with print_lock: print(f"DEBUG: Failed to clear SRIK: {srik_e}")
+			if out_path.exists():
+				out_path.unlink()
+				safe_print(f"    Deleted rejected output file: {out_path.name}")
+		except Exception as del_e:
+			safe_print(f"    ERROR: Failed to delete rejected output file {out_path.name}: {del_e}")
+		try:	errlog_block(input_file, "Cleanup Failure/Rejection", reason)
+		except Exception:	pass
+		return -1
 
-		# Final return based on state determined in the main try block
-		if reject_reason or not validation_passed:
-			return -1
+	# Values used later for summary/guards
+	in_size: int = 0
+	out_size: int = 0
+
+	try:
+		# 1) existence
+		if not out_path.exists():  return fail(f"Output file missing: {output_file}")
+		if not in_path.exists():   return fail(f"Input file missing during cleanup: {input_file}")
+
+		# 2) stat
+		try:
+			in_size  = in_path.stat().st_size
+			out_size = out_path.stat().st_size
+		except Exception as e:		return fail(f"Stat failure: {e}")
+
+		# 3) fetch plan + probe output
+		try:
+			srik_data: Dict[str, Any] = srik_get(input_file)
+			source_info: Dict[str, Any] = srik_data.get("source", {})
+			plan_info:   Dict[str, Any] = srik_data.get("plan", {})
+			if not source_info or not plan_info:
+				return fail("Missing planning data (SRIK) for validation")
+
+			out_meta, _, probe_err = ffprobe_run(str(out_path), check_corruption=False)
+			if probe_err or not out_meta:
+				return fail(f"Failed to re-probe output file: {probe_err or 'No metadata'}")
+
+			out_fmt     = out_meta.get("format", {})
+			out_streams = out_meta.get("streams", [])
+			out_v       = next((s for s in out_streams if s.get("codec_type") == "video"), {})
+			out_a       = next((s for s in out_streams if s.get("codec_type") == "audio"), {})
+
+			output_info: Dict[str, Any] = {
+				"size_out":   out_size,
+				"w_enc":      int(out_v.get("width", 0) or 0),
+				"h_enc":      int(out_v.get("height", 0) or 0),
+				"ach_out":    int(out_a.get("channels", 0) or 0),
+				"asr_out":    int(out_a.get("sample_rate", 0) or 0),
+				"acodec_out": str(out_a.get("codec_name", "") or "").lower(),
+				"dur_out":    float(out_fmt.get("duration", 0.0) or 0.0),
+			}
+		except Exception as e:
+			return fail(f"Exception during validation prep: {e}\n{traceback.format_exc()}")
+
+		# 4) core validation
+		problems = []
+
+		# duration
+		dur_in  = float(source_info.get("dur_in", 0.0) or 0.0)
+		dur_out = float(output_info.get("dur_out", 0.0) or 0.0)
+		if dur_in > 1.0:
+			tol = max(DURATION_TOLERANCE_ABS, DURATION_TOLERANCE_PCT * dur_in)
+			if abs(dur_in - dur_out) > tol:
+				problems.append(f"Duration mismatch (Diff:{abs(dur_in - dur_out):.1f}s > Tol:{tol:.1f}s)")
+
+		# resolution + optional downscale expectation; prevent upscaling
+		w_in = int(source_info.get("w_in", 0) or 0)
+		h_in = int(source_info.get("h_in", 0) or 0)
+		w_o  = int(output_info.get("w_enc", 0) or 0)
+		h_o  = int(output_info.get("h_enc", 0) or 0)
+
+		if w_o <= 0 or h_o <= 0:
+			problems.append("Output video dimensions invalid (<=0)")
 		else:
-			# If validation passed and no reject reason occurred, return savings
-			return savings
-	# --- Finally Block Ends ---
+			if w_in > 0 and h_in > 0 and (w_o > w_in * 1.01 or h_o > h_in * 1.01):
+				problems.append(f"Output appears upscaled ({w_o}x{h_o} > {w_in}x{h_in})")
+			if plan_info.get("expect_downscale"):
+				target_h = 1080
+				if abs(h_o - target_h) > target_h * 0.02:
+					problems.append(f"Expected downscale height ~{target_h}, got {h_o}")
+				if w_in > 0 and h_in > 0:
+					ar_in = w_in / max(1, h_in)
+					ar_o  = w_o  / max(1, h_o)
+					if abs(ar_in - ar_o) > 0.05:
+						problems.append(f"Aspect ratio changed (In:{ar_in:.2f}, Out:{ar_o:.2f})")
+
+		# audio policy
+		ap = plan_info.get("audio_policy", {"codec": "aac", "sr": 48000, "channels": [2, 6]})
+		ac = output_info.get("acodec_out", "")
+		ch = int(output_info.get("ach_out", 0) or 0)
+		sr = int(output_info.get("asr_out", 0) or 0)
+		if not (ac == ap.get("codec", "aac") and ch in set(ap.get("channels", [2, 6])) and (sr in (0, ap.get("sr", 48000)))):
+			problems.append(f"Audio policy fail (Got {ac}/{ch}ch/{sr}Hz)")
+
+		if problems:		return fail("Core validation failed: " + "; ".join(problems))
+
+		# 5) Size + duration validation — plan-based, audio-aware, no legacy heuristics
+		try:
+#			de_bug = True
+			duration_diff = abs(dur_in - dur_out)
+			duration_tol  = max(DURATION_TOLERANCE_ABS, DURATION_TOLERANCE_PCT * dur_in)
+
+			# Duration mismatch
+			if dur_in > 1.0 and duration_diff > duration_tol:
+				print(f"⚠️ Duration mismatch: {dur_in:.2f}s → {dur_out:.2f}s (diff {duration_diff:.2f}s > tol {duration_tol:.2f}s)")
+				if de_bug:
+					input("IS IT Fishy ?")
+				return fail(f"Duration mismatch ({duration_diff:.1f}s > {duration_tol:.1f}s)")
+
+			# Plan-based expected output size
+			target_bps = float(plan_info.get("ideal_bps", 0.0) or 0.0)
+			dur_ok     = 10.0 < dur_in < 86400.0
+
+			if target_bps > 0 and dur_ok:
+				expected_size = (target_bps * dur_in) / 8
+				min_size      = expected_size * 0.70  # 30% safety margin
+
+				if out_size < min_size:
+					print(	f"Output too small {hm_sz(out_size)} < expected floor {hm_sz(min_size)} "
+							f"(target: {target_bps/1_000_000:.2f} Mbps × {dur_in:.1f}s)"
+					)
+					if de_bug:
+						input("WTF DID WE DO ?")
+					return fail("Output too small based on target bitrate and duration")
+
+			# Audio-heavy warning
+			if 'audio_total_kbps' in source_info:
+				try:
+					audio_kbps = float(source_info["audio_total_kbps"])
+					est_audio_size = (audio_kbps * 1000 * dur_in) / 8
+					audio_pct = 100.0 * est_audio_size / max(1, out_size)
+					if audio_pct > 50:
+						print(f"⚠️ Audio-heavy output: estimated {hm_sz(est_audio_size)} ({audio_pct:.1f}% of output)")
+						if de_bug:
+							input("Audio size dominant — is this expected?")
+				except Exception as e:
+					if de_bug:
+						print(f"⚠️ Audio estimate error: {e}")
+						input("IS IT FishY ?")
+		except Exception as e:
+			if de_bug:
+				print(f"⚠️ Validation error: {e}")
+				input("IS IT Fishy ?")
+
+		# 6) replacement
+		final_path = in_path.with_suffix(TMPF_EX)
+		backup     = in_path.with_suffix(f".{in_path.suffix.lstrip('.')}.orig_{RUN_TOKEN}")
+
+		try:
+			retry_with_lock_info(action_desc=f"Renaming original to backup\n    {in_path} -> {backup}",
+								func=in_path.rename, args=(backup,), de_bug=de_bug)
+			log(f"Renamed original -> backup: {backup.name}")
+
+			retry_with_lock_info(action_desc=f"Moving new file to final location\n    {out_path} -> {final_path}",
+								func=shutil.move, args=(str(out_path), str(final_path)), de_bug=de_bug)
+			log(f"Moved new file -> final: {final_path.name}")
+
+			try:
+				dir_fd = os.open(str(final_path.parent), os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))
+				os.fsync(dir_fd); os.close(dir_fd)
+			except Exception as fs_err:		log(f"fsync skipped/failed: {fs_err}")
+
+			# 7) MAIN-only triple-compare (before deleting backup)
+			# XXX: TBD ???
+			# 8) artifacts (non-blocking)
+			try:
+				_post_encode_artifacts(
+					final_file_path		=final_path,
+					output_info			=output_info,
+					task_id_base		=task_id,
+					main_was_skipped	=main_was_skipped,
+					de_bug				=de_bug
+				)
+			except Exception as art_e:
+				try: errlog_block(str(final_path), "post artifacts exception", f"{art_e}\n{traceback.format_exc()}")
+				except Exception: pass
+
+			# 9) delete backup
+			try:	backup.unlink(missing_ok=True)
+			except Exception as del_err:
+				safe_print(f" ?!Warning: Failed to delete backup file {backup.name}: {del_err}")
+
+		except Exception as replace_err:
+			safe_print(f"ERROR during replacement for {input_file}: {replace_err}")
+			try:
+				if 'final_path' in locals() and final_path.exists():
+					final_path.unlink(missing_ok=True)
+				if 'backup' in locals() and backup.exists():
+					retry_with_lock_info(action_desc=f"Restoring backup after failure\n    {backup} -> {in_path}",
+										func=backup.rename, args=(in_path,), de_bug=de_bug	)
+					safe_print(f"Successfully rolled back: Restored {in_path.name}")
+			except Exception as restore_err:
+				msg = f"File Replacement Failure: {replace_err}\nCRITICAL ROLLBACK FAILED for {in_path.name}: {restore_err}"
+				try: errlog_block(input_file, "CRITICAL ROLLBACK FAILURE", msg)
+				except Exception: pass
+				return fail(msg)
+			return fail(f"File Replacement Failure: {replace_err}")
+
+		# Success summary
+		savings = in_size - out_size
+		ratio   = round(100.0 * savings / max(1, in_size), 1)  # signed %
+
+		if   savings == 0:	change = "Same size"
+		elif savings  > 0:	change = f"Saved {ratio:.1f}%"
+		else:				change = f"Lost {abs(ratio):.1f}%"
+
+		safe_print(f"\n   .Size Was: {hm_sz(in_size)} Is: {hm_sz(out_size)} {change} !")
+		return savings
+
+	except Exception as e:
+		err_msg = f"Unexpected clean_up failure: {e}\n{traceback.format_exc()}"
+		return fail(err_msg)
+
+	finally:
+		# Run exactly once regardless of outcome
+		try:
+			log("Clearing SRIK (in finally block)")
+			srik_clear(input_file)
+		except Exception as srik_e:	log(f"Failed to clear SRIK in finally: {srik_e}")

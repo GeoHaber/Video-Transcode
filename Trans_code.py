@@ -1,7 +1,15 @@
 # -*- coding: utf-8 -*-
-
 from __future__ import annotations
 
+Rev ="""
+  Trans_code.py (Shutdown-safe hardening) 10/30/2025
+	- All fixes from design review applied.
+	- Standardized logging to use Tee+print_lock and a module logger for critical errors.
+	- Fixed hvc1 remux-only bug.
+	- Fixed bitrate logic.
+	- Fixed spinner bug.
+	- Fixed concurrency deadlock risk.
+"""
 # --- Standard Library Imports ---
 import os
 import re
@@ -22,9 +30,12 @@ from Utils import *		# Imports all constants, globals (locks, etc.), and basic h
 
 Log_File = str(WORK_DIR / f"__{Path(sys.argv[0]).stem}_{time.strftime('%Y_%j_%H-%M-%S')}.log")
 
-ROOT_DIR			= r"C:\\Users\\Geo\\Desktop\\downloads"	# Main directory to scan
-EXCEPT_DIR			= r"C:\\_temp"							# Directory for failed/corrupt files
-sort_keys_cfg		= [("size", True), ("date", False)]		# Example: Smallest first, then newest
+ROOT_DIR			= r"C:/Users/Geo/Desktop/downloads"	# Main directory to scan
+
+
+### EXCEPT_DIR			= r"C:\\_temp"							# Directory for failed/corrupt files
+sort_keys_cfg		= [("size", True ), ("date", False )]		# Example: Largest first, oldest
+#sort_keys_cfg		= [("size", False), ("date", False )]		# Example: Smalles first, oldest
 # -----------------------------------------------------------------------------
 # File Scanning
 # -----------------------------------------------------------------------------
@@ -38,8 +49,13 @@ def scan_folder(root: str, xtnsio: Collection[str], sort_keys_cfg: Collection, u
 	file_list: List[Dict[str, Any]] = []
 	for dirpath, _, files in os.walk(root):
 		for one_file in files:
-			if Path(one_file).suffix.lower() in xtnsio:
+			if not (ext := Path(one_file).suffix.lower()):
+				continue
+			if ext in xtnsio:
 				candidates.append(os.path.join(dirpath, one_file))
+			elif ext not in Ignore_fils:
+				safe_print(f"\033[93m :) File {ext}: not Video {one_file}\033[0m")
+
 	total = len(candidates)
 	err = 0
 
@@ -53,9 +69,9 @@ def scan_folder(root: str, xtnsio: Collection[str], sort_keys_cfg: Collection, u
 				if file_stat.st_size < 10:
 					try:
 						os.remove(f_path)
-						with print_lock: print(f"\033[93m :) Removed empty file: {f_path}\033[0m")
+						safe_print(f"\033[93m :) Removed empty file: {f_path}\033[0m")
 					except Exception as e:
-						with print_lock: print(f"\033[93m !! Failed to remove file {f_path}: {e}\033[0m")
+						safe_print(f"\033[93m !! Failed to remove file {f_path}: {e}\033[0m")
 					continue
 			except Exception:
 				continue
@@ -63,17 +79,17 @@ def scan_folder(root: str, xtnsio: Collection[str], sort_keys_cfg: Collection, u
 				metadata, is_corrupted, error_msg = fut.result()
 				if error_msg:
 					err += 1
-					with print_lock: print(f"\n\033[93m Warning: Could not probe '{f_path}':\nMeta Data{metadata}\nErr: {error_msg}. Skipping.\033[0m")
+					safe_print(f"\n\033[93m Warning: Could not probe '{f_path}':\nMeta Data{metadata}\nErr: {error_msg}. Skipping.\033[0m")
 				elif is_corrupted:
 					err += 1
-					with print_lock: print(f"\n\033[93m Error: File '{f_path}'\n{metadata}\n Moving to{EXCEPT_DIR}.\033[0m")
+					safe_print(f"\n\033[93m Error: File '{f_path}'\n{metadata}\n Moving to{EXCEPT_DIR}.\033[0m")
 					# copy_move is in utils.py
 					copy_move(f_path, EXCEPT_DIR, move=True)
 				else:
 					try:
 						file_mtime = datetime.fromtimestamp(file_stat.st_mtime)
 					except Exception as ts_err:
-						with print_lock: print(f"\n\033[93m[WARNING] Invalid timestamp for {f_path}: {ts_err}. Using default date.\033[0m")
+						safe_print(f"\n\033[93m[WARNING] Invalid timestamp for {f_path}: {ts_err}. Using default date.\033[0m")
 						file_mtime = datetime.fromtimestamp(0)
 					file_list.append({
 							"path": 	f_path,
@@ -86,19 +102,17 @@ def scan_folder(root: str, xtnsio: Collection[str], sort_keys_cfg: Collection, u
 			except Exception as e:
 				err += 1
 				error_details = traceback.format_exc()
-				with print_lock: print(f"\n\033[91m[CRITICAL] Unhandled error scanning {f_path}: {e}\033[0m \n {error_details}")
-				try:
-					# errlog_block is in utils.py
-					errlog_block(f_path, "scan_folder CRITICAL error", error_details)
-				except Exception as log_e:
-					with print_lock: print(f"  (Additionally, failed to write to error log: {log_e})")
+				safe_print(f"\n\033[91m[CRITICAL] Unhandled error scanning {f_path}: {e}\033[0m \n {error_details}")
+				# errlog_block is in utils.py
+				try:						errlog_block(f_path, "scan_folder CRITICAL error", error_details)
+				except Exception as log_e:	safe_print(f"  (Additionally, failed to write to error log: {log_e})")
 				copy_move(f_path, EXCEPT_DIR, move=True)
 
 			spinner.print_spin(f"[scan] {100*(i+1)/total if total > 0 else 0:>3.1f}% Done - {err:>3} Err ✓ {os.path.basename(f_path)}")
 
 	spinner.stop()
 	if err > 0:
-		with print_lock: print(f"\033[93mWarning:\033[0m {err} files failed scanning (see per-file logs in script folder).")
+		safe_print(f"\033[93mWarning:\033[0m {err} files failed scanning (see per-file logs in script folder).")
 
 	Sort_key = {"size":		lambda x: x["size"],
 				"date":		lambda x: x["date"],
@@ -123,6 +137,7 @@ def process_file(file_info: Dict[str, Any], idx: int, total: int, task_id: str
 	Returns: (saved_bytes, processed, skipped, errors)
 	"""
 	# Use datetime.now()
+	de_bug	= False
 	str_t	= datetime.now()
 	saved	= procs = skipt = errod = 0
 	file_p	= file_info["path"]
@@ -135,13 +150,13 @@ def process_file(file_info: Dict[str, Any], idx: int, total: int, task_id: str
 	if file_stem.endswith("_matrix") or \
 		file_stem.endswith(f"_short_{int(ADDITIONAL_SHORT_DUR)}s") or \
 		re.search(r"_fast_[\d\.]+x$", file_stem): # Matches _fast_2.0x, _fast_3.0x etc.
-		with print_lock:	print(f"\nSkipping file (already an artifact): {input_path_obj.name}")
+		safe_print(f"\nSkipping file (already an artifact): {input_path_obj.name}")
 		skipt = 1
 		# This is a clean skip, so we return immediately
 		end_t = datetime.now(); duration_sec=(end_t-str_t).total_seconds()
-		with print_lock: print(f" -End: [{end_t.strftime('%H:%M:%S')}]\tTotal: {hm_tm(duration_sec)}")
+		safe_print(f" -End: [{end_t.strftime('%H:%M:%S')}]\tTotal: {hm_tm(duration_sec)}")
 		return saved, procs, skipt, errod
-	with print_lock: print(f"\n{file_p}\n +Start: [{str_t.strftime('%H:%M:%S')}]  File: {idx} of {total}, {hm_sz(file_info['size'])}")
+	safe_print(f"\n{file_p}\n +Start: [{str_t.strftime('%H:%M:%S')}]  File: {idx} of {total}, {hm_sz(file_info['size'])}")
 	try: # --- Main Try Block ---
 		# 1. Parse file info
 		try:
@@ -155,7 +170,7 @@ def process_file(file_info: Dict[str, Any], idx: int, total: int, task_id: str
 			except Exception: pass
 
 		for ln in captured_output_lines:
-			with print_lock: print(ln)
+			safe_print(ln)
 		# 2. Handle Skip (or Parse Error)
 		if skip_it:
 			# Determine status based on whether parse failed
@@ -164,7 +179,7 @@ def process_file(file_info: Dict[str, Any], idx: int, total: int, task_id: str
 			# else: errod remains 1 from parse failure
 			# --- ARTIFACTS ON SKIP (Optional) ---
 			if ADD_ADDITIONAL and FORCE_ARTIFACTS_ON_SKIP and errod == 0: # Only run if ADD_ADDITIONAL is on, force is on, and parse didn't fail
-			#	with print_lock: print("\033[96m  .Artifacts- from source.\033[0m")
+			#	safe_print("\033[96m  .Artifacts- from source.\033[0m")
 				# We need info from the source file
 				source_info_for_artifacts = {}
 				probe_success = False
@@ -187,17 +202,17 @@ def process_file(file_info: Dict[str, Any], idx: int, total: int, task_id: str
 						}
 						probe_success = True
 					else:
-						with print_lock: print(f"   [WARN] Could not probe source '{input_path_obj.name}' for skip-artifact info: {probe_err or 'No meta/Corrupt'}")
+						safe_print(f"   [WARN] Could not probe source '{input_path_obj.name}' for skip-artifact info: {probe_err or 'No meta/Corrupt'}")
 					# Call artifact generation using the SOURCE path and probed info (if probe worked)
 					if probe_success:
-						with print_lock: print("\n[post] Start Artifact generation from source...")
+						safe_print("\n[post] Start Artifact generation from source...")
 						# Call _post_encode_artifacts from FFMpeg
-						FFMpeg._post_encode_artifacts(input_path_obj, source_info_for_artifacts, f"{task_id}_SKIP", de_bug=de_bug)
+						FFMpeg._post_encode_artifacts(input_path_obj, source_info_for_artifacts, f"{task_id}_SKIP", de_bug )
 					else:
-						with print_lock: print("\n[post] (skip) Skipping Artifact source probe failure.")
+						safe_print("\n[post] (skip) Skipping Artifact source probe failure.")
 				except Exception as art_e:
 					# Log errors during artifact generation but don't fail the main skip
-					with print_lock: print(f"\n   [WARN] Error during skip-artifact generation: {art_e}")
+					safe_print(f"\n   [WARN] Error during skip-artifact generation: {art_e}")
 					try: errlog_block(file_p, "Skip Artifact Generation Error", f"{art_e}\n{traceback.format_exc()}")
 					except Exception: pass
 			# --- END ARTIFACTS ON SKIP ---
@@ -213,7 +228,7 @@ def process_file(file_info: Dict[str, Any], idx: int, total: int, task_id: str
 		if not out_file_temp:
 			# 3a. FFmpeg failed
 			errod = 1
-			with print_lock: print(f"ffmpeg_run failed for: {file_p}")
+			safe_print(f"ffmpeg_run failed for: {file_p}")
 			copy_move(file_p, EXCEPT_DIR, move=True)
 			# Return directly after handling failure
 			# (Finally block will still execute)
@@ -237,10 +252,9 @@ def process_file(file_info: Dict[str, Any], idx: int, total: int, task_id: str
 
 	except Exception as e:
 		# 4. Catch-all for any *unexpected* errors in the main try block
-		with print_lock: print(f"\n[CRITICAL] Unhandled worker error for {file_p}: {e}\n{traceback.format_exc()}")
+		safe_print(f"\n[CRITICAL] Unhandled worker error for {file_p}: {e}\n{traceback.format_exc()}")
 		saved, procs, skipt, errod = 0, 0, 0, 1 # Force error state
-		try:
-			errlog_block(file_p, "process_file CRITICAL", traceback.format_exc())
+		try:	errlog_block(file_p, "process_file CRITICAL", traceback.format_exc())
 		except Exception: pass
 		# Cleanup potentially created temp file
 		if out_file_temp and Path(out_file_temp).exists():
@@ -258,7 +272,7 @@ def process_file(file_info: Dict[str, Any], idx: int, total: int, task_id: str
 		# Use datetime.now()
 		end_t = datetime.now()
 		duration_sec = (end_t - str_t).total_seconds()
-		with print_lock: print(f" -End: [{end_t.strftime('%H:%M:%S')}]\tTotal: {hm_tm(duration_sec)}")
+		safe_print(f" -End: [{end_t.strftime('%H:%M:%S')}]\tTotal: {hm_tm(duration_sec)}")
 		# NOTE: SRIK clear is now handled within the specific paths (skip, cleanup success/fail)
 
 	# This line should ideally not be reached if all paths return correctly above,
@@ -306,7 +320,7 @@ class ProgressReporter(threading.Thread):
 
 					except Exception as e:
 						# If reporter fails, just print error and stop thread
-						with print_lock: print(f"[FATAL] ProgressReporter failed: {e}")
+						safe_print(f"[FATAL] ProgressReporter failed: {e}")
 						self.last_lines_printed = 0 # Reset to avoid clearing error
 						break # Stop thread
 
@@ -369,8 +383,10 @@ def main(argv: Optional[List[str]] = None
 						procs += p
 						skipt += skc
 						errod += e
-						msg = f":):|To_do: {fl_nmb - (procs + skipt + errod)} |OK: {procs} |Skip: {skipt} |Err: {errod} |Saved: {hm_sz(saved)} |"
-						with print_lock: print(msg)
+
+						label	= "Lost" if saved < 0 else "Saved"
+						msg		= f":):|To_do: {fl_nmb - (procs + skipt + errod)}|OK: {procs}|Errors: {errod}|Skipt: {skipt}|{label}: {hm_sz(saved)} |"
+						safe_print(msg)
 					except Exception as exc:
 						errod += 1
 						print(f"\n[CRITICAL] Worker for {futures[future]['path']} generated: {exc}\n{traceback.format_exc()}")
@@ -384,8 +400,9 @@ def main(argv: Optional[List[str]] = None
 			procs += p
 			skipt += skc
 			errod += e
-			msg = f"  |To_do: {fl_nmb - (procs + skipt + errod)}|OK: {procs} |Err: {errod} |Skipt: {skipt} |Saved: {hm_sz(saved)} |"
-			with print_lock: print(msg)
+			label	= "Lost" if saved < 0 else "Saved"
+			msg		= f"  |To_do: {fl_nmb - (procs + skipt + errod)}|OK: {procs}|Errors: {errod}|Skipt: {skipt}|{label}: {hm_sz(saved)} |"
+			safe_print(msg)
 
 	end_t = datetime.now()
 	total = (end_t - strt_m).total_seconds()
