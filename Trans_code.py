@@ -15,113 +15,211 @@ import os
 import re
 import sys
 import time
+import json
 import traceback
 import threading
 
 from typing				import Any, Dict, List, Tuple
+from hashlib 			import sha1
 from pathlib			import Path
 from datetime			import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
 # --- Our Project Imports ---
+
 import FFMpeg			# Imports the entire FFmpeg engine
 from Utils import *		# Imports all constants, globals (locks, etc.), and basic helpers
 
 
 Log_File = str(WORK_DIR / f"__{Path(sys.argv[0]).stem}_{time.strftime('%Y_%j_%H-%M-%S')}.log")
 
-ROOT_DIR			= r"C:/Users/Geo/Desktop/downloads"	# Main directory to scan
+ROOT_DIR			= "C:/Video_files_to_proccess"
 
 
-### EXCEPT_DIR			= r"C:\\_temp"							# Directory for failed/corrupt files
+### EXCEPT_DIR			= r"C:/_temp"							# Directory for failed/corrupt files
 sort_keys_cfg		= [("size", True ), ("date", False )]		# Example: Largest first, oldest
-#sort_keys_cfg		= [("size", False), ("date", False )]		# Example: Smalles first, oldest
+
 # -----------------------------------------------------------------------------
 # File Scanning
 # -----------------------------------------------------------------------------
-
-def scan_folder(root: str, xtnsio: Collection[str], sort_keys_cfg: Collection, use_threads: bool, max_workers: int
-	) -> List[Dict[str, Any]]:
-
-	print(f"Scan: {root}\n Scaning folder Sort: {sort_keys_cfg} Start: {time.strftime('%H:%M:%S')}")
+def scan_folder(root: str, xtnsio: Collection[str], sort_keys_cfg: Collection, use_threads: bool, max_workers: int) -> List[Dict[str, Any]]:
+	print(f"Scan: {root}\n Scanning folder Sort: {sort_keys_cfg} Start: {time.strftime('%H:%M:%S')}")
 	spinner = Spinner()
 	candidates: List[str] = []
 	file_list: List[Dict[str, Any]] = []
+	TOUCH_DATE = datetime(2000, 1, 1)
+	CACHE_FILE = WORK_DIR / "scan_cache.json"
+
+	# # XXX: Environment flags
+	IGNORE_SCAN_CACHE	= os.getenv("IGNORE_SCAN_CACHE", "0") == "1"
+	CLEAR_SCAN_CACHE	= os.getenv("CLEAR_SCAN_CACHE", "0") == "1"
+
+	# Handle cache
+	cache = {}
+	if CLEAR_SCAN_CACHE and CACHE_FILE.exists():
+		try:
+			CACHE_FILE.unlink()
+			safe_print("\033[93m[cache]\033[0m Cleared scan cache.")
+		except Exception as e:			safe_print(f"\033[93m[warn]\033[0m Failed to delete cache file: {e}")
+
+	if not IGNORE_SCAN_CACHE and CACHE_FILE.exists():
+		try:
+			with CACHE_FILE.open("r", encoding="utf-8") as f:
+				cache = json.load(f)
+		except Exception:				safe_print("\033[93m[warn]\033[0m Failed to load cache. Starting fresh.")
+
+	# Collect candidate files
 	for dirpath, _, files in os.walk(root):
 		for one_file in files:
-			if not (ext := Path(one_file).suffix.lower()):
-				continue
-			if ext in xtnsio:
-				candidates.append(os.path.join(dirpath, one_file))
-			elif ext not in Ignore_fils:
-				safe_print(f"\033[93m :) File {ext}: not Video {one_file}\033[0m")
+			ext = Path(one_file).suffix.lower()
+			if not ext:			continue
+			full_path = os.path.join(dirpath, one_file)
+			if ext in xtnsio:	candidates.append(full_path)
+			elif ext not in Ignore_fils:	safe_print(f"\033[93m :) File {ext}: not Video {one_file}\033[0m")
 
 	total = len(candidates)
 	err = 0
+	stat_results = {}
 
+	# Step 1: Parallel os.stat
+	with ThreadPoolExecutor(max_workers=max_workers) as stat_pool:
+		stat_futures = {stat_pool.submit(os.stat, f): f for f in candidates}
+		for fut in as_completed(stat_futures):
+			f_path = stat_futures[fut]
+			try:				stat_results[f_path] = fut.result()
+			except Exception:	continue
+
+	# Step 2: Separate cached and fresh probes
+	cached_results = {}
+	futures = {}
 	with ThreadPoolExecutor(max_workers=max_workers if use_threads else 1) as executor:
-		# Use the ffprobe_run from FFMpeg
-		futures = {executor.submit(FFMpeg.ffprobe_run, p, FFPROBE, de_bug, CHECK_CORRUPTION): p for p in candidates}
-		for i, fut in enumerate(as_completed(futures)):
-			f_path = futures[fut]
-			try:
-				file_stat = os.stat(f_path)
-				if file_stat.st_size < 10:
-					try:
-						os.remove(f_path)
-						safe_print(f"\033[93m :) Removed empty file: {f_path}\033[0m")
-					except Exception as e:
-						safe_print(f"\033[93m !! Failed to remove file {f_path}: {e}\033[0m")
-					continue
-			except Exception:
-				continue
-			try:
-				metadata, is_corrupted, error_msg = fut.result()
-				if error_msg:
-					err += 1
-					safe_print(f"\n\033[93m Warning: Could not probe '{f_path}':\nMeta Data{metadata}\nErr: {error_msg}. Skipping.\033[0m")
-				elif is_corrupted:
-					err += 1
-					safe_print(f"\n\033[93m Error: File '{f_path}'\n{metadata}\n Moving to{EXCEPT_DIR}.\033[0m")
-					# copy_move is in utils.py
-					copy_move(f_path, EXCEPT_DIR, move=True)
-				else:
-					try:
-						file_mtime = datetime.fromtimestamp(file_stat.st_mtime)
-					except Exception as ts_err:
-						safe_print(f"\n\033[93m[WARNING] Invalid timestamp for {f_path}: {ts_err}. Using default date.\033[0m")
-						file_mtime = datetime.fromtimestamp(0)
-					file_list.append({
-							"path": 	f_path,
-							"metadata":	metadata,
-							"size":		file_stat.st_size,
-							"name":		Path(f_path).name,
-							"date":		file_mtime,
-							"duration": float((metadata.get("format", {}) or {}).get("duration", 0.0) or 0.0)
-							})
-			except Exception as e:
-				err += 1
-				error_details = traceback.format_exc()
-				safe_print(f"\n\033[91m[CRITICAL] Unhandled error scanning {f_path}: {e}\033[0m \n {error_details}")
-				# errlog_block is in utils.py
-				try:						errlog_block(f_path, "scan_folder CRITICAL error", error_details)
-				except Exception as log_e:	safe_print(f"  (Additionally, failed to write to error log: {log_e})")
-				copy_move(f_path, EXCEPT_DIR, move=True)
+		for f_path, stat in stat_results.items():
+			f_key = sha1(f"{f_path}|{stat.st_size}|{stat.st_mtime}".encode()).hexdigest()
+			if not IGNORE_SCAN_CACHE and f_key in cache:
+				cached_results[f_path] = (
+							cache[f_key]["metadata"],
+							cache[f_key]["is_corrupted"],
+							cache[f_key]["error_msg"]
+						)
+			else:
+				fut = executor.submit(FFMpeg.ffprobe_run, f_path, FFPROBE, de_bug, CHECK_CORRUPTION)
+				futures[fut] = f_path
 
-			spinner.print_spin(f"[scan] {100*(i+1)/total if total > 0 else 0:>3.1f}% Done - {err:>3} Err ✓ {os.path.basename(f_path)}")
+	# Step 3: Process cached results
+	for f_path, (metadata, is_corrupted, error_msg) in cached_results.items():
+		file_stat = stat_results.get(f_path)
+		if not file_stat or file_stat.st_size < 10:
+			try:
+				os.remove(f_path)
+				safe_print(f"\033[93m :) Removed empty file: {f_path}\033[0m")
+			except Exception as e:				safe_print(f"\033[93m !! Failed to remove file {f_path}: {e}\033[0m")
+			continue
+
+		if error_msg:
+			err += 1
+			safe_print(f"\n\033[93m Warning: Could not probe '{f_path}':\nMeta Data{metadata}\nErr: {error_msg}. Skipping.\033[0m")
+			continue
+		if is_corrupted:
+			err += 1
+			safe_print(f"\n\033[93m Error: File '{f_path}'\n{metadata}\n Moving to {EXCEPT_DIR}.\033[0m")
+			copy_move(f_path, EXCEPT_DIR, move=True)
+			continue
+
+		try:
+			file_mtime = datetime.fromtimestamp(file_stat.st_mtime)
+			if file_mtime.year < 1970:
+				safe_print(f"\n\033[93m[WARNING] Invalid timestamp for {f_path} ({file_mtime}). Touching to {TOUCH_DATE}.\033[0m")
+				ts = TOUCH_DATE.timestamp()
+				os.utime(f_path, (ts, ts))
+				file_mtime = TOUCH_DATE
+		except Exception as ts_err:
+			safe_print(f"\n\033[93m[WARNING] Failed to read timestamp for {f_path}: {ts_err}. Using default date.\033[0m")
+			file_mtime = TOUCH_DATE
+
+		file_list.append({	"path":     f_path,
+							"metadata": metadata,
+							"size":     file_stat.st_size,
+							"name":     Path(f_path).name,
+							"date":     file_mtime,
+							"duration": float((metadata.get("format", {}) or {}).get("duration", 0.0) or 0.0)
+						})
+
+	# Step 4: Process fresh futures
+	for i, fut in enumerate(as_completed(futures)):
+		f_path = futures[fut]
+		file_stat = stat_results.get(f_path)
+		if not file_stat:		continue
+		try:
+			metadata, is_corrupted, error_msg = fut.result()
+			f_key = sha1(f"{f_path}|{file_stat.st_size}|{file_stat.st_mtime}".encode()).hexdigest()
+			cache[f_key] = {"metadata": metadata,
+							"is_corrupted": is_corrupted,
+							"error_msg": error_msg
+						}
+		except Exception as e:
+			err += 1
+			error_details = traceback.format_exc()
+			safe_print(f"\n\033[91m[CRITICAL] Unhandled error scanning {f_path}: {e}\033[0m \n {error_details}")
+			try:						errlog_block(f_path, "scan_folder CRITICAL error", error_details)
+			except Exception as log_e:	safe_print(f"  (Additionally, failed to write to error log: {log_e})")
+			copy_move(f_path, EXCEPT_DIR, move=True)
+			continue
+
+		if file_stat.st_size < 10:
+			try:
+				os.remove(f_path)
+				safe_print(f"\033[93m :) Removed empty file: {f_path}\033[0m")
+			except Exception as e:	safe_print(f"\033[93m !! Failed to remove file {f_path}: {e}\033[0m")
+			continue
+
+		if error_msg:
+			err += 1
+			safe_print(f"\n\033[93m Warning: Could not probe '{f_path}':\nMeta Data{metadata}\nErr: {error_msg}. Skipping.\033[0m")
+			continue
+		if is_corrupted:
+			err += 1
+			safe_print(f"\n\033[93m Error: File '{f_path}'\n{metadata}\n Moving to {EXCEPT_DIR}.\033[0m")
+			copy_move(f_path, EXCEPT_DIR, move=True)
+			continue
+
+		try:
+			file_mtime = datetime.fromtimestamp(file_stat.st_mtime)
+			if file_mtime.year < 1970:
+				safe_print(f"\n\033[93m[WARNING] Invalid timestamp for {f_path} ({file_mtime}). Touching to {TOUCH_DATE}.\033[0m")
+				ts = TOUCH_DATE.timestamp()
+				os.utime(f_path, (ts, ts))
+				file_mtime = TOUCH_DATE
+		except Exception as ts_err:
+			safe_print(f"\n\033[93m[WARNING] Failed to read timestamp for {f_path}: {ts_err}. Using default date.\033[0m")
+			file_mtime = TOUCH_DATE
+
+		file_list.append({	"path":     f_path,
+							"metadata": metadata,
+							"size":     file_stat.st_size,
+							"name":     Path(f_path).name,
+							"date":     file_mtime,
+							"duration": float((metadata.get("format", {}) or {}).get("duration", 0.0) or 0.0)
+						})
+
+		spinner.print_spin(f"[scan] {100*(i+1)/total if total > 0 else 0:>3.1f}% Done - {err:>3} Err ✓ {os.path.basename(f_path)}")
 
 	spinner.stop()
-	if err > 0:
-		safe_print(f"\033[93mWarning:\033[0m {err} files failed scanning (see per-file logs in script folder).")
+	if err > 0:		safe_print(f"\033[93mWarning:\033[0m {err} files failed scanning (see per-file logs in script folder).")
 
-	Sort_key = {"size":		lambda x: x["size"],
-				"date":		lambda x: x["date"],
-				"name":		lambda x: x["name"],
-				"duration": lambda x: x["duration"],
+	# Save updated cache
+	if not IGNORE_SCAN_CACHE:
+		try:
+			with CACHE_FILE.open("w", encoding="utf-8") as f:
+				json.dump(cache, f, indent=2)
+		except Exception as e:			safe_print(f"\033[93m[warn]\033[0m Failed to save scan cache: {e}")
+
+	# Final sort
+	Sort_key = {	"size":     lambda x: x["size"],
+					"date":     lambda x: x["date"],
+					"name":     lambda x: x["name"],
+					"duration": lambda x: x["duration"],
 				}
 	for key, descending in reversed(sort_keys_cfg):
-		if key in Sort_key:
-			file_list.sort(key=Sort_key[key], reverse=descending)
+		if key in Sort_key:	file_list.sort(key=Sort_key[key], reverse=descending)
 
 	return file_list
 
