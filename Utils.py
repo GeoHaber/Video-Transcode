@@ -151,10 +151,8 @@ def copy_move(src: str, dst_dir: str, move: bool):
 	try:
 		dst_file = Path(dst_dir) / Path(src).name
 		print(f" File:	{src}\n {op} to: {dst_file}")
-		if move:
-			shutil.move(src, dst_file)
-		else:
-			shutil.copy2(src, dst_file)
+		if move:	shutil.move(src, dst_file)
+		else:		shutil.copy2(src, dst_file)
 		return True
 	except Exception as e:
 		print(f" ERROR: Could not {op.lower()} '{src}' to '{dst_dir}': {e}")

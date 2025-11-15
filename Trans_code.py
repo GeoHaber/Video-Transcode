@@ -213,11 +213,11 @@ def scan_folder(root: str, xtnsio: Collection[str], sort_keys_cfg: Collection, u
 		except Exception as e:			safe_print(f"\033[93m[warn]\033[0m Failed to save scan cache: {e}")
 
 	# Final sort
-	Sort_key = {	"size":     lambda x: x["size"],
-					"date":     lambda x: x["date"],
-					"name":     lambda x: x["name"],
-					"duration": lambda x: x["duration"],
-				}
+	Sort_key = {"size":     lambda x: x["size"],
+				"date":     lambda x: x["date"],
+				"name":     lambda x: x["name"],
+				"duration": lambda x: x["duration"],
+			}
 	for key, descending in reversed(sort_keys_cfg):
 		if key in Sort_key:	file_list.sort(key=Sort_key[key], reverse=descending)
 

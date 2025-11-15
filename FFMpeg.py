@@ -1434,17 +1434,15 @@ def _faststart_remux(inp: Path, out: Path, task_id: str = "T1", duration: Option
 	if out.exists():
 		try:		out.unlink(missing_ok=True) # Use missing_ok=True for cleaner deletion
 		except Exception as e:			safe_print(f"   [{task_id}] WARNING: Could not delete existing output {out.name}: {e}")
-			# Use print_lock for thread safety
-			# Continue even if deletion failed, ffmpeg -y will handle it
 
 	cmd2 = [FFMPEG, "-y", "-hide_banner",
-			"-i", str(inp),
-			"-map_metadata", "-1",	# clear; don't import source tags
-			"-map", "0:v?",			# <--- THIS IS THE FIX
-			"-map", "0:a?",			# <--- THIS IS THE FIX
-			"-map", "0:s?",			# <--- THIS IS THE FIX
-			"-c", "copy",
-	]
+					"-i", str(inp),
+					"-map_metadata", "-1",	# clear; don't import source tags
+					"-map", "0:v?",			# <--- THIS IS THE FIX
+					"-map", "0:a?",			# <--- THIS IS THE FIX
+					"-map", "0:s?",			# <--- THIS IS THE FIX
+					"-c", "copy",
+				]
 
 	# --- NEW: Add hvc1 tag if requested ---
 	if add_hvc1_tag:	cmd2.extend(["-tag:v", "hvc1"])
@@ -1567,10 +1565,17 @@ def run_encode_then_faststart(encode_cmd: List[str], src_path: Path, final_mp4_p
 		errlog_block(str(src_path), f"ffmpeg stage-1 rc={rc1} [{task_id}]", " ".join(cmd1) + "\n\n" + (tail1 or ""))
 
 		# --- Sanitize Attempt (if applicable) ---
-		SUSPECT = ("non-monotonous", "invalid dts", "invalid nal", "max_analyze_duration", "malformed", "error reading", "assertion", "next_dts", "movenc.c")
+		SUSPECT = ( "non-monotonous", "invalid dts", "invalid nal", "max_analyze_duration", "malformed", "error reading", "assertion", "next_dts", "movenc.c",
+					"discarding excessive bitstream" )
 		if allow_sanitize and any(p in (tail1 or "").lower() for p in SUSPECT):
 			sanitize_src = RUN_TMP / f"__sanitize_{src_path.stem}_{token}.mkv"
-			cmd_san = [FFMPEG, "-y", "-hide_banner", "-fflags", "+genpts", "-i", str(src_path), "-map", "0", "-map_metadata", "0", "-c", "copy", str(sanitize_src)]
+			cmd_san = [FFMPEG,	"-y", "-hide_banner",
+								"-fflags",
+								"+genpts", 		"-i", str(src_path),
+								"-map", 		"0",
+								"-map_metadata","0",
+								"-c", "copy",	str(sanitize_src)
+								]
 			safe_print(f"[{task_id}] Sanitize remux attempt -> {sanitize_src.name}")
 			rcs, tailS = _run_ffmpeg_live(cmd_san, task_id=f"{task_id}_SAN", timeout=max(1200, STAGE_TIMEOUT_S // 8), duration=duration) # Pass duration here too
 			if rcs == 0 and sanitize_src.exists() and sanitize_src.stat().st_size > 1024:
