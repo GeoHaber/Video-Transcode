@@ -15,6 +15,7 @@ import threading
 import traceback
 import subprocess as sp
 import math # Make sure math is imported for _ff_atempo_chain
+import charset_normalizer # <-- NEW: Added for smart encoding detection
 
 from typing			import Any, Dict, List, Optional, Tuple, Callable, Iterable
 from pathlib		import Path
@@ -318,13 +319,12 @@ def _parse_fps(avg_frame_rate: str) -> float:
 def compute_aspect_ratio(width: int, height: int) -> Tuple[str, float]:
 	if width <= 0 or height <= 0: raise ValueError("Width and height must be positive")
 	raw_ratio = width / height
-	APPR_RATIO = {
-				"21:9": 21 / 9,
-				"16:9": 16 / 9,
-				"3:2":  3 / 2,
-				"4:3":  4 / 3,
-				"1:1":  1.0,
-		}
+	APPR_RATIO = {	"21:9": 21 / 9,
+					"16:9": 16 / 9,
+					"3:2":  3 / 2,
+					"4:3":  4 / 3,
+					"1:1":  1.0,
+			}
 	best_ratio = min(APPR_RATIO, key=lambda k: abs(APPR_RATIO[k] - raw_ratio))
 	return best_ratio, raw_ratio
 
@@ -352,11 +352,8 @@ def get_reencode_settings_based_on_source(
 	if target_w % 2:	target_w += 1
 
 	# Final scaling decision: only if dimensions actually change and source isn't already smaller
-	needs_scaling = (
-		scale_trigger and
-		(target_w != w_src or target_h != h_src) and
-		(w_src > target_w or h_src > target_h)
-	)
+	needs_scaling = (scale_trigger and (target_w != w_src or target_h != h_src) and
+					(w_src > target_w or h_src > target_h) )
 	if scale_trigger and not needs_scaling:
 		logs.append(f"   |Skip: Scaling triggered but dimensions unchanged or already smaller ({w_src}x{h_src})|")
 
@@ -375,7 +372,7 @@ def get_reencode_settings_based_on_source(
 	ideal_display	= hm_sz(ideal_bps, 'bps')
 	target_display	= hm_sz(target_bps, 'bps')
 	if br > 0 and ideal_bps > 0:
-		percent_change = round(((br - ideal_bps) / ideal_bps) * 100)
+		percent_change = round(((br - ideal_bps) / br) * 100)
 		change_type = "increase" if percent_change < 0 else "reduction"
 		logs.append(f"   |Source: {br_display} vs Ideal: {ideal_display}|App: {abs(percent_change)}% BitRate {change_type}")
 	elif br > 0:	logs.append(f"   |Source: {br_display} <= {target_display}|Target & Source similar.")
@@ -450,6 +447,7 @@ def parse_video(streams_in: List[Dict[str, Any]], context: VideoContext, de_bug:
 	out_idx = 0
 	logs: List[str] = [] # <-- MODIFIED: Log list
 	STREAM_SPECIFIC_OPTS = {"-c:v", "-b:v", "-profile:v", "-maxrate", "-bufsize"}
+	IMAGE_VIDEO_CODECS 	= {"png", "mjpeg", "gif", "tiff", "bmp", "webp", "svg"}  # etc.
 
 	for s in streams_in:
 		if s.get("disposition", {}).get("attached_pic"):
@@ -459,6 +457,9 @@ def parse_video(streams_in: List[Dict[str, Any]], context: VideoContext, de_bug:
 			logs.append(f"\033[93m  ?!Warning: Skipping non-video stream index {s.get('index')}\033[0m") # <-- MODIFIED: Append to logs
 			continue
 		codec		=     s.get("codec_name", "")
+		if codec in IMAGE_VIDEO_CODECS:
+			logs.append(f"\033[91m   .Skip: Image-based video stream index {s.get('index')} ({codec}) – ignoring for main video.\033[0m")
+			continue
 		pix_fmt		=     s.get("pix_fmt", "")
 		w			= int(s.get("width", 0))
 		h			= int(s.get("height", 0))
@@ -636,6 +637,44 @@ for k, vals in _LANG_ALIASES.items():
 		for v in vals:
 				_ALIAS_TO_LANG3[v.lower()] = k
 
+def _detect_encoding(file_path: Path) -> Optional[str]:
+	"""
+	Detects the encoding of a text file using charset_normalizer.
+	Returns the encoding name (e.g., 'windows-1255') if it's NOT
+	'utf-8' or 'ascii'.
+	Returns None if it's 'utf-8', 'ascii', or detection fails.
+	"""
+	try:
+		data = file_path.read_bytes()[:102400]
+		if not data:
+			return None # Empty file, let ffmpeg handle it
+		match = charset_normalizer.from_bytes(data).best()
+		if match:
+			encoding = str(match.encoding).lower()
+			if encoding not in ('utf-8', 'ascii'):
+				return encoding
+	except Exception as e:
+		safe_print(f"   ?!Warning: Could not detect encoding for {file_path.name}: {e}")
+	return None
+def _detect_encoding(file_path: Path) -> Optional[str]:
+	"""
+	Detects the encoding of a text file using charset_normalizer.
+	Returns the encoding name (e.g., 'windows-1255') if it's NOT
+	'utf-8' or 'ascii'.
+	Returns None if it's 'utf-8', 'ascii', or detection fails.
+	"""
+	try:
+		data = file_path.read_bytes()[:102400]
+		if not data:
+			return None  # Empty file, let ffmpeg handle it
+		match = charset_normalizer.from_bytes(data).best()
+		if match and match.encoding:
+			encoding = str(match.encoding).lower()
+			if encoding not in ("utf-8", "ascii"):
+				return encoding
+	except Exception as e:
+		safe_print(f"   ?!Warning: Could not detect encoding for {file_path.name}: {e}")
+	return None
 def _tokens_after_stem(sub_path: Path, video_stem: str) -> List[str]:
 		remainder = sub_path.stem[len(video_stem):].lstrip(".-_ ")
 		if not remainder:		return []
@@ -644,8 +683,7 @@ def _tokens_after_stem(sub_path: Path, video_stem: str) -> List[str]:
 def _guess_lang3_from_filename(sub_path: Path, video_stem: str) -> Optional[str]:
 		for tok in _tokens_after_stem(sub_path, video_stem):
 				key = tok.lower()
-				if key in _ALIAS_TO_LANG3:
-						return _ALIAS_TO_LANG3[key]
+				if key in _ALIAS_TO_LANG3:	return _ALIAS_TO_LANG3[key]
 		return None
 
 _LATIN_SW = {
@@ -709,9 +747,12 @@ def _score_sidecar(video_stem: str, path: Path, default_lng: str, keep_langs: se
 def add_subtl_from_file(input_file: str
 	) -> Tuple[List[str], bool, List[str]]: # <-- MODIFIED: Returns logs
 	"""
-	Finds the best single external subtitle file, converts it,
+	Finds the best single external subtitle file, sanitizes it to UTF-8 if needed,
 	and intelligently assigns the disposition (default, forced, or none).
-	MODIFIED: Returns log lines instead of printing.
+	Returns:
+	- ffmpeg options for the external subtitle input
+	- can_skip_processing: True if we decided NOT to add any external subtitle
+	- logs: list of log lines (strings with ANSI color codes)
 	"""
 	p = Path(input_file)
 	stem = p.stem
@@ -734,9 +775,9 @@ def add_subtl_from_file(input_file: str
 				if st == stem or st.startswith(stem + "."):
 					candidates.append(ep)
 	except Exception as e:
-		# --- MODIFIED: Append to logs ---
-		logs.append(f"\033[93m  ?!Warning: Failed to scan for external subtitles in {parent}: {e}\033[0m")
-		pass
+		logs.append(
+			f"\033[93m  ?!Warning: Failed to scan for external subtitles in {parent}: {e}\033[0m"
+		)
 
 	if not candidates:
 		# Return any logs we've gathered (like the warning)
@@ -744,23 +785,15 @@ def add_subtl_from_file(input_file: str
 
 	# --- Logic for "Direct" (Default Language) Matches ---
 	direct = [c for c in candidates if _guess_lang3_from_filename(c, stem) == default_lng]
+	chosen: Optional[Path] = None
 	if direct:
 		ext_pref = {".srt": 3, ".ass": 2, ".vtt": 1, ".ssa": 0}
-		chosen = sorted(direct, key=lambda x: (-ext_pref.get(x.suffix.lower(), 0), x.name.lower()))[0]
-
+		chosen = sorted(
+			direct,
+			key=lambda x: (-ext_pref.get(x.suffix.lower(), 0), x.name.lower()),
+		)[0]
 		# --- NEW: Determine disposition for the chosen file ---
-		tokens = {t.lower() for t in _tokens_after_stem(chosen, stem)}
-		disposition = "default" # Start by assuming default
-		if "forced" in tokens: 					disposition = "forced"
-		elif "sdh" in tokens or "cc" in tokens:	disposition = "0" # SDH/CC tracks are for accessibility, not default
 
-		logs.append(f"\033[94m  .Adding subtitle: {chosen.name} (Lang: {default_lng}, Disp: {disposition})\033[0m") # <-- MODIFIED: Append to logs
-		return ["-i", str(chosen),
-				"-map", "1:0",
-				"-c:s:0", "mov_text",
-				"-metadata:s:s:0", f"language={default_lng}",
-				"-disposition:s:0", disposition
-		], False, logs # <-- MODIFIED: Return logs
 
 	# --- Logic for "Scored" (Best Guess) Matches ---
 	scored = [(*_score_sidecar(stem, c, default_lng, keep), c) for c in candidates]
@@ -768,29 +801,146 @@ def add_subtl_from_file(input_file: str
 		key=lambda t: (
 			t[0], # Score
 			{".srt": 3, ".ass": 2, ".vtt": 1, ".ssa": 0}.get(t[2].suffix.lower(), 0),
-			t[2].name.lower()
+			t[2].name.lower(),
 		),
-		reverse=True
+		reverse=True,
 	)
 
 	best_score, best_lang, best_path = scored[0]
+	sub_path = chosen or best_path
 	lang3 = (best_lang or default_lng).lower() # Best guess at language
 
 	# --- NEW: Determine disposition for the best-scored file ---
-	tokens = {t.lower() for t in _tokens_after_stem(best_path, stem)}
+	tokens = {t.lower() for t in _tokens_after_stem(sub_path, stem)}
 	disposition = "0" # Default to 'off' for non-direct matches
 
-	if "forced" in tokens: 	disposition = "forced"
-	elif lang3 == default_lng and "sdh" not in tokens and "cc" not in tokens:
+	if chosen is not None:
+		# Direct language match: start assuming default
 		disposition = "default"
+		if "forced" in tokens:
+			disposition = "forced"
+		elif "sdh" in tokens or "cc" in tokens:
+			disposition = "0"
+	else:
+		if "forced" in tokens:
+			disposition = "forced"
+		elif lang3 == default_lng and "sdh" not in tokens and "cc" not in tokens:
+			disposition = "default"
 
-	logs.append(f"\033[94m  .Adding subtitle: {best_path.name} (Lang: {lang3}, Disp: {disposition})\033[0m") # <-- MODIFIED: Append to logs
-	return ["-i", str(best_path),
-			"-map", "1:0",
-			"-c:s:0", "mov_text",
-			"-metadata:s:s:0", f"language={lang3}",
-			"-disposition:s:0", disposition
-	], False, logs # <-- MODIFIED: Return logs
+	detected_encoding = _detect_encoding(sub_path)
+	encoding = detected_encoding or "utf-8"
+	import tempfile
+	sanitized = False
+	tmp_path: Optional[Path] = None
+	try:
+		with open(sub_path, "r", encoding=encoding, errors="ignore") as f:
+			content = f.readlines()
+		suffix = sub_path.suffix.lower()
+		sanitized_lines: List[str] = []
+		if suffix in {".srt", ".vtt"}:
+			import re as _re
+			i = 0
+			while i < len(content):
+				line = content[i].strip()
+				if line.isdigit():  # Entry number
+					sanitized_lines.append(content[i])
+					i += 1
+					if i < len(content):
+						time_line = content[i].strip()
+						if _re.match(
+							r"\d{2}:\d{2}:\d{2}[.,]\d{3} --> \d{2}:\d{2}:\d{2}[.,]\d{3}",
+							time_line,
+						):
+							sanitized_lines.append(content[i])
+							i += 1
+							while i < len(content) and content[i].strip():
+								clean_text = "".join(
+									c for c in content[i] if (ord(c) >= 32 or c in "\n\r\t")
+								)
+								sanitized_lines.append(clean_text)
+								i += 1
+							sanitized_lines.append("\n")  # Blank line
+						else:
+							i += 1
+				else:
+					i += 1
+		elif suffix in {".ass", ".ssa"}:
+			for line in content:
+				clean_line = "".join(
+					c for c in line if (ord(c) >= 32 or c in "\n\r\t")
+				)
+				sanitized_lines.append(clean_line)
+		else:
+			for line in content:
+				clean_line = "".join(
+					c for c in line if (ord(c) >= 32 or c in "\n\r\t")
+				)
+				sanitized_lines.append(clean_line)
+		if len(sanitized_lines) < 10:
+			raise ValueError("Sanitization resulted in too few lines")
+		with tempfile.NamedTemporaryFile(
+			mode="w", encoding="utf-8", suffix=suffix, delete=False
+		) as tmp_f:
+			tmp_f.writelines(sanitized_lines)
+			tmp_path = Path(tmp_f.name)
+		sanitized = True
+		logs.append(
+			f"\033[93m   .Info: Sanitized subtitle '{sub_path.name}' to UTF-8 temp file.\033[0m"
+		)
+	except Exception as san_e:
+		logs.append(
+			f"\033[93m   ?!Warning: Sanitization failed for {sub_path.name}: {san_e}\033[0m"
+		)
+		if tmp_path and os.path.exists(tmp_path):
+			os.unlink(tmp_path)
+		return [], True, logs
+	use_path = tmp_path if sanitized else sub_path
+	null_dev = "NUL" if IS_WIN else "/dev/null"
+	test_cmd = [
+		FFMPEG,
+		"-y",
+		"-hide_banner",
+		"-i",
+		str(use_path),
+		"-map",
+		"0:s?",
+		"-c:s",
+		"copy",
+		"-f",
+		"null",
+		null_dev,
+	]
+	if not _artifact_run(test_cmd, task_id="SUB_TEST"):
+		logs.append(
+			f"\033[93m   ?!Warning: FFmpeg validation failed for subtitle {sub_path.name}. Skipping addition.\033[0m"
+		)
+		if tmp_path and os.path.exists(tmp_path):
+			os.unlink(tmp_path)
+		return [], True, logs
+	subtitle_opts: List[str] = []
+	if detected_encoding and not sanitized:
+		subtitle_opts = ["-sub_charenc", detected_encoding]
+	log_msg = (
+		f"\033[94m  .Adding subtitle: {sub_path.name} "
+		f"(Lang: {lang3}, Disp: {disposition})"
+	)
+	if sanitized:
+		log_msg += " (sanitized)"
+	log_msg += "\033[0m"
+	logs.append(log_msg)
+	opts = subtitle_opts + [
+		"-i",
+		str(use_path),
+		"-map",
+		"1:0",
+		"-c:s:0",
+		"mov_text",
+		"-metadata:s:s:0",
+		f"language={lang3}",
+		"-disposition:s:0",
+		disposition,
+	]
+	return opts, False, logs
 
 def parse_subtl(
 	sub_streams: List[Dict[str, Any]],

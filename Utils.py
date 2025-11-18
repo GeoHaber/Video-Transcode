@@ -54,9 +54,9 @@ de_bug					= False # Set to True for verbose debugging output
 PAUSE_ON_EXIT			= True  # Set to True to pause console before exiting
 
 # --- File Handling ---
-File_extn				= { ".avi", ".av1",".m4v",".mkv",".mov",".mp4",".ts",".mts", ".webm", ".wmv"}
+File_extn				= { ".avi", ".flv", ".av1",".m4v",".mkv",".mov",".mp4",".ts",".mts", ".webm", ".wmv"}
 Ignore_fils				= { ".7z", ".mp3", ".pdf", ".epub", ".ini", ".jpg", ".jpeg", ".txt" ,".png", ".rar", ".xml",
-							".nfo", ".srt", ".ssa", ".metathumb", ".plexmatch" , ".url", ".zip", ".exe", ".msi"}
+							".nfo", ".srt", ".ssa", ".metathumb", ".plexmatch", ".url", ".zip", ".exe", ".msi"}
 
 TMPF_EX					= ".mp4"								# Output container format
 SKIP_KEY				= "| <¯\\_(ツ)_/¯> |"					# Metadata comment to mark processed files

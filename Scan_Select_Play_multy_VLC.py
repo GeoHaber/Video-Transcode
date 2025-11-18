@@ -1,50 +1,66 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+Rev ="""
+Scan • Select • Play – VLC Matrix
+Built by @dvdzen"
+RC 3 [ Nov 15 2025 ]
+
+Highlights
+----------
+- Modern dark UI, VLC-inspired
+- Scan library from one or more folders (with keyword exclusion)
+- Fast scan: directory walk only; metadata is done later in parallel
+- Library view with filter + sort + multi-select
+- Matrix viewer:
+	* Up to MAX_PREVIEW_PANES default 12 videos at once (python-vlc)
+	* Double-click anywhere on a pane (title, video, ⤢) to zoom that pane
+	* Double-click again or press Esc to return to grid
+	* Global:
+		- Play / Pause all
+		- Global seek slider
+		- Global volume
+		- Global playback rate controls ([, ], \)
+		- "Audio from" selector (which pane is unmuted)
+	* Per-pane:
+		- Per-pane volume slider in title bar
+		- Right-click context menu on the video:
+			• Play / Pause this video
+			• Mute / Unmute this video
+			• Seek -10% / +10%
+			• Rate -5% / +5% (this pane)
+			• Show metadata popup
+		- Focus highlight (orange border when pane is focused)
+	* Metadata:
+		- Uses ffprobe (if available) in a background thread
+		- Per-pane header shows resolution, size and A/S counts (A=audio, S=subtitles)
+
+- Drag & drop:
+	* Drop video files onto the Matrix window to reload with those files
+
+- Auto-restore:
+	* Last matrix layout (file list) is saved and reopened on next start (if files still exist)
 """
-Scan • Select • Play – VLC Matrix (Designer Edition + Player Settings)
 
-- Modern dark UI
-- Top command bar: Scan Library, Open in Matrix, Settings
-- Library panel:
-	* Source folder picker (with Browse)
-	* Rescan button
-	* Settings button
-	* Filter + Sort + Open Selected + item count
-- Background scanning (non-blocking UI)
-- Multi-select list → opens up to MAX_PREVIEW_PANES in VLC matrix
-
-Matrix window:
-	- Up to 12 panes
-	- Single audio source selector
-	- Global playback speed (with hotkeys)
-	- Global seek
-	- Global volume
-	- All player defaults configurable in Settings:
-		* Default playback speed
-		* Default volume
-		* Default audio pane (which pane has sound)
-		* Autoplay on/off when matrix opens
-
-Req:
-	pip install PySide6 python-vlc
-"""
-
+import re
 import os
 import sys
+import vlc
+import json
 import time
 import math
-import json
-import re
 import threading
 import traceback
-from pathlib import Path
-from typing import List, Tuple, Optional
+import subprocess
 
-import vlc
+from dataclasses import dataclass
+from pathlib import Path
+from typing import List, Tuple, Optional, Dict, Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from PySide6 import QtCore, QtGui, QtWidgets
 
-# ---------------- Configuration persistence ----------------
+# ---------------- Configuration & globals ----------------
 
 CONFIG_FILE = "scan_select_play_config.json"
 
@@ -71,6 +87,9 @@ DEFAULT_VOLUME: int = 80               # 0–100
 DEFAULT_AUDIO_SOURCE_INDEX: int = 0    # 0 = first pane
 DEFAULT_AUTOPLAY: bool = True          # auto-start playback when matrix opens
 
+# Last matrix layout (auto-restore)
+LAST_MATRIX_PATHS: List[str] = []
+
 VLC_ARGS: Tuple[str, ...] = ("--quiet", "--no-video-title-show", "--no-osd")
 
 SPIN_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
@@ -91,6 +110,7 @@ def load_config() -> None:
 	"""Load config from JSON into globals."""
 	global SOURCE_DIRS, EXCLUDE_KEYWORDS, VIDEO_EXTENSIONS, MAX_PREVIEW_PANES
 	global DEFAULT_PLAYBACK_RATE, DEFAULT_VOLUME, DEFAULT_AUDIO_SOURCE_INDEX, DEFAULT_AUTOPLAY
+	global LAST_MATRIX_PATHS
 
 	try:
 		if not os.path.isfile(CONFIG_FILE):
@@ -143,6 +163,10 @@ def load_config() -> None:
 		if isinstance(ap, bool):
 			DEFAULT_AUTOPLAY = ap
 
+		lp = data.get("last_matrix_paths")
+		if isinstance(lp, list):
+			LAST_MATRIX_PATHS = [str(p) for p in lp if str(p).strip()]
+
 	except Exception as e:
 		safe_print(f"Error loading config {CONFIG_FILE}: {e}")
 
@@ -159,11 +183,91 @@ def save_config() -> None:
 			"default_volume": DEFAULT_VOLUME,
 			"default_audio_source_index": DEFAULT_AUDIO_SOURCE_INDEX,
 			"default_autoplay": DEFAULT_AUTOPLAY,
+			"last_matrix_paths": LAST_MATRIX_PATHS,
 		}
 		with open(CONFIG_FILE, "w", encoding="utf-8") as f:
 			json.dump(data, f, indent=2)
 	except Exception as e:
 		safe_print(f"Error saving config {CONFIG_FILE}: {e}")
+
+
+# ---------------- Metadata helpers (ffprobe) ----------------
+
+@dataclass
+class MediaInfo:
+	width: Optional[int] = None
+	height: Optional[int] = None
+	duration: Optional[float] = None  # seconds (not currently used)
+	size_bytes: Optional[int] = None
+	video_streams: int = 0
+	audio_streams: int = 0
+	subtitle_streams: int = 0
+
+
+MEDIA_INFO_CACHE: Dict[str, MediaInfo] = {}
+media_cache_lock = threading.Lock()
+
+
+def human_size(num_bytes: Optional[int]) -> str:
+	if not num_bytes or num_bytes <= 0:
+		return "?"
+	units = ["B", "KB", "MB", "GB", "TB"]
+	size = float(num_bytes)
+	idx = 0
+	while size >= 1024 and idx < len(units) - 1:
+		size /= 1024.0
+		idx += 1
+	if idx == 0:
+		return f"{int(size)} {units[idx]}"
+	return f"{size:0.1f} {units[idx]}"
+
+
+def get_media_info(path: Path) -> MediaInfo:
+	"""Probe basic metadata using ffprobe. Uses cache and degrades gracefully."""
+	key = str(path)
+	with media_cache_lock:
+		if key in MEDIA_INFO_CACHE:
+			return MEDIA_INFO_CACHE[key]
+
+	info = MediaInfo()
+
+	# File size
+	try:
+		info.size_bytes = path.stat().st_size
+	except Exception:
+		pass
+
+	# ffprobe
+	try:
+		cmd = [
+			"ffprobe",
+			"-v", "error",
+			"-show_streams",
+			"-of", "json",
+			str(path),
+		]
+		res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+		if res.returncode == 0 and res.stdout.strip():
+			data = json.loads(res.stdout)
+			for st in data.get("streams", []):
+				ctype = st.get("codec_type")
+				if ctype == "video":
+					info.video_streams += 1
+					w = st.get("width")
+					h = st.get("height")
+					if w and h and not info.width:
+						info.width = int(w)
+						info.height = int(h)
+				elif ctype == "audio":
+					info.audio_streams += 1
+				elif ctype in ("subtitle", "sub"):
+					info.subtitle_streams += 1
+	except Exception as e:
+		safe_print(f"ffprobe failed for {path}: {e}")
+
+	with media_cache_lock:
+		MEDIA_INFO_CACHE[key] = info
+	return info
 
 
 # ---------------- Filename parsing & scanning ----------------
@@ -174,7 +278,7 @@ YEAR_RE = re.compile(r"(19\d{2}|20\d{2})")
 def parse_title_year(path: Path) -> Tuple[str, Optional[str]]:
 	"""
 	Extract a title and year from a filename.
-	Example:  "Avatar.2009.1080p.mkv" -> ("Avatar", "2009")
+	Example: "Avatar.2009.1080p.mkv" -> ("Avatar", "2009")
 	"""
 	name = path.stem
 	clean = re.sub(r"[._\-]+", " ", name).strip()
@@ -210,10 +314,13 @@ def exclude_match(path: Path) -> bool:
 	return False
 
 
-def scan_sources_with_progress(dirs: List[str]) -> List[Path]:
+def scan_sources_with_progress(
+	dirs: List[str],
+	cancel_cb: Optional[Callable[[], bool]] = None,
+) -> List[Path]:
 	"""
-	Scan SOURCE_DIRS for media files (blocking, but we run it in a QThread).
-	Shows a spinner + stats in the console, returns filtered list of Paths.
+	Scan SOURCE_DIRS for media files (blocking, but no ffprobe here).
+	If cancel_cb is provided and returns True, stops early and returns partial results.
 	"""
 	roots = [Path(d) for d in dirs if d]
 	candidates: List[Path] = []
@@ -231,6 +338,10 @@ def scan_sources_with_progress(dirs: List[str]) -> List[Path]:
 	last = start
 	frame = 0
 	for idx, p in enumerate(candidates, 1):
+		if cancel_cb and cancel_cb():
+			safe_print("Scan cancelled by user.")
+			break
+
 		if not exclude_match(p):
 			kept.append(p)
 		now = time.time()
@@ -247,40 +358,151 @@ def scan_sources_with_progress(dirs: List[str]) -> List[Path]:
 				sys.stdout.flush()
 			last = now
 	with print_lock:
-		sys.stdout.write("\r ✓ Scanning complete. " + " " * 36 + "\n")
+		sys.stdout.write("\r ✓ Scanning finished. " + " " * 36 + "\n")
 		sys.stdout.flush()
 	safe_print(f"Kept {len(kept)} file(s) after keyword filter.")
 	return kept
 
 
-# ---------------- VLC Pane & Matrix ----------------
+# ---------------- Custom VideoFrame for mouse & context menu ----------------
+
+class VideoFrame(QtWidgets.QFrame):
+	"""
+	QFrame used as the VLC video target.
+
+	We disable VLC's own mouse/key input so Qt receives mouse events.
+	"""
+
+	double_clicked = QtCore.Signal()
+	context_menu_requested = QtCore.Signal(QtCore.QPoint)
+
+	def __init__(self, parent=None):
+		super().__init__(parent)
+		self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+		self.customContextMenuRequested.connect(self.context_menu_requested.emit)
+
+	def mouseDoubleClickEvent(self, event: QtGui.QMouseEvent) -> None:
+		self.double_clicked.emit()
+		super().mouseDoubleClickEvent(event)
+
+
+# ---------------- VLC Pane ----------------
 
 class Pane(QtWidgets.QWidget):
 	"""
-	One VLC video pane: title label + video widget + controls via python-vlc.
-	We avoid aggressive .release() calls to reduce crashes on close.
+	One VLC video pane: title bar (title + per-pane volume + ⤢) + VideoFrame + VLC player.
+
+	Zoom UX:
+	  - Double-click the title bar
+	  - OR click the ⤢ button
+	  - OR double-click anywhere on the video area (VideoFrame)
+	  => emits double_clicked(self), which MatrixViewer uses to toggle fullscreen.
 	"""
 
-	def __init__(self, label: str, vlc_args: Tuple[str, ...] = VLC_ARGS):
+	double_clicked = QtCore.Signal(object)  # emits self
+
+	def __init__(self, vlc_args: Tuple[str, ...] = VLC_ARGS):
 		super().__init__()
-		self.label_text = label
 		self.vlc_instance = vlc.Instance(*vlc_args)
 		self.player = self.vlc_instance.media_player_new()
 		self._media_obj = None
 		self._video_output_set = False
+		self._base_title: str = ""
 
-		self.vbox = QtWidgets.QVBoxLayout(self)
-		self.vbox.setContentsMargins(0, 0, 0, 0)
+		# IMPORTANT: give panes small minimum size to avoid huge window requests
+		self.setMinimumSize(220, 160)
+		self.setSizePolicy(QtWidgets.QSizePolicy.Expanding,
+						   QtWidgets.QSizePolicy.Expanding)
+		self.setFocusPolicy(QtCore.Qt.StrongFocus)
 
-		self.title = QtWidgets.QLabel(label)
+		main_layout = QtWidgets.QVBoxLayout(self)
+		main_layout.setContentsMargins(0, 0, 0, 0)
+		main_layout.setSpacing(0)
+
+		# --- Title bar ---
+		title_bar = QtWidgets.QWidget()
+		title_layout = QtWidgets.QHBoxLayout(title_bar)
+		title_layout.setContentsMargins(0, 0, 0, 0)
+		title_layout.setSpacing(4)
+
+		self.title = QtWidgets.QLabel("Video")
+		self.title.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
 		self.title.setStyleSheet(
-			"QLabel{background:#141414;color:#f5f5f5;font-weight:bold;padding:4px 8px;}"
+			"QLabel{background:#141414;color:#f5f5f5;font-weight:bold;"
+			"padding:6px 10px; font-size: 10pt;}"
 		)
-		self.vbox.addWidget(self.title)
 
-		self.video_frame = QtWidgets.QFrame()
-		self.video_frame.setStyleSheet("QFrame{background:#000; border:1px solid #222;}")
-		self.vbox.addWidget(self.video_frame, 1)
+		self.vol_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+		self.vol_slider.setRange(0, 100)
+		self.vol_slider.setValue(DEFAULT_VOLUME)
+		self.vol_slider.setFixedWidth(90)
+		self.vol_slider.setToolTip("Per-pane volume")
+		self.vol_slider.setStyleSheet(
+			"QSlider::groove:horizontal {height:4px;background:#444;border-radius:2px;}"
+			"QSlider::handle:horizontal {width:10px;margin:-4px 0;border-radius:5px;background:#ffb347;}"
+		)
+
+		self.zoom_button = QtWidgets.QToolButton()
+		self.zoom_button.setText("⤢")
+		self.zoom_button.setToolTip("Zoom this pane (fullscreen in matrix)")
+		self.zoom_button.setStyleSheet(
+			"QToolButton{background:#141414;color:#ffb347;border:none;"
+			"padding:4px 10px; font-size: 11pt;}"
+			"QToolButton:hover{background:#222222;}"
+		)
+		self.zoom_button.setCursor(QtCore.Qt.PointingHandCursor)
+
+		title_layout.addWidget(self.title, 1)
+		title_layout.addWidget(QtWidgets.QLabel("Vol:"), 0)
+		title_layout.addWidget(self.vol_slider, 0)
+		title_layout.addWidget(self.zoom_button, 0, QtCore.Qt.AlignRight)
+		main_layout.addWidget(title_bar)
+
+		# --- Video frame ---
+		self.video_frame = VideoFrame()
+		self._video_frame_base_style = "QFrame{background:#000; border:1px solid #222;}"
+		self.video_frame.setStyleSheet(self._video_frame_base_style)
+		self.video_frame.setMinimumSize(200, 120)
+		self.video_frame.setSizePolicy(QtWidgets.QSizePolicy.Expanding,
+									   QtWidgets.QSizePolicy.Expanding)
+		main_layout.addWidget(self.video_frame, 1)
+
+		# Events & wiring
+		self.title.installEventFilter(self)
+		self.zoom_button.clicked.connect(self._emit_double_clicked)
+		self.video_frame.double_clicked.connect(self._emit_double_clicked)
+		self.video_frame.context_menu_requested.connect(self._show_video_context_menu)
+		self.vol_slider.valueChanged.connect(self.set_volume)
+
+	# ---- focus highlight ----
+
+	def focusInEvent(self, event: QtGui.QFocusEvent) -> None:
+		self.video_frame.setStyleSheet(
+			"QFrame{background:#000; border:2px solid #ffb347;}"
+		)
+		super().focusInEvent(event)
+
+	def focusOutEvent(self, event: QtGui.QFocusEvent) -> None:
+		self.video_frame.setStyleSheet(self._video_frame_base_style)
+		super().focusOutEvent(event)
+
+	def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
+		self.setFocus()
+		super().mousePressEvent(event)
+
+	def sizeHint(self) -> QtCore.QSize:
+		# Reasonable default per-pane footprint; allows grid to fit on one screen
+		return QtCore.QSize(320, 180)
+
+	# ---- Title double-click via event filter ----
+	def eventFilter(self, obj, event):
+		if obj is self.title and event.type() == QtCore.QEvent.MouseButtonDblClick:
+			self._emit_double_clicked()
+			return True
+		return super().eventFilter(obj, event)
+
+	def _emit_double_clicked(self):
+		self.double_clicked.emit(self)
 
 	def ensure_video_output(self):
 		if self._video_output_set or not self.video_frame.isVisible():
@@ -293,32 +515,136 @@ class Pane(QtWidgets.QWidget):
 				self.player.set_nsobject(wid)
 			else:
 				self.player.set_xwindow(wid)
+
+			# Disable VLC mouse & key input so Qt gets all events
+			try:
+				self.player.video_set_mouse_input(False)
+				self.player.video_set_key_input(False)
+			except Exception as e:
+				safe_print(f"[Pane] Could not disable VLC input (non-fatal): {e}")
+
 			self._video_output_set = True
 		except Exception as e:
 			safe_print(f"[Pane] set output error: {e}")
 
 	def clear_media(self):
-		"""Stop playback and reset label, but do NOT aggressively release VLC objects."""
+		"""Stop playback and reset label (keep VLC instance)."""
 		try:
 			self.player.stop()
 			self._media_obj = None
-			self.title.setText(self.label_text)
+			self._base_title = ""
+			self.title.setText("Video")
+			self.setToolTip("")
 		except Exception as e:
 			safe_print(f"[Pane] clear_media error: {e}")
 
 	def set_media(self, path: Optional[Path]):
 		self.clear_media()
 		if not path or not path.exists():
-			self.title.setText(self.label_text + " (no media)")
+			self.title.setText("Video: (no media)")
 			return
 		try:
 			m = self.vlc_instance.media_new_path(str(path))
 			self.player.set_media(m)
 			self._media_obj = m
-			self.title.setText(self.label_text + f"  —  {path.name}")
+			t, y = parse_title_year(path)
+			base = f"{t} ({y})" if y else t
+			self._base_title = base
+			self.title.setText(f"Video: {base}")
 		except Exception as e:
 			safe_print(f"[Pane] set_media error: {e}")
-			self.title.setText(self.label_text + " (error)")
+			self.title.setText("Video: (error)")
+
+	def update_metadata_display(self, info: MediaInfo):
+		"""Called when metadata is ready: updates title line and tooltip."""
+		detail_parts: List[str] = []
+		if info.width and info.height:
+			detail_parts.append(f"{info.width}×{info.height}")
+		if info.size_bytes:
+			detail_parts.append(human_size(info.size_bytes))
+		if info.audio_streams or info.subtitle_streams:
+			detail_parts.append(f"A{info.audio_streams}/S{info.subtitle_streams}")
+		detail = " • ".join(detail_parts)
+
+		base = self._base_title or "Unknown"
+		if detail:
+			self.title.setText(f"Video: {base}  —  {detail}")
+		else:
+			self.title.setText(f"Video: {base}")
+
+		tip_lines = [
+			f"Title: {base}",
+			f"Size: {human_size(info.size_bytes)}",
+			(
+				f"Resolution: {info.width}×{info.height}"
+				if info.width and info.height
+				else "Resolution: ?"
+			),
+			f"Streams: V{info.video_streams} / A{info.audio_streams} / S{info.subtitle_streams}",
+		]
+		self.setToolTip("\n".join(tip_lines))
+
+	# ---- video context menu ----
+	def _show_video_context_menu(self, pos: QtCore.QPoint):
+		menu = QtWidgets.QMenu(self)
+
+		st = self.player.get_state()
+		playing_states = (vlc.State.Playing, vlc.State.Opening, vlc.State.Buffering)
+		is_playing = st in playing_states
+		is_muted = bool(self.player.audio_get_mute())
+
+		act_playpause = menu.addAction("Pause this video" if is_playing else "Play this video")
+		act_mute = menu.addAction("Unmute this video" if is_muted else "Mute this video")
+		menu.addSeparator()
+		act_seek_back = menu.addAction("Seek −10%")
+		act_seek_fwd = menu.addAction("Seek +10%")
+		menu.addSeparator()
+		act_rate_dn = menu.addAction("Rate −5% (this pane)")
+		act_rate_up = menu.addAction("Rate +5% (this pane)")
+		menu.addSeparator()
+		act_meta = menu.addAction("Show metadata")
+
+		global_pos = self.video_frame.mapToGlobal(pos)
+		chosen = menu.exec(global_pos)
+		if chosen is None:
+			return
+
+		if chosen == act_playpause:
+			if is_playing:
+				self.pause()
+			else:
+				self.play()
+		elif chosen == act_mute:
+			self.set_muted(not is_muted)
+		elif chosen == act_seek_back:
+			try:
+				p = self.get_position()
+				self.set_position(p - 0.10)
+			except Exception:
+				pass
+		elif chosen == act_seek_fwd:
+			try:
+				p = self.get_position()
+				self.set_position(p + 0.10)
+			except Exception:
+				pass
+		elif chosen == act_rate_dn:
+			try:
+				r = float(self.player.get_rate() or 1.0)
+			except Exception:
+				r = 1.0
+			r = max(0.25, r - 0.05)
+			self.set_rate(r)
+		elif chosen == act_rate_up:
+			try:
+				r = float(self.player.get_rate() or 1.0)
+			except Exception:
+				r = 1.0
+			r = min(4.0, r + 0.05)
+			self.set_rate(r)
+		elif chosen == act_meta:
+			tip = self.toolTip() or "(No metadata yet)"
+			QtWidgets.QMessageBox.information(self, "Video metadata", tip)
 
 	def play(self):
 		try:
@@ -359,6 +685,10 @@ class Pane(QtWidgets.QWidget):
 	def set_volume(self, vol: int):
 		try:
 			v = max(0, min(100, int(vol)))
+			if self.vol_slider.value() != v:
+				self.vol_slider.blockSignals(True)
+				self.vol_slider.setValue(v)
+				self.vol_slider.blockSignals(False)
 			self.player.audio_set_volume(v)
 		except Exception as e:
 			safe_print(f"[Pane] volume error: {e}")
@@ -366,25 +696,72 @@ class Pane(QtWidgets.QWidget):
 
 def grid_for_count(n: int) -> Tuple[int, int]:
 	if n <= 1:
-		return (1, 1)
+		return 1, 1
 	if n == 2:
-		return (1, 2)
+		return 1, 2
 	if n in (3, 4):
-		return (2, 2)
+		return 2, 2
 	cols = math.ceil(math.sqrt(n))
 	rows = math.ceil(n / cols)
-	return (rows, cols)
+	return rows, cols
 
+
+# ---------------- Metadata worker (parallel ffprobe) ----------------
+
+class MetadataWorker(QtCore.QObject):
+	"""Runs ffprobe for many files in parallel and reports info back incrementally."""
+	progress = QtCore.Signal(str, dict)  # path_str, info_dict
+	finished = QtCore.Signal()
+
+	def __init__(self, paths: List[str], max_workers: Optional[int] = None):
+		super().__init__()
+		self._paths = paths
+		self._max_workers = max_workers or max(2, min(8, (os.cpu_count() or 4)))
+
+	@QtCore.Slot()
+	def run(self):
+		try:
+			with ThreadPoolExecutor(max_workers=self._max_workers) as ex:
+				futures = {ex.submit(get_media_info, Path(p)): p for p in self._paths}
+				for fut in as_completed(futures):
+					p = futures[fut]
+					try:
+						info = fut.result()
+					except Exception as e:
+						safe_print(f"Metadata worker error for {p}: {e}")
+						info = MediaInfo()
+					self.progress.emit(p, info.__dict__.copy())
+		finally:
+			self.finished.emit()
+
+
+# ---------------- Matrix Viewer ----------------
 
 class MatrixViewer(QtWidgets.QMainWindow):
 	"""
 	Window with up to MAX_PREVIEW_PANES video panes (VLC), plus global controls.
+
+	- Double-click pane title / zoom button / video area → fullscreen on that pane.
+	- Double-click again or press Esc → restore multi-pane grid.
+	- Metadata for panes is fetched in background and shown in each pane’s title bar.
+	- Accepts drag & drop of media files to reload matrix.
 	"""
 
 	def __init__(self, paths: List[Path]):
 		super().__init__()
 		self.setWindowTitle("VLC Matrix Viewer")
-		self.resize(1720, 980)
+
+		# Critical: keep default and minimum size reasonable relative to a 1080p display.
+		self.resize(1400, 900)
+		self.setMinimumSize(900, 600)
+
+		self.setAcceptDrops(True)
+
+		self._is_any_playing = False
+		self._expanded_pane: Optional[Pane] = None
+
+		self._pane_meta_thread: Optional[QtCore.QThread] = None
+		self._pane_meta_worker: Optional[MetadataWorker] = None
 
 		cw = QtWidgets.QWidget()
 		self.setCentralWidget(cw)
@@ -394,8 +771,7 @@ class MatrixViewer(QtWidgets.QMainWindow):
 
 		# --- Top Controls ---
 		top = QtWidgets.QHBoxLayout()
-		self.btn_playpause = QtWidgets.QPushButton("⏯  Play / Pause")
-		self.btn_playpause.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
+		self.btn_playpause = QtWidgets.QPushButton()
 		self.btn_mute_all = QtWidgets.QPushButton("🔇  Mute All")
 		self.lbl_audio = QtWidgets.QLabel("Audio from:")
 		self.combo_audio = QtWidgets.QComboBox()
@@ -416,29 +792,47 @@ class MatrixViewer(QtWidgets.QMainWindow):
 		self.spin_rate.setSingleStep(0.05)
 		self.spin_rate.setValue(DEFAULT_PLAYBACK_RATE)
 
-		for w in (
-			self.btn_playpause,
-			self.btn_mute_all,
-			self.lbl_audio,
-			self.combo_audio,
-			QtWidgets.QLabel("Rate:"),
-			self.btn_rate_dn,
-			self.btn_rate_rst,
-			self.btn_rate_up,
-			self.spin_rate,
-		):
-			top.addWidget(w)
+		# left cluster: play/pause + mute
+		top.addWidget(self.btn_playpause)
+		top.addWidget(self.btn_mute_all)
+		top.addSpacing(12)
+
+		# middle cluster: audio source
+		top.addWidget(self.lbl_audio)
+		top.addWidget(self.combo_audio)
+		top.addSpacing(20)
+
+		# right cluster: rate controls
+		top.addWidget(QtWidgets.QLabel("Rate:"))
+		top.addWidget(self.btn_rate_dn)
+		top.addWidget(self.btn_rate_rst)
+		top.addWidget(self.btn_rate_up)
+		top.addWidget(self.spin_rate)
+
 		top.addStretch(1)
 		v.addLayout(top)
 
-		# --- Grid of panes ---
-		self.grid_wrap = QtWidgets.QWidget()
-		self.grid = QtWidgets.QGridLayout(self.grid_wrap)
+		self._update_play_button_visual(False)
+
+		# --- Stack: grid vs single-pane ---
+		self.stack = QtWidgets.QStackedLayout()
+		v.addLayout(self.stack, 1)
+
+		self.grid_page = QtWidgets.QWidget()
+		self.grid = QtWidgets.QGridLayout(self.grid_page)
 		self.grid.setContentsMargins(0, 0, 0, 0)
 		self.grid.setSpacing(6)
-		v.addWidget(self.grid_wrap, 1)
+		self.stack.addWidget(self.grid_page)
 
-		# --- Bottom bar: seek + volume ---
+		self.single_page = QtWidgets.QWidget()
+		self.single_layout = QtWidgets.QVBoxLayout(self.single_page)
+		self.single_layout.setContentsMargins(0, 0, 0, 0)
+		self.single_layout.setSpacing(0)
+		self.stack.addWidget(self.single_page)
+
+		self.stack.setCurrentWidget(self.grid_page)
+
+		# --- Bottom bar ---
 		bottom_bar = QtWidgets.QHBoxLayout()
 		self.slider_seek = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
 		self.slider_seek.setRange(0, 1000)
@@ -457,6 +851,15 @@ class MatrixViewer(QtWidgets.QMainWindow):
 		bottom_bar.addWidget(self.slider_volume)
 
 		v.addLayout(bottom_bar)
+
+		# --- Shortcuts bar ---
+		self.shortcuts_label = QtWidgets.QLabel(
+			"Shortcuts: Space = Play/Pause   [ / ] = Rate ±5%   \\ = Reset Rate   Esc = Exit pane fullscreen"
+		)
+		self.shortcuts_label.setStyleSheet(
+			"QLabel { color: #bbbbbb; font-size: 9pt; padding-top: 2px; }"
+		)
+		v.addWidget(self.shortcuts_label)
 
 		# Wiring
 		self.btn_playpause.clicked.connect(self._toggle_play_pause)
@@ -479,6 +882,9 @@ class MatrixViewer(QtWidgets.QMainWindow):
 		QtGui.QShortcut(QtGui.QKeySequence("\\"), self).activated.connect(
 			lambda: self._set_rate_all(DEFAULT_PLAYBACK_RATE)
 		)
+		QtGui.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key_Escape), self).activated.connect(
+			self._exit_pane_fullscreen
+		)
 
 		self.slider_seek.sliderMoved.connect(self._seek_all)
 		self.slider_seek.sliderPressed.connect(
@@ -499,6 +905,42 @@ class MatrixViewer(QtWidgets.QMainWindow):
 
 		self.set_videos(paths)
 
+	# ---- drag & drop support ----
+
+	def dragEnterEvent(self, event: QtGui.QDragEnterEvent) -> None:
+		if event.mimeData().hasUrls():
+			for url in event.mimeData().urls():
+				if url.isLocalFile():
+					p = Path(url.toLocalFile())
+					if any(str(p).lower().endswith("." + ext.lower()) for ext in VIDEO_EXTENSIONS):
+						event.acceptProposedAction()
+						return
+		event.ignore()
+
+	def dropEvent(self, event: QtGui.QDropEvent) -> None:
+		paths: List[Path] = []
+		for url in event.mimeData().urls():
+			if url.isLocalFile():
+				p = Path(url.toLocalFile())
+				if any(str(p).lower().endswith("." + ext.lower()) for ext in VIDEO_EXTENSIONS):
+					paths.append(p)
+		if paths:
+			self.set_videos(paths[:MAX_PREVIEW_PANES])
+			event.acceptProposedAction()
+		else:
+			event.ignore()
+
+	# ---- global controls ----
+
+	def _update_play_button_visual(self, playing: bool):
+		self._is_any_playing = playing
+		if playing:
+			self.btn_playpause.setText("⏸  Pause")
+			self.btn_playpause.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPause))
+		else:
+			self.btn_playpause.setText("▶  Play")
+			self.btn_playpause.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
+
 	# Rate/volume helpers
 	def _nudge_rate(self, delta: float):
 		new_val = float(self.spin_rate.value()) + float(delta)
@@ -516,13 +958,30 @@ class MatrixViewer(QtWidgets.QMainWindow):
 		for p in self._panes:
 			p.set_volume(int(vol))
 
-	# Matrix setup
+	# ---- matrix setup ----
+
 	def set_videos(self, paths: List[Path]):
+		global LAST_MATRIX_PATHS
+
+		# stop previous metadata worker if any
+		self._stop_pane_metadata_worker()
+
 		for p in self._panes:
 			p.clear_media()
 			p.setParent(None)
 		self._panes = []
 		self._paths = [p for p in paths if p and p.exists()][:MAX_PREVIEW_PANES]
+		self._expanded_pane = None
+
+		# remember layout for auto-restore
+		LAST_MATRIX_PATHS = [str(p) for p in self._paths]
+		save_config()
+
+		while self.grid.count():
+			item = self.grid.takeAt(0)
+			w = item.widget()
+			if w is not None:
+				w.setParent(None)
 
 		n = len(self._paths) or 1
 		r, c = grid_for_count(n)
@@ -532,7 +991,8 @@ class MatrixViewer(QtWidgets.QMainWindow):
 			self.grid.setColumnStretch(cc, 1)
 
 		for i in range(n):
-			pane = Pane(f"Pane {i+1}")
+			pane = Pane()
+			pane.double_clicked.connect(self._toggle_pane_fullscreen)
 			self._panes.append(pane)
 			R, C = divmod(i, c)
 			self.grid.addWidget(pane, R, C)
@@ -553,7 +1013,10 @@ class MatrixViewer(QtWidgets.QMainWindow):
 			self._apply_audio_idx(idx)
 
 		names = "  |  ".join([p.name for p in self._paths])
-		self.setWindowTitle(f"VLC Matrix Viewer — {names}" if names else "VLC Matrix Viewer")
+		base_title = f"VLC Matrix Viewer — {names}" if names else "VLC Matrix Viewer"
+		self.setWindowTitle(base_title + f"   [{Rev}]")
+
+		self.stack.setCurrentWidget(self.grid_page)
 
 		QtCore.QTimer.singleShot(150, self._ensure_outputs_and_maybe_play)
 		QtCore.QTimer.singleShot(
@@ -562,6 +1025,8 @@ class MatrixViewer(QtWidgets.QMainWindow):
 		QtCore.QTimer.singleShot(
 			270, lambda: self._set_volume_all(int(self.slider_volume.value()))
 		)
+
+		self._start_pane_metadata_worker()
 
 	def showEvent(self, e: QtGui.QShowEvent) -> None:
 		super().showEvent(e)
@@ -574,28 +1039,45 @@ class MatrixViewer(QtWidgets.QMainWindow):
 			QtCore.QTimer.singleShot(
 				120, lambda: [pn.play() for pn in self._panes if pn.player.get_media()]
 			)
+			self._update_play_button_visual(True)
+		else:
+			self._update_play_button_visual(False)
 
 	# Playback UI
 	def _toggle_play_pause(self):
 		if not self._panes:
 			return
-		p0 = self._panes[0].player
-		st = p0.get_state()
-		playing = (vlc.State.Playing, vlc.State.Buffering, vlc.State.Opening)
-		if st in playing:
-			for p in self._panes:
+
+		playing_states = (vlc.State.Playing, vlc.State.Buffering, vlc.State.Opening)
+
+		any_playing = False
+		try:
+			for pane in self._panes:
+				st = pane.player.get_state()
+				if st in playing_states:
+					any_playing = True
+					break
+		except Exception:
+			any_playing = False
+
+		if any_playing:
+			# Pause all
+			for pane in self._panes:
 				try:
-					if p.player.get_state() in playing:
-						p.pause()
+					if pane.player.get_state() in playing_states:
+						pane.pause()
 				except Exception:
 					pass
+			self._update_play_button_visual(False)
 		else:
-			for p in self._panes:
+			# Play all with media
+			for pane in self._panes:
 				try:
-					if p.player.get_media():
-						p.play()
+					if pane.player.get_media():
+						pane.play()
 				except Exception:
 					pass
+			self._update_play_button_visual(True)
 
 	def _mute_all(self):
 		for p in self._panes:
@@ -637,9 +1119,131 @@ class MatrixViewer(QtWidgets.QMainWindow):
 		for p in self._panes:
 			p.set_position(pos)
 
+	# ------- fullscreen toggle for panes -------
+
+	def _toggle_pane_fullscreen(self, pane: Pane):
+		if pane not in self._panes:
+			return
+
+		if self._expanded_pane is None:
+			self._expanded_pane = pane
+			self._show_pane_fullscreen(pane)
+			return
+
+		if self._expanded_pane is pane:
+			self._expanded_pane = None
+			self._restore_grid_layout()
+			return
+
+		self._expanded_pane = pane
+		self._show_pane_fullscreen(pane)
+
+	def _show_pane_fullscreen(self, pane: Pane):
+		for p in self._panes:
+			self.grid.removeWidget(p)
+			p.setParent(None)
+
+		while self.single_layout.count():
+			item = self.single_layout.takeAt(0)
+			w = item.widget()
+			if w is not None:
+				w.setParent(None)
+
+		self.single_layout.addWidget(pane)
+		self.stack.setCurrentWidget(self.single_page)
+
+	def _restore_grid_layout(self):
+		while self.single_layout.count():
+			item = self.single_layout.takeAt(0)
+			w = item.widget()
+			if w is not None:
+				w.setParent(None)
+
+		while self.grid.count():
+			item = self.grid.takeAt(0)
+			w = item.widget()
+			if w is not None:
+				w.setParent(None)
+
+		n = len(self._panes) or 1
+		r, c = grid_for_count(n)
+		for rr in range(max(r, 2)):
+			self.grid.setRowStretch(rr, 1)
+		for cc in range(max(c, 2)):
+			self.grid.setColumnStretch(cc, 1)
+
+		for i, pane in enumerate(self._panes):
+			R, C = divmod(i, c)
+			self.grid.addWidget(pane, R, C)
+		if n == 3:
+			filler = QtWidgets.QWidget()
+			filler.setStyleSheet("background:#111;")
+			self.grid.addWidget(filler, 1, 1)
+
+		self.stack.setCurrentWidget(self.grid_page)
+
+	def _exit_pane_fullscreen(self):
+		if self._expanded_pane is None:
+			return
+		self._expanded_pane = None
+		self._restore_grid_layout()
+
+	# ------- pane metadata worker -------
+
+	def _start_pane_metadata_worker(self):
+		if not self._paths:
+			return
+
+		self._stop_pane_metadata_worker()
+
+		paths = [str(p) for p in self._paths]
+		self._pane_meta_thread = QtCore.QThread(self)
+		self._pane_meta_worker = MetadataWorker(paths, max_workers=min(len(paths), 4))
+		self._pane_meta_worker.moveToThread(self._pane_meta_thread)
+
+		self._pane_meta_thread.started.connect(self._pane_meta_worker.run)
+		self._pane_meta_worker.progress.connect(self._pane_metadata_progress)
+		self._pane_meta_worker.finished.connect(self._pane_metadata_finished)
+
+		self._pane_meta_worker.finished.connect(self._pane_meta_thread.quit)
+		self._pane_meta_worker.finished.connect(self._pane_meta_worker.deleteLater)
+		self._pane_meta_thread.finished.connect(self._pane_meta_thread_finished)
+
+		self._pane_meta_thread.start()
+
+	def _stop_pane_metadata_worker(self):
+		if self._pane_meta_thread is not None:
+			self._pane_meta_thread.quit()
+			self._pane_meta_thread.wait()
+			self._pane_meta_thread = None
+			self._pane_meta_worker = None
+
+	@QtCore.Slot(str, dict)
+	def _pane_metadata_progress(self, path_str: str, info_dict: dict):
+		path_obj = Path(path_str)
+		idx = -1
+		for i, p in enumerate(self._paths):
+			if p == path_obj:
+				idx = i
+				break
+		if idx < 0 or idx >= len(self._panes):
+			return
+		pane = self._panes[idx]
+		info = MediaInfo(**info_dict)
+		pane.update_metadata_display(info)
+
+	@QtCore.Slot()
+	def _pane_metadata_finished(self):
+		self._stop_pane_metadata_worker()
+
+	@QtCore.Slot()
+	def _pane_meta_thread_finished(self):
+		self._pane_meta_thread = None
+		self._pane_meta_worker = None
+
 	def closeEvent(self, e: QtGui.QCloseEvent) -> None:
-		"""Stop timer + stop players, but avoid over-releasing VLC objects."""
 		self.tmr.stop()
+		self._stop_pane_metadata_worker()
 		for p in self._panes:
 			try:
 				p.player.stop()
@@ -648,21 +1252,9 @@ class MatrixViewer(QtWidgets.QMainWindow):
 		super().closeEvent(e)
 
 
-# ---------------- Settings dialog for scan constants + player defaults ----------------
+# ---------------- Settings dialog ----------------
 
 class SettingsDialog(QtWidgets.QDialog):
-	"""
-	Edits:
-	  - SOURCE_DIRS
-	  - EXCLUDE_KEYWORDS
-	  - VIDEO_EXTENSIONS
-	  - MAX_PREVIEW_PANES
-	  - DEFAULT_PLAYBACK_RATE
-	  - DEFAULT_VOLUME
-	  - DEFAULT_AUDIO_SOURCE_INDEX
-	  - DEFAULT_AUTOPLAY
-	"""
-
 	def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
 		super().__init__(parent)
 		self.setWindowTitle("Settings")
@@ -704,7 +1296,9 @@ class SettingsDialog(QtWidgets.QDialog):
 		self.audio_index_spin.setRange(1, MAX_PREVIEW_PANES)
 		self.audio_index_spin.setValue(DEFAULT_AUDIO_SOURCE_INDEX + 1)
 
-		self.autoplay_check = QtWidgets.QCheckBox("Start playback automatically when matrix opens")
+		self.autoplay_check = QtWidgets.QCheckBox(
+			"Start playback automatically when matrix opens"
+		)
 		self.autoplay_check.setChecked(DEFAULT_AUTOPLAY)
 
 		layout.addRow("Default playback speed:", self.rate_spin)
@@ -738,17 +1332,24 @@ class SettingsDialog(QtWidgets.QDialog):
 # ---------------- Background scanner worker (QThread) ----------------
 
 class ScannerWorker(QtCore.QObject):
-	finished = QtCore.Signal(list)   # list[str] as paths
+	finished = QtCore.Signal(list)
 	error = QtCore.Signal(str)
 
 	def __init__(self, dirs: List[str]):
 		super().__init__()
 		self._dirs = dirs
+		self._cancelled = False
+
+	def request_cancel(self):
+		self._cancelled = True
+
+	def is_cancelled(self) -> bool:
+		return self._cancelled
 
 	@QtCore.Slot()
 	def run(self):
 		try:
-			files = scan_sources_with_progress(self._dirs)
+			files = scan_sources_with_progress(self._dirs, cancel_cb=self.is_cancelled)
 			self.finished.emit([str(p) for p in files])
 		except Exception as e:
 			self.error.emit(str(e))
@@ -757,7 +1358,6 @@ class ScannerWorker(QtCore.QObject):
 # ---------------- App-wide theme ----------------
 
 def apply_dark_theme(app: QtWidgets.QApplication):
-	"""Global dark theme with orange accent."""
 	palette = QtGui.QPalette()
 
 	base = QtGui.QColor(20, 20, 20)
@@ -873,6 +1473,8 @@ class MainWindow(QtWidgets.QMainWindow):
 		self.settings = QtCore.QSettings("GeoTools", "ScanSelectPlayVLC")
 		self._scan_thread: Optional[QtCore.QThread] = None
 		self._scan_worker: Optional[ScannerWorker] = None
+		self._scan_progress: Optional[QtWidgets.QProgressDialog] = None
+		self._scan_cancel_requested: bool = False
 
 		cw = QtWidgets.QWidget()
 		self.setCentralWidget(cw)
@@ -903,14 +1505,24 @@ class MainWindow(QtWidgets.QMainWindow):
 		title_label.setFont(title_font)
 		title_label.setStyleSheet("color:#ffb347;")
 
+		# Title left, buttons right (good horizontal scaling)
 		cmd_bar.addWidget(title_label)
-		cmd_bar.addSpacing(20)
+		cmd_bar.addStretch(1)
 		cmd_bar.addWidget(self.btn_cmd_rescan)
 		cmd_bar.addWidget(self.btn_cmd_open)
 		cmd_bar.addWidget(self.btn_cmd_settings)
-		cmd_bar.addStretch(1)
 
 		main_layout.addLayout(cmd_bar)
+
+		# --- Steps helper strip ---
+		steps_label = QtWidgets.QLabel(
+			"① Pick source  ·  ② Scan Library  ·  ③ Filter & select  ·  ④ Open in Matrix"
+		)
+		steps_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+		steps_label.setStyleSheet(
+			"QLabel { color:#aaaaaa; font-size:9pt; padding:2px 4px; }"
+		)
+		main_layout.addWidget(steps_label)
 
 		# --- Library / Filter panel ---
 		library_group = QtWidgets.QGroupBox("Library")
@@ -928,17 +1540,14 @@ class MainWindow(QtWidgets.QMainWindow):
 		self.btn_browse_source.setFixedWidth(90)
 		self.btn_rescan = QtWidgets.QPushButton("Rescan")
 		self.btn_rescan.setFixedWidth(80)
-		self.btn_settings = QtWidgets.QPushButton("Settings…")
-		self.btn_settings.setFixedWidth(85)
 
 		row1.addWidget(lbl_source)
 		row1.addWidget(self.source_edit, 3)
 		row1.addWidget(self.btn_browse_source)
 		row1.addSpacing(6)
 		row1.addWidget(self.btn_rescan)
-		row1.addWidget(self.btn_settings)
 
-		# Row 2: Filter + sort + open
+		# Row 2: Filter + sort + item count
 		row2 = QtWidgets.QHBoxLayout()
 		lbl_filter = QtWidgets.QLabel("Filter:")
 		self.edit_filter = QtWidgets.QLineEdit()
@@ -947,15 +1556,11 @@ class MainWindow(QtWidgets.QMainWindow):
 		self.combo_sort.addItems(["Title ↑", "Title ↓", "Year ↑", "Year ↓"])
 		self.combo_sort.setCurrentIndex(int(self.settings.value("sort_index", 0)))
 		self.edit_filter.setText(str(self.settings.value("last_filter", "")))
-		self.btn_open_sel = QtWidgets.QPushButton("Open Selected in Matrix")
-		self.btn_open_sel.setToolTip(f"Play up to {MAX_PREVIEW_PANES} videos at once")
 		self.lbl_info = QtWidgets.QLabel("0 item(s)")
 
 		row2.addWidget(lbl_filter)
 		row2.addWidget(self.edit_filter, 3)
 		row2.addWidget(self.combo_sort)
-		row2.addSpacing(12)
-		row2.addWidget(self.btn_open_sel, 2)
 		row2.addStretch(1)
 		row2.addWidget(self.lbl_info)
 
@@ -972,22 +1577,18 @@ class MainWindow(QtWidgets.QMainWindow):
 		self.list.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
 		main_layout.addWidget(self.list, 1)
 
-		# --- Status bar-like label ---
-		self.status = QtWidgets.QLabel("Ready")
+		self.status = QtWidgets.QLabel(f"Ready  ·  {Rev}")
 		self.status.setObjectName("StatusLabel")
 		self.status.setMinimumHeight(22)
 		self.status.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
 		main_layout.addWidget(self.status)
 
-		# Data
 		self._all_files: List[Path] = files[:]
+		self._item_by_path: Dict[str, QtWidgets.QListWidgetItem] = {}
 
-		# Hooks – command bar + main controls share handlers
 		self.btn_rescan.clicked.connect(self._rescan)
-		self.btn_open_sel.clicked.connect(self._open_selected)
-		self.btn_settings.clicked.connect(self._open_settings)
-
 		self.btn_cmd_rescan.clicked.connect(self._rescan)
+
 		self.btn_cmd_open.clicked.connect(self._open_selected)
 		self.btn_cmd_settings.clicked.connect(self._open_settings)
 
@@ -996,6 +1597,9 @@ class MainWindow(QtWidgets.QMainWindow):
 		self.list.customContextMenuRequested.connect(self._open_context_menu)
 		self.btn_browse_source.clicked.connect(self._browse_source)
 		self.source_edit.editingFinished.connect(self._source_changed)
+
+		# Double-click = open single-video matrix
+		self.list.itemDoubleClicked.connect(self._open_one_item_matrix)
 
 		# Populate with initial files
 		self._populate(files)
@@ -1088,7 +1692,7 @@ class MainWindow(QtWidgets.QMainWindow):
 		if action == act_toggle:
 			item = self.list.itemAt(pos)
 			if item:
-				item.setSelected( not item.isSelected())
+				item.setSelected(not item.isSelected())
 		elif action == act_select_all:
 			self.list.selectAll()
 		elif action == act_clear_sel:
@@ -1102,9 +1706,9 @@ class MainWindow(QtWidgets.QMainWindow):
 		title, year = parse_title_year(p)
 		year_val = int(year) if (year and year.isdigit()) else -1
 		if mode in (0, 1):  # Title
-			return (title.lower(), year_val)
-		else:               # Year
-			return (year_val, title.lower())
+			return title.lower(), year_val
+		else:  # Year
+			return year_val, title.lower()
 
 	def _resort(self, idx: int):
 		self.settings.setValue("sort_index", int(idx))
@@ -1145,19 +1749,56 @@ class MainWindow(QtWidgets.QMainWindow):
 
 	def _populate(self, files: List[Path]):
 		self.list.clear()
+		self._item_by_path.clear()
+
 		for p in files:
 			title, year = parse_title_year(p)
-			txt = f"{title} ({year})" if year else title
-			it = QtWidgets.QListWidgetItem(txt)
+			base_title = f"{title} ({year})" if year else title
+
+			display = base_title
+
+			it = QtWidgets.QListWidgetItem(display)
 			it.setData(QtCore.Qt.UserRole, str(p))
+
+			tip_lines = [
+				f"Title: {title}",
+				f"Year: {year or 'Unknown'}",
+				f"Path: {p}",
+				"Details: loaded when opened in Matrix.",
+			]
+			it.setToolTip("\n".join(tip_lines))
+
 			self.list.addItem(it)
+			self._item_by_path[str(p)] = it
+
 		self.lbl_info.setText(f"{self.list.count()} item(s)")
 		if files:
-			self.status.setText("Library loaded.")
+			self.status.setText(f"Library loaded. Select items and open in Matrix.  ·  {Rev}")
 		else:
-			self.status.setText("No items. Click Scan Library to scan source folder.")
+			self.status.setText(f"No items. Click Scan Library to scan source folder.  ·  {Rev}")
 
-	# ---- Scanning in background ----
+	def _create_scan_progress(self):
+		self._scan_progress = QtWidgets.QProgressDialog(
+			"Scanning media library…", "Cancel", 0, 0, self
+		)
+		self._scan_progress.setWindowTitle("Scanning")
+		self._scan_progress.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
+		self._scan_progress.setMinimumDuration(0)
+		self._scan_progress.canceled.connect(self._cancel_scan)
+		self._scan_progress.setAutoClose(False)
+		self._scan_progress.show()
+
+	def _close_scan_progress(self):
+		if self._scan_progress is not None:
+			self._scan_progress.close()
+			self._scan_progress.deleteLater()
+			self._scan_progress = None
+
+	def _cancel_scan(self):
+		self._scan_cancel_requested = True
+		if self._scan_worker is not None:
+			self._scan_worker.request_cancel()
+		self.status.setText("Cancelling scan…")
 
 	def _rescan(self):
 		if self._scan_thread is not None:
@@ -1172,9 +1813,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
 		self.status.setText("Scanning… (see console for progress)")
 		self.btn_rescan.setEnabled(False)
-		self.btn_open_sel.setEnabled(False)
 		self.btn_cmd_rescan.setEnabled(False)
 		self.btn_cmd_open.setEnabled(False)
+		self._scan_cancel_requested = False
 
 		self._scan_thread = QtCore.QThread(self)
 		self._scan_worker = ScannerWorker(SOURCE_DIRS)
@@ -1189,32 +1830,38 @@ class MainWindow(QtWidgets.QMainWindow):
 		self._scan_thread.finished.connect(self._scan_thread_finished)
 
 		self._scan_thread.start()
+		self._create_scan_progress()
 
 	@QtCore.Slot(list)
 	def _scan_finished(self, files_as_str: List[str]):
 		self.btn_rescan.setEnabled(True)
-		self.btn_open_sel.setEnabled(True)
 		self.btn_cmd_rescan.setEnabled(True)
 		self.btn_cmd_open.setEnabled(True)
 		self._all_files = [Path(s) for s in files_as_str]
 		self._resort(self.combo_sort.currentIndex())
-		self.status.setText("Scan complete.")
+
+		if self._scan_cancel_requested:
+			self.status.setText("Scan cancelled – partial results loaded.")
+		else:
+			self.status.setText("Scan complete. Select items and open in Matrix.")
+
+		self._scan_cancel_requested = False
+		self._close_scan_progress()
 
 	@QtCore.Slot(str)
 	def _scan_error(self, msg: str):
 		self.btn_rescan.setEnabled(True)
-		self.btn_open_sel.setEnabled(True)
 		self.btn_cmd_rescan.setEnabled(True)
 		self.btn_cmd_open.setEnabled(True)
 		QtWidgets.QMessageBox.critical(self, "Scan error", msg)
 		self.status.setText(f"Scan error: {msg}")
+		self._close_scan_progress()
 
 	@QtCore.Slot()
 	def _scan_thread_finished(self):
 		self._scan_thread = None
 		self._scan_worker = None
-
-	# ---- Open in matrix ----
+		self._close_scan_progress()
 
 	def _open_selected(self):
 		items = self.list.selectedItems()
@@ -1230,17 +1877,30 @@ class MainWindow(QtWidgets.QMainWindow):
 		mv = MatrixViewer(paths)
 		mv.show()
 
+	def _open_one_item_matrix(self, item: QtWidgets.QListWidgetItem):
+		if not item:
+			return
+		p = Path(item.data(QtCore.Qt.UserRole))
+		if not p.exists():
+			QtWidgets.QMessageBox.warning(self, "Open", "File no longer exists.")
+			return
+		mv = MatrixViewer([p])
+		mv.show()
+
 
 # ---------------- Entry point ----------------
 
 def main(argv: List[str]) -> int:
+	print ( Rev )
 	safe_print("Scan • Select • Play – starting")
 	load_config()
 
 	cli_paths = [Path(a) for a in argv if a and not a.startswith("-")]
 	app = QtWidgets.QApplication(sys.argv)
 	apply_dark_theme(app)
+	app.setQuitOnLastWindowClosed(True)
 
+	# CLI mode: directly open Matrix with files
 	if cli_paths:
 		mv = MatrixViewer([p for p in cli_paths if p.exists()][:MAX_PREVIEW_PANES])
 		mv.show()
@@ -1258,6 +1918,14 @@ def main(argv: List[str]) -> int:
 		w.restoreState(state)
 
 	w.show()
+
+	# Auto-restore last matrix layout (if files still exist)
+	if LAST_MATRIX_PATHS:
+		existing = [Path(p) for p in LAST_MATRIX_PATHS if Path(p).exists()]
+		if existing:
+			mv = MatrixViewer(existing[:MAX_PREVIEW_PANES])
+			mv.show()
+
 	ret = app.exec()
 
 	qs.setValue("main_geo", w.saveGeometry())

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 Rev ="""
-  Trans_code.py (Shutdown-safe hardening) 10/30/2025
+  Trans_code.py (Shutdown-safe hardening) 11/17/2025
 	- All fixes from design review applied.
 	- Standardized logging to use Tee+print_lock and a module logger for critical errors.
 	- Fixed hvc1 remux-only bug.
@@ -32,7 +32,7 @@ from Utils import *		# Imports all constants, globals (locks, etc.), and basic h
 
 Log_File = str(WORK_DIR / f"__{Path(sys.argv[0]).stem}_{time.strftime('%Y_%j_%H-%M-%S')}.log")
 
-ROOT_DIR			= "C:/Video_files_to_proccess"
+ROOT_DIR			= "Directory of the Video_files_to_proccess" # C:/videos
 
 
 ### EXCEPT_DIR			= r"C:/_temp"							# Directory for failed/corrupt files
