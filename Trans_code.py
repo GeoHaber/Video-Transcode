@@ -95,11 +95,10 @@ def scan_folder(root: str, xtnsio: Collection[str], sort_keys_cfg: Collection, u
 		for f_path, stat in stat_results.items():
 			f_key = sha1(f"{f_path}|{stat.st_size}|{stat.st_mtime}".encode()).hexdigest()
 			if not IGNORE_SCAN_CACHE and f_key in cache:
-				cached_results[f_path] = (
-							cache[f_key]["metadata"],
-							cache[f_key]["is_corrupted"],
-							cache[f_key]["error_msg"]
-						)
+				cached_results[f_path] = (  cache[f_key]["metadata"],
+											cache[f_key]["is_corrupted"],
+											cache[f_key]["error_msg"]
+										)
 			else:
 				fut = executor.submit(FFMpeg.ffprobe_run, f_path, FFPROBE, de_bug, CHECK_CORRUPTION)
 				futures[fut] = f_path
