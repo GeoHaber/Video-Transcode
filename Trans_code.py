@@ -22,7 +22,7 @@ import FFMpeg
 from Utils import *
 
 Log_File = str(WORK_DIR / f"__{Path(sys.argv[0]).stem}_{time.strftime('%Y_%j_%H-%M-%S')}.log")
-ROOT_DIR = r"C:/Users/Geo/Desktop/downloads"
+ROOT_DIR = r"C:/Users/The Place Where your Videos Are"
 
 if 'EXCEPT_DIR' not in globals(): EXCEPT_DIR = Path("C:/_temp")
 sort_keys_cfg = [("size", True ), ("date", False )]
