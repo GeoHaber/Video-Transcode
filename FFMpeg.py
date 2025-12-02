@@ -7,27 +7,27 @@ import sys
 import json
 import time
 import shlex
-import queue
+
 import atexit
 import signal
 import tempfile
 import threading
-import traceback
+
 import subprocess as sp
-import math
+
 import platform
 import random
 import string
 import shutil
 import charset_normalizer
 
-from typing import Any, Dict, List, Optional, Tuple, Callable, Iterable, Union
-from pathlib import Path
-from fractions import Fraction
-from dataclasses import dataclass, field
-from collections import defaultdict
+from typing 		import Any, Dict, List, Optional, Tuple, Callable, Iterable, Union
+from pathlib 		import Path
+from fractions 		import Fraction
+from dataclasses 	import dataclass, field
+from collections 	import defaultdict
 
-from Utils import *
+from Utils 			import *
 
 IS_WIN = sys.platform.startswith("win")
 
@@ -36,30 +36,37 @@ IS_WIN = sys.platform.startswith("win")
 # =============================================================================
 
 def detect_hardware_encoder() -> str:
-	"""
-	Detects the best available hardware encoder (NVIDIA, Intel QSV, AMD AMF)
-	based on the system's hardware configuration.
-	"""
+	"""Detects available hardware encoder (NVIDIA, AMD, Intel)."""
+	# 1. Define Rules: (Keywords -> Encoder)
+	rules = [
+		(["nvidia"], 			"hevc_nvenc"),
+		(["amd", "radeon"], 	"hevc_amf"),
+		(["intel", "arc"], 		"hevc_qsv"),
+	]
+
+	# 2. Gather Hardware Info Strings
+	info_sources = []
+	
 	if IS_WIN:
 		try:
 			import wmi
-			c = wmi.WMI()
-			for gpu in c.Win32_VideoController():
-				name = gpu.Name.lower()
-				if "amd" in name or "radeon" in name: return "hevc_amf"
-				if "intel" in name or "arc" in name: return "hevc_qsv"
-				if "nvidia" in name: return "hevc_nvenc"
+			for gpu in wmi.WMI().Win32_VideoController():
+				info_sources.append(gpu.Name.lower())
 		except: pass
 	else:
 		try:
-			lspci = sp.check_output("lspci", shell=True).decode().lower()
-			if "amd" in lspci: return "hevc_amf"
-			if "intel" in lspci: return "hevc_qsv"
+			info_sources.append(sp.check_output("lspci", shell=True).decode().lower())
 		except: pass
+	
+	# Add CPU as fallback
+	info_sources.append(platform.processor().lower())
 
-	proc = platform.processor().lower()
-	if "intel" in proc: return "hevc_qsv"
-	if "amd" in proc: return "hevc_amf"
+	# 3. Check Rules
+	for info in info_sources:
+		for keywords, encoder in rules:
+			if any(k in info for k in keywords):
+				return encoder
+
 	return "libx265"
 
 CURRENT_ENCODER = detect_hardware_encoder()
@@ -68,6 +75,7 @@ FFMPEG          = "ffmpeg"
 FFPROBE         = "ffprobe"
 PROBE_TIMEOUT_S = 30
 CORRUPTION_CHECK_TIMEOUT_S = 60
+USE_TWO_PASS    = True  # Enables 2-pass encoding for supported encoders (libx265)
 
 # =============================================================================
 # 2. PROCESS MANAGEMENT
@@ -79,10 +87,7 @@ if IS_WIN:
 	PROCESS_ALL_ACCESS = 0x1F0FFF
 
 class ChildProcessManager:
-	"""
-	Registers subprocesses and ensures they are terminated when the main
-	Python script exits or receives a kill signal.
-	"""
+	"""Registry for subprocesses to ensure cleanup on exit."""
 	def __init__(self):
 		self._procs = []
 		self._lock = threading.Lock()
@@ -91,16 +96,13 @@ class ChildProcessManager:
 		signal.signal(signal.SIGTERM, lambda s,f: self.terminate_all())
 
 	def register(self, proc):
-		"""Adds a process to the managed list."""
 		with self._lock: self._procs.append(proc)
 
 	def unregister(self, proc):
-		"""Removes a process from the managed list (e.g., after clean exit)."""
 		with self._lock:
 			if proc in self._procs: self._procs.remove(proc)
 
 	def terminate_all(self):
-		"""Force kills all currently registered processes."""
 		with self._lock:
 			for p in self._procs:
 				try: p.kill()
@@ -110,10 +112,7 @@ class ChildProcessManager:
 PROC_MGR = ChildProcessManager()
 
 def _popen_managed(cmd: List[str], **kwargs) -> sp.Popen:
-	"""
-	Wrapper for subprocess.Popen that automatically registers the process
-	with the ChildProcessManager for cleanup.
-	"""
+	"""Starts a subprocess and registers it for cleanup."""
 	if IS_WIN: kwargs.setdefault("creationflags", sp.CREATE_NEW_PROCESS_GROUP)
 	else: kwargs.setdefault("preexec_fn", os.setsid)
 
@@ -133,7 +132,7 @@ _SRIK_LOCK = threading.RLock()
 _GLOBAL_SRIK = {}
 
 def srik_update(path: str, *, source=None, plan=None, output=None):
-	"""Thread-safe update of the in-memory state dictionary for a file."""
+	"""Updates the global state record for a file."""
 	k = str(Path(path).resolve())
 	with _SRIK_LOCK:
 		entry = _GLOBAL_SRIK.get(k, {})
@@ -142,12 +141,10 @@ def srik_update(path: str, *, source=None, plan=None, output=None):
 		_GLOBAL_SRIK[k] = entry
 
 def srik_get(path: str):
-	"""Retrieves the state dictionary for a specific file path."""
 	k = str(Path(path).resolve())
 	with _SRIK_LOCK: return _GLOBAL_SRIK.get(k, {}).copy()
 
 def srik_clear(path: str):
-	"""Removes a file from the state dictionary."""
 	k = str(Path(path).resolve())
 	with _SRIK_LOCK: _GLOBAL_SRIK.pop(k, None)
 
@@ -157,7 +154,7 @@ def srik_clear(path: str):
 
 @dataclass
 class VideoMeta:
-	"""Data structure holding essential video file metadata."""
+	"""Data structure for parsed video metadata."""
 	width: int = 0
 	height: int = 0
 	duration: float = 0.0
@@ -168,10 +165,7 @@ class VideoMeta:
 	format_tags: Dict = field(default_factory=dict)
 
 def ffprobe_run(input_file: str, execu=None, de_bug=False, check_corruption=False):
-	"""
-	Runs ffprobe to extract JSON metadata and optionally performs a quick
-	decoding test to check for file corruption.
-	"""
+	"""Runs ffprobe to extract metadata and optionally checks for corruption."""
 	cmd = [execu or FFPROBE, "-v", "error", "-show_streams", "-show_format", "-of", "json", input_file]
 	meta_obj, corrupt, err_msg = None, False, None
 
@@ -230,7 +224,6 @@ _LANG_ALIASES = {
 _ALIAS_TO_LANG3 = {v.lower(): k for k, vals in _LANG_ALIASES.items() for v in vals}
 
 def _detect_encoding(file_path: Path) -> Optional[str]:
-	"""Attempts to detect the character encoding of a text file."""
 	try:
 		data = file_path.read_bytes()[:102400]
 		match = charset_normalizer.from_bytes(data).best()
@@ -239,19 +232,16 @@ def _detect_encoding(file_path: Path) -> Optional[str]:
 	return None
 
 def _tokens_after_stem(sub_path: Path, video_stem: str) -> List[str]:
-	"""Extracts tokens (like 'eng', 'forced') from filename after the video name match."""
 	remainder = sub_path.stem[len(video_stem):].lstrip(".-_ ")
 	return [t for t in re.split(r"[.\-_ ]+", remainder) if t]
 
 def _guess_lang3_from_filename(sub_path: Path, video_stem: str) -> Optional[str]:
-	"""Guesses 3-letter language code based on filename tokens."""
 	for tok in _tokens_after_stem(sub_path, video_stem):
 		key = tok.lower()
 		if key in _ALIAS_TO_LANG3: return _ALIAS_TO_LANG3[key]
 	return None
 
 def _score_sidecar(video_stem: str, path: Path, default_lng: str) -> int:
-	"""Calculates a relevance score for a sidecar file to pick the best match."""
 	score = {".srt": 30, ".ass": 20, ".vtt": 10}.get(path.suffix.lower(), 0)
 	tokens = {t.lower() for t in _tokens_after_stem(path, video_stem)}
 	lang = _guess_lang3_from_filename(path, video_stem)
@@ -260,16 +250,22 @@ def _score_sidecar(video_stem: str, path: Path, default_lng: str) -> int:
 	if "sdh" in tokens or "cc" in tokens: score += 25
 	return score
 
-def add_subtl_from_file(input_file: str) -> Tuple[List[str], bool, List[str], str, str]:
-	"""
-	Scans for external subtitles, picks the best match, sanitizes it to UTF-8,
-	and returns input arguments for FFmpeg.
+def add_subtl_from_file(input_file: str, existing_subs: List[Dict] = None) -> Tuple[List[str], bool, List[str], str, str]:
+	"""Scans for and processes external subtitle files.
+	
+	Args:
+		input_file: Path to the video file
+		existing_subs: List of existing subtitle stream dicts from ffprobe
+	
+	Returns:
+		(cmd_part, skip, logs, lang3, disposition)
 	"""
 	p = Path(input_file)
 	stem = p.stem
 	parent = p.parent
 	candidates = []
 	logs = []
+	existing_subs = existing_subs or []
 
 	try:
 		for e in parent.iterdir():
@@ -286,6 +282,18 @@ def add_subtl_from_file(input_file: str) -> Tuple[List[str], bool, List[str], st
 	best_path = scored[0][1]
 
 	lang3 = _guess_lang3_from_filename(best_path, stem) or default_lng
+	
+	# **NEW: Check if this external subtitle is already embedded**
+	for sub in existing_subs:
+		if sub.get("codec_type") != "subtitle":
+			continue
+		sub_lang = sub.get("tags", {}).get("language", "und").lower()
+		
+		# Match if: same language AND codec is mov_text (typical for embedded .srt)
+		if sub_lang == lang3 and sub.get("codec_name") == "mov_text":
+			logs.append(f"\033[93m  .Info: External subtitle '{best_path.name}' (Lang: {lang3}) appears already embedded (Stream {sub.get('index')}). Skipping.\033[0m")
+			return [], True, logs, lang3, "default"
+	
 	tokens = {t.lower() for t in _tokens_after_stem(best_path, stem)}
 	disposition = "default"
 	if "forced" in tokens: disposition = "forced"
@@ -352,7 +360,6 @@ class VideoContext:
 	estimated_video_bitrate: int = 0
 
 def _ideal_hevc_bps(w, h, fps, source_br):
-	"""Calculates the target HEVC bitrate based on resolution, FPS, and BIT_PER_PIX."""
 	if w > 0 and h > 0:
 		return max(250_000, int(w * h * fps * BIT_PER_PIX))
 	if source_br > 0:
@@ -360,7 +367,6 @@ def _ideal_hevc_bps(w, h, fps, source_br):
 	return 1_000_000
 
 def _get_aspect_ratio(w, h):
-	"""Calculates a display-friendly aspect ratio string."""
 	if not h: return "?"
 	r = w/h
 	if abs(r - 1.77) < 0.05: return "16:9"
@@ -368,7 +374,7 @@ def _get_aspect_ratio(w, h):
 	return f"{w}:{h}"
 
 def parse_video(streams, ctx):
-	"""Generates FFmpeg args to scale, re-encode, or copy video streams."""
+	"""Generates FFmpeg arguments for video streams."""
 	logs, cmd = [], []
 	skip_all = True
 	out_idx = 0
@@ -420,7 +426,12 @@ def parse_video(streams, ctx):
 
 			if "amf" in c_enc: cmd.extend(["-quality", "quality", "-rc", "vbr_peak"])
 			elif "qsv" in c_enc: cmd.extend(["-preset", "slow", "-global_quality", "22"])
-			else: cmd.extend(["-preset", "medium", "-crf", "22"])
+			elif "nvenc" in c_enc: cmd.extend(["-preset", "p4", "-rc", "vbr", "-cq", "24"])
+			else:
+				cmd.extend(["-preset", "medium"])
+				# Only use CRF if NOT doing 2-pass with libx265
+				if not (USE_TWO_PASS and "libx265" in c_enc):
+					cmd.extend(["-crf", "22"])
 
 			vf = []
 			if needs_scale: vf.append(f"scale={tgt_w}:{tgt_h}")
@@ -430,8 +441,29 @@ def parse_video(streams, ctx):
 			if w == 0: status = f"Re-encode (Fix Unknown Res -> {c_enc} @ {hm_sz(ideal, 'bps')})"
 			else: status = f"Re-encode ({c_enc} @ {hm_sz(ideal, 'bps')})"
 
+		# Detailed Metadata Extraction
+		field_order = s.get("field_order", "progressive")
+		is_interlaced = (field_order != "progressive") and (field_order != "unknown")
+		
+		color_transfer = s.get("color_transfer", "unknown")
+		is_hdr = (color_transfer in ["smpte2084", "arib-std-b67"])
+		
+		r_frame_rate = s.get("r_frame_rate", "0/0")
+		avg_frame_rate = s.get("avg_frame_rate", "0/0")
+		is_vfr = (r_frame_rate != avg_frame_rate)
+
+		is_10bit = ("10" in pix) or ("p010" in pix)
+
+		# Enhanced Logging
+		status_extras = []
+		if is_hdr: status_extras.append("HDR")
+		if is_interlaced: status_extras.append("Interlaced")
+		if is_vfr: status_extras.append("VFR")
+		
+		extra_info = f"|{' '.join(status_extras)}" if status_extras else ""
+		
 		ar = _get_aspect_ratio(w, h)
-		row = f"   |<V:{s.get('index','?'):2}>|{codec:^8}|{w}x{h}|{ar}|{fps:.2f} fps|{'10-bit' if '10' in pix else '8-bit'}|{status}"
+		row = f"   |<V:{s.get('index','?'):2}>|{codec:^6}|{w}x{h}|{ar}|{fps:.2f} fps|{'10-bit' if is_10bit else '8-bit'}{extra_info}|{status}"
 		logs.append(f"\033[91m{row}\033[0m")
 		out_idx += 1
 
@@ -439,7 +471,7 @@ def parse_video(streams, ctx):
 	return cmd, skip_all, logs
 
 def parse_audio(streams, ctx):
-	"""Generates FFmpeg args to normalize audio to AAC (stereo/5.1) or copy if valid."""
+	"""Generates FFmpeg arguments for audio streams."""
 	cmd, logs = [], []
 	skip_all = True
 	out_idx = 0
@@ -466,17 +498,15 @@ def parse_audio(streams, ctx):
 				cmd.extend([f"-b:a:{out_idx}", "192k"])
 				action = "Re-encode (-> Stereo 192k)"
 
-		logs.append(f"\033[92m   |<A:{idx:2}>|{codec:^6}|{lang:<3}|Br:{hm_sz(br,'bps'):<10}|Ch:{ch}| {action}\033[0m")
+		sr = int(s.get('sample_rate', 0))
+		logs.append(f"\033[92m   |<A:{idx:2}>|{codec:^6}|{lang:<3}|Br:{hm_sz(br,'bps'):<10}|Ch:{ch}|SR:{sr}Hz| {action}\033[0m")
 		out_idx += 1
 
 	if skip_all: logs.append("\033[92m  .Skip: Audio streams are optimal.\033[0m")
 	return cmd, skip_all, logs
 
 def parse_subtl(streams, ctx):
-	"""
-	Identifies internal text streams and checks for external subtitles.
-	Note: Returns sidecar info separately so it can be mapped LAST in the orchestrator.
-	"""
+	"""Generates FFmpeg arguments for subtitle streams."""
 	cmd, logs = [], []
 	skip_all = True
 	out_idx = 0
@@ -506,7 +536,9 @@ def parse_subtl(streams, ctx):
 	side_disp = "default"
 
 	try:
-		res_cmd, res_skip, res_logs, res_lang, res_disp = add_subtl_from_file(ctx.input_file)
+		# Pass existing subtitle streams to prevent duplicates
+		sub_streams = [s for s in streams if s.get("codec_type") == "subtitle"]
+		res_cmd, res_skip, res_logs, res_lang, res_disp = add_subtl_from_file(ctx.input_file, sub_streams)
 		logs.extend(res_logs)
 		if res_cmd:
 			sidecar_cmd = res_cmd
@@ -522,12 +554,7 @@ def parse_subtl(streams, ctx):
 	return cmd, skip_all, logs, sidecar_cmd, side_lang, side_disp
 
 def parse_finfo(input_file: str, metadata: Any, de_bug=False):
-	"""
-	Main orchestration function.
-	1. Analyzes file metadata.
-	2. Calls parse_video/audio/subtl.
-	3. Assembles the final FFmpeg command, ensuring external subs are mapped LAST.
-	"""
+	"""Analyzes file metadata and plans the transcoding process."""
 	fmt, streams, fmt_tags = {}, [], {}
 	tot_br, dur, sz = 0, 0.0, 0
 
@@ -537,16 +564,16 @@ def parse_finfo(input_file: str, metadata: Any, de_bug=False):
 	elif isinstance(metadata, dict):
 		streams = metadata.get("streams", [])
 		if "format" in metadata:
-			fmt = metadata.get("format", {})
-			fmt_tags = fmt.get("tags", {})
-			tot_br = int(fmt.get('bit_rate', 0) or 0)
-			dur = float(fmt.get('duration', 0) or 0)
-			sz = int(fmt.get('size', 0) or 0)
+			fmt			= metadata.get("format", {})
+			fmt_tags	= fmt.get("tags", {})
+			tot_br		= int(fmt.get('bit_rate', 0) or 0)
+			dur			= float(fmt.get('duration', 0) or 0)
+			sz			= int(fmt.get('size', 0) or 0)
 		else:
-			tot_br = int(metadata.get("bitrate", 0) or 0)
-			dur = float(metadata.get("duration", 0) or 0)
-			sz = int(metadata.get("size", 0) or 0)
-			fmt_tags = metadata.get("format_tags", {})
+			tot_br		= int(metadata.get("bitrate", 0) or 0)
+			dur			= float(metadata.get("duration", 0) or 0)
+			sz			= int(metadata.get("size", 0) or 0)
+			fmt_tags	= metadata.get("format_tags", {})
 
 	if not streams and sz == 0:
 		return [], True, ["\033[93m !Error: Unreadable Metadata\033[0m"]
@@ -623,7 +650,6 @@ def parse_finfo(input_file: str, metadata: Any, de_bug=False):
 # =============================================================================
 
 def _read_pipe1_progress(pipe, task_id, duration):
-	"""Reads FFmpeg -progress pipe to display a live progress bar."""
 	start_time = time.time()
 	d = {}
 
@@ -637,12 +663,19 @@ def _read_pipe1_progress(pipe, task_id, duration):
 
 		if line == "progress=continue" or line == "progress=end":
 			try:
-				us = int(d.get("out_time_us", 0))
+				us = 0
+				try:
+					val = d.get("out_time_us", "0")
+					if val.isdigit(): us = int(val)
+				except: pass
+
 				if us == 0 and "out_time" in d:
-					t_str = d["out_time"]
-					if ":" in t_str:
-						h, m, s = t_str.split(":")
-						us = int((float(h)*3600 + float(m)*60 + float(s)) * 1000000)
+					t_str = d["out_time"].replace(",", ".")
+					try:
+						if ":" in t_str:
+							h, m, s = t_str.split(":")
+							us = int((float(h)*3600 + float(m)*60 + float(s)) * 1000000)
+					except: pass
 
 				sec = us / 1_000_000
 				pct = min(100.0, (sec / duration) * 100) if duration > 0 else 0
@@ -654,9 +687,12 @@ def _read_pipe1_progress(pipe, task_id, duration):
 				spd = d.get("speed", "0").replace("x", "")
 				fps = d.get("frame", "0")
 
+				fps = d.get("frame", "0")
+
 				el = time.time() - start_time
 				eta = "--:--"
-				if pct > 0.1:
+				# Show ETA if we have meaningful progress (>0.01%) AND at least 3 seconds elapsed
+				if pct > 0.01 and el > 3:
 					rem = (el / (pct/100)) - el
 					eta = time.strftime("%H:%M:%S", time.gmtime(rem))
 
@@ -671,63 +707,112 @@ def _read_pipe1_progress(pipe, task_id, duration):
 	return 0
 
 def ffmpeg_run(input_file, cmd, duration, skip_it, de_bug, task_id):
-	"""
-	Executes the FFmpeg command in a subprocess.
-	Captures stderr in a background thread to prevent deadlocks and display errors on failure.
-	"""
+	"""Executes the FFmpeg command with progress tracking (supports 2-pass)."""
 	if skip_it or not cmd: return None
-	temp = str(Path(input_file).with_suffix('.temp.mp4'))
+	# Use RUN_TMP for centralized temp file management
+	temp = str(RUN_TMP / f"{Path(input_file).stem}_{random.randint(1000,9999)}.mp4")
 
-	cmd_p = cmd[:]
-	cmd_p = [x for x in cmd_p if x not in ("-stats", "-nostats")]
-	cmd_p.extend(["-progress", "pipe:1", "-stats_period", "0.5"])
-	cmd_p.extend(["-movflags", "+faststart", temp])
-
-	safe_print(f"   [{task_id}] Stage-1 encode -> MP4")
-
-	# 1. Change stderr to PIPE to capture errors
-	p = _popen_managed(cmd_p, stdout=sp.PIPE, stderr=sp.PIPE, bufsize=1)
-
-	# 2. Helper to capture stderr without blocking stdout
-	stderr_log = []
-	def _read_stderr(pipe, log_list):
+	# Fallback: If duration is missing, try to retrieve from SRIK (populated by parse_finfo)
+	if duration <= 0:
 		try:
-			for line in iter(pipe.readline, ''):
-				log_list.append(line)
+			info = srik_get(input_file)
+			duration = float(info.get("source", {}).get("dur", 0))
 		except: pass
 
-	# 3. Start threads for both pipes
-	t_out = threading.Thread(target=_read_pipe1_progress, args=(p.stdout, task_id, duration))
-	t_err = threading.Thread(target=_read_stderr, args=(p.stderr, stderr_log))
+	# Determine if we should do 2-pass
+	# Currently enabling only for libx265 as it's the most standard use-case
+	do_2pass = (USE_TWO_PASS and "libx265" in CURRENT_ENCODER)
 
-	t_out.start()
-	t_err.start()
+	passes = []
+	if do_2pass:
+		# Generate a unique log prefix
+		log_prefix = str(Path(tempfile.gettempdir()) / f"ffmpeg_pass_{int(time.time())}_{random.randint(1000,9999)}")
+		dev_null = "NUL" if IS_WIN else "/dev/null"
+		
+		# PASS 1: Analysis
+		p1_cmd = [x for x in cmd if x not in ("-stats", "-nostats")]
+		p1_cmd.extend(["-pass", "1", "-passlogfile", log_prefix])
+		p1_cmd.extend(["-f", "null", dev_null])
+		passes.append((1, p1_cmd, log_prefix))
 
-	p.wait()
-	t_out.join()
-	t_err.join()
-
-	PROC_MGR.unregister(p)
-
-	# 4. Analyze Result
-	if p.returncode == 0 and os.path.exists(temp):
-		return temp
+		# PASS 2: Encode
+		p2_cmd = [x for x in cmd if x not in ("-stats", "-nostats")]
+		p2_cmd.extend(["-pass", "2", "-passlogfile", log_prefix])
+		p2_cmd.extend(["-progress", "pipe:1", "-stats_period", "0.5"])
+		p2_cmd.extend(["-movflags", "+faststart", temp])
+		passes.append((2, p2_cmd, log_prefix))
 	else:
-		# 5. Display the Cause of Failure
-		safe_print(f"\033[91m   [Error] FFmpeg Failed (Code: {p.returncode})\033[0m")
-		if stderr_log:
-			safe_print("\033[93m   --- FFmpeg Error Log (Last 10 lines) ---\033[0m")
-			# Print last 10 lines to avoid spamming, but enough to see the error
-			for line in stderr_log[-10:]:
-				sys.stdout.write(f"   > {line}")
-			safe_print("\033[93m   ----------------------------------------\033[0m")
-		return None
+		# Single Pass
+		p1_cmd = [x for x in cmd if x not in ("-stats", "-nostats")]
+		p1_cmd.extend(["-progress", "pipe:1", "-stats_period", "0.5"])
+		p1_cmd.extend(["-movflags", "+faststart", temp])
+		passes.append((0, p1_cmd, None))
+
+	final_success = False
+
+	for p_num, p_cmd, p_log in passes:
+		label = "Encode"
+		if p_num == 1: label = "Analysis (Pass 1/2)"
+		if p_num == 2: label = "Encode (Pass 2/2)"
+		
+		safe_print(f"   [{task_id}] Stage-1 {label} -> {'MP4' if p_num != 1 else 'Null'}")
+
+		# 1. Change stderr to PIPE to capture errors
+		p = _popen_managed(p_cmd, stdout=sp.PIPE, stderr=sp.PIPE, bufsize=1)
+
+		# 2. Helper to capture stderr without blocking stdout
+		stderr_log = []
+		def _read_stderr(pipe, log_list):
+			try:
+				for line in iter(pipe.readline, ''):
+					log_list.append(line)
+			except: pass
+
+		# 3. Start threads for both pipes
+		t_out = threading.Thread(target=_read_pipe1_progress, args=(p.stdout, task_id, duration))
+		t_err = threading.Thread(target=_read_stderr, args=(p.stderr, stderr_log))
+
+		t_out.start()
+		t_err.start()
+
+		p.wait()
+		t_out.join()
+		t_err.join()
+
+		PROC_MGR.unregister(p)
+
+		if p.returncode != 0:
+			safe_print(f"\033[91m   [Error] FFmpeg Failed in Pass {p_num} (Code: {p.returncode})\033[0m")
+			if stderr_log:
+				safe_print("\033[93m   --- FFmpeg Error Log (Last 10 lines) ---\033[0m")
+				for line in stderr_log[-10:]:
+					sys.stdout.write(f"   > {line}")
+				safe_print("\033[93m   ----------------------------------------\033[0m")
+			
+			# Cleanup logs if failed
+			if p_log:
+				try:
+					for f in Path(tempfile.gettempdir()).glob(f"{Path(p_log).name}*"):
+						f.unlink()
+				except: pass
+			return None
+		
+		final_success = True
+
+	# Cleanup Pass Logs
+	if do_2pass and passes:
+		log_prefix = passes[0][2]
+		try:
+			for f in Path(tempfile.gettempdir()).glob(f"{Path(log_prefix).name}*"):
+				f.unlink()
+		except: pass
+
+	if final_success and os.path.exists(temp):
+		return temp
+	return None
 
 def clean_up(input_file, output_file, skip_it=False, de_bug=False, task_id=""):
-	"""
-	Verifies the output file size, backs up the original, and replaces it with the new encode.
-	Optionally generates matrix images or speed-up versions.
-	"""
+	"""Replaces original file with output and handles artifacts."""
 	if skip_it or not output_file: return -1
 	in_p = Path(input_file)
 	out_p = Path(output_file)
@@ -749,21 +834,21 @@ def clean_up(input_file, output_file, skip_it=False, de_bug=False, task_id=""):
 		bk = in_p.with_suffix(".orig")
 		in_p.rename(bk)
 
-		# FIX: Handle extension change (MKV->MP4) without rename error
-		if in_p.suffix.lower() != out_p.suffix.lower():
-			# We already renamed MKV to .orig.
-			# Now we just leave MP4 as MP4. No rename needed.
-			pass
-		else:
-			out_p.rename(in_p)
+		# Rename output to final destination (handling .temp.mp4 -> .mp4)
+		final_path = in_p.with_suffix(out_p.suffix)
+		if final_path.exists():
+			final_path.unlink()
+		
+		# Use shutil.move instead of rename to handle cross-drive moves (since RUN_TMP might be elsewhere)
+		shutil.move(str(out_p), str(final_path))
 
 		bk.unlink(missing_ok=True)
 
 		saved = in_size - out_size
 		pct = (saved / in_size) * 100 if in_size > 0 else 0
-		label = "Saved" if saved >= 0 else "Lost"
+		label = "Saved:" if saved >= 0 else "Lost:"
 
-		safe_print(f"\n   .Size Was: {hm_sz(in_size)} Is: {hm_sz(out_size)} {label} {pct:.1f}% !")
+		safe_print(f"\n   .Size Was: {hm_sz(in_size)} Is: {hm_sz(out_size)} Diff: {hm_sz(saved)} {label} {pct:.1f}% !")
 		return saved
 	except Exception as e:
 		safe_print(f"   [Error] Replace failed: {e}")
@@ -773,13 +858,12 @@ def clean_up(input_file, output_file, skip_it=False, de_bug=False, task_id=""):
 		return -1
 
 def matrix_it(inp, out, task_id):
-	"""Generates a 4x4 contact sheet/matrix image of the video."""
+	"""Generates a contact sheet (matrix) image."""
 	cmd = [FFMPEG, "-y", "-hide_banner", "-i", str(inp), "-vf", "select='not(mod(n,1000))',scale=320:-1,tile=4x4", "-frames:v", "1", "-q:v", "5", str(out)]
 	_popen_managed(cmd, stdout=sp.DEVNULL, stderr=sp.DEVNULL).wait()
 
 def speed_up(inp, out, task_id):
-	"""Generates a sped-up version of the video (e.g. for previews)."""
+	"""Generates a sped-up preview video."""
 	f = ADDITIONAL_SPEED_FACTOR
 	cmd = [FFMPEG, "-y", "-hide_banner", "-i", str(inp), "-filter_complex", f"[0:v]setpts=PTS/{f}[v];[0:a]atempo={f}[a]", "-map", "[v]", "-map", "[a]", "-preset", "veryfast", str(out)]
 	_popen_managed(cmd, stdout=sp.DEVNULL, stderr=sp.DEVNULL).wait()
-	
