@@ -1,0 +1,662 @@
+================================================================================
+                        SUBTITLE MANAGER DOCUMENTATION
+================================================================================
+
+Version: 1.0
+Last Updated: 2025-11-27
+Author: Your FFmpeg Toolkit
+Purpose: Ultimate subtitle management - clean duplicates, ensure English, 
+         add multiple language translations using AI
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. OVERVIEW
+2. FEATURES
+3. HOW IT WORKS (TECHNICAL DETAILS)
+4. INSTALLATION & REQUIREMENTS
+5. USAGE EXAMPLES
+6. COMMAND-LINE OPTIONS
+7. SUPPORTED LANGUAGES
+8. TIPS & BEST PRACTICES
+9. TROUBLESHOOTING
+10. TODO / FUTURE ENHANCEMENTS
+
+================================================================================
+1. OVERVIEW
+================================================================================
+
+Subtitle_Manager.py is a comprehensive tool for managing subtitle tracks in 
+video files. It uses AI-powered translation models to automatically generate
+subtitles in multiple languages and intelligently removes duplicate subtitle
+streams based on content analysis.
+
+KEY CAPABILITIES:
+- Remove duplicate subtitles (content-based, not just metadata)
+- Auto-translate to English if missing
+- Generate subtitles in multiple languages from English source
+- Preserve legitimate subtitle variations (SDH, Forced, etc.)
+- Batch process entire directories
+
+================================================================================
+2. FEATURES
+================================================================================
+
+FEATURE 1: DUPLICATE DETECTION & REMOVAL (--clean)
+--------------------------------------------------
+✓ Content-based comparison using MD5 hashing
+✓ Aggressive normalization to detect duplicates even with:
+  - Different HTML/XML tags (<i>, <b>, <font>)
+  - Different styling tags ({\an8}, {\i1})
+  - Sound effect annotations ([Music], (SIGHS))
+  - Punctuation variations (., !, ?)
+  - Whitespace differences
+✓ Groups by language first, then compares content
+✓ Keeps unique variations (e.g., SDH vs regular)
+✓ Safe: Keeps files with errors to avoid data loss
+
+FEATURE 2: AUTO-TRANSLATE TO ENGLISH (--ensure-eng)
+----------------------------------------------------
+✓ Detects if English subtitle is missing
+✓ Automatically selects best source subtitle to translate from
+✓ Uses Helsinki-NLP transformer models (OPUS-MT)
+✓ Preserves timing information
+✓ Adds translated subtitle as new stream
+
+FEATURE 3: MULTI-LANGUAGE TRANSLATION (--add-langs)
+----------------------------------------------------
+✓ Translate to any supported language from English
+✓ Add multiple languages in one command (e.g., "fra,spa,deu")
+✓ Batch processing with progress indicators
+✓ Skips languages that already exist
+✓ Metadata tags for language identification
+
+================================================================================
+3. HOW IT WORKS (TECHNICAL DETAILS)
+================================================================================
+
+ARCHITECTURE:
+-------------
+┌─────────────────┐
+│  Input File(s)  │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│   FFprobe       │ ◄── Extracts stream metadata
+│   Analysis      │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Subtitle       │
+│  Extraction     │ ◄── Extracts each subtitle stream as SRT
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Normalization  │ ◄── Strips formatting, tags, timestamps
+│  & Hashing      │     Converts to lowercase, removes punctuation
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Duplicate      │ ◄── MD5 hash comparison within language groups
+│  Detection      │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Translation    │ ◄── Helsinki-NLP OPUS-MT models
+│  (if requested) │     Batch processing with transformers
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  FFmpeg         │ ◄── Remux with selected streams
+│  Remux          │     Add new subtitle files
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Output File    │
+└─────────────────┘
+
+
+DUPLICATE DETECTION ALGORITHM:
+-------------------------------
+1. Group subtitle streams by language tag (e.g., "eng", "spa")
+2. For each language group with multiple streams:
+   a. Extract subtitle content to SRT format
+   b. Apply normalization:
+      - Remove subtitle indices (1, 2, 3...)
+      - Remove timestamps (00:00:01,000 --> 00:00:04,000)
+      - Remove HTML tags (<i>, <b>, <font color="red">)
+      - Remove styling tags ({\an8}, {\i1})
+      - Remove sound annotations ([Music], (SIGHS))
+      - Remove all punctuation
+      - Normalize whitespace (multiple spaces → single space)
+      - Convert to lowercase
+   c. Generate MD5 hash of normalized content
+   d. Compare hashes - duplicates will have identical hashes
+   e. Keep first occurrence, mark others for removal
+3. Preserve all unique content (different hashes)
+
+
+TRANSLATION WORKFLOW:
+---------------------
+1. Parse SRT file into structured items (index, timestamp, content)
+2. Load Helsinki-NLP OPUS-MT model for source→target language pair
+3. Extract dialogue text from each subtitle item
+4. Translate in batches (batch_size=16) for efficiency
+5. Replace original content with translated text
+6. Preserve timing information
+7. Save as new SRT file in temporary directory
+8. Add to video file during remux
+
+
+NORMALIZATION FUNCTION (SubtitleContent.normalize):
+----------------------------------------------------
+Input:  "1\n00:00:01,000 --> 00:00:04,000\n<i>Hello!</i> [Music]"
+Step 1: Remove indices → "00:00:01,000 --> 00:00:04,000\n<i>Hello!</i> [Music]"
+Step 2: Remove timestamps → "<i>Hello!</i> [Music]"
+Step 3: Remove HTML tags → "Hello! [Music]"
+Step 4: Remove annotations → "Hello! "
+Step 5: Remove punctuation → "Hello "
+Step 6: Normalize whitespace → "Hello"
+Step 7: Lowercase → "hello"
+Output: "hello"
+
+This ensures that these are detected as duplicates:
+- "<i>Hello!</i>" and "Hello" and "HELLO" and "Hello!!!"
+
+
+REMUXING PROCESS:
+-----------------
+1. Create temporary output file in __N_tmp_XXXX directory
+2. Build FFmpeg command:
+   - Map video streams (copy codec)
+   - Map audio streams (copy codec)
+   - Map kept subtitle streams (copy codec)
+   - Add new subtitle files (convert to mov_text for MP4)
+   - Set metadata (language tags, titles)
+3. Execute FFmpeg
+4. Replace original file with new file (atomic operation)
+5. Cleanup temporary files
+
+
+FILE SAFETY:
+------------
+- Uses --dry-run for testing without modifying files
+- Creates temporary files in isolated directory
+- Only replaces original on successful remux
+- Preserves original if any errors occur
+- Automatic cleanup of temp files on exit
+
+================================================================================
+4. INSTALLATION & REQUIREMENTS
+================================================================================
+
+REQUIRED SOFTWARE:
+------------------
+1. Python 3.8 or higher
+2. FFmpeg (with ffprobe)
+3. FFprobe (usually bundled with FFmpeg)
+
+
+REQUIRED PYTHON PACKAGES:
+--------------------------
+Install with: pip install torch transformers sentencepiece
+
+- torch (PyTorch) - For running AI models
+- transformers (Hugging Face) - Pre-trained translation models
+- sentencepiece - Tokenizer for translation models
+
+
+OPTIONAL (for better performance):
+-----------------------------------
+- CUDA-enabled GPU for faster translation
+- pip install torch --index-url https://download.pytorch.org/whl/cu118
+
+
+VERIFY INSTALLATION:
+--------------------
+Run this command to check if everything is installed:
+
+    python -c "import torch; import transformers; print('All dependencies OK')"
+
+
+FILE STRUCTURE:
+---------------
+FFmpeg/
+├── Subtitle_Manager.py         (Main script)
+├── Utils.py                     (Helper utilities)
+├── AI_Models/                   (Cached translation models)
+│   └── models--Helsinki-NLP--opus-mt-*/
+├── __N_tmp_XXXX/                (Temporary files - auto-created)
+└── SUBTITLE_MANAGER_DOCUMENTATION.txt (This file)
+
+================================================================================
+5. USAGE EXAMPLES
+================================================================================
+
+BASIC USAGE:
+------------
+Process a single file:
+    python Subtitle_Manager.py "movie.mp4" --clean
+
+Process entire folder:
+    python Subtitle_Manager.py "C:\Movies" --clean
+
+
+EXAMPLE 1: REMOVE DUPLICATE SUBTITLES
+--------------------------------------
+Command:
+    python Subtitle_Manager.py "movie.mp4" --clean --dry-run
+
+Output:
+    Processing: movie.mp4
+      [CLEAN] Analyzing 4 streams...
+        Checking 3 'eng' streams...
+          Stream 3: Duplicate content. Dropping.
+          Stream 4: Duplicate content. Dropping.
+      [DRY-RUN] Would remux file with:
+        - Keeping streams: [2, 5]
+        - Adding 0 new subtitles
+
+Then run without --dry-run to apply:
+    python Subtitle_Manager.py "movie.mp4" --clean
+
+
+EXAMPLE 2: TRANSLATE FOREIGN FILM TO ENGLISH
+---------------------------------------------
+Scenario: Movie only has Spanish subtitles, you want English
+
+Command:
+    python Subtitle_Manager.py "spanish_movie.mp4" --ensure-eng
+
+Output:
+    Processing: spanish_movie.mp4
+      [INFO] Missing English. Translating from spa...
+      [TRANS] Translating Stream 2 (spa) -> eng...
+      [AI] Loading model: Helsinki-NLP/opus-mt-es-en ...
+        100/100
+      [EXEC] Remuxing...
+      [SUCCESS] File updated.
+
+Result: File now has both Spanish (original) and English (translated)
+
+
+EXAMPLE 3: ADD MULTIPLE LANGUAGE SUBTITLES
+-------------------------------------------
+Scenario: English movie, want to add French and German subtitles
+
+Command:
+    python Subtitle_Manager.py "movie.mp4" --add-langs "fra,spa,deu"
+
+Output:
+    Processing: movie.mp4
+      [TRANS] Translating Stream 2 (eng) -> fra...
+      [AI] Loading model: Helsinki-NLP/opus-mt-en-fr ...
+        100/100
+      [TRANS] Translating Stream 2 (eng) -> deu...
+      [AI] Loading model: Helsinki-NLP/opus-mt-en-de ...
+        100/100
+      [EXEC] Remuxing...
+      [SUCCESS] File updated.
+
+
+EXAMPLE 4: COMPREHENSIVE CLEANUP
+---------------------------------
+Remove duplicates, ensure English, and add Spanish/French:
+
+Command:
+    python Subtitle_Manager.py "movie.mp4" --clean --ensure-eng --add-langs "spa,fra"
+
+
+EXAMPLE 5: BATCH PROCESSING
+----------------------------
+Process entire TV series folder:
+
+Command:
+    python Subtitle_Manager.py "C:\TV Shows\Breaking Bad" --clean
+
+This will recursively process all video files in the folder.
+
+
+EXAMPLE 6: TEST BEFORE APPLYING
+--------------------------------
+Always test with --dry-run first:
+
+Command:
+    python Subtitle_Manager.py "C:\Movies" --clean --ensure-eng --dry-run
+
+Review the output, then remove --dry-run to apply changes.
+
+================================================================================
+6. COMMAND-LINE OPTIONS
+================================================================================
+
+SYNTAX:
+-------
+python Subtitle_Manager.py <file_or_folder> [options]
+
+
+POSITIONAL ARGUMENTS:
+---------------------
+path                  File or folder to process
+                      - Single file: "movie.mp4"
+                      - Folder: "C:\Movies" (processes all video files)
+
+
+OPTIONAL ARGUMENTS:
+-------------------
+--clean               Remove duplicate subtitle streams based on content
+                      Default: Off (keeps all subtitles)
+
+--ensure-eng          Translate to English if missing
+                      - Checks if English subtitle exists
+                      - If not, translates from best available subtitle
+                      Default: Off
+
+--add-langs LANGS     Comma-separated list of languages to add
+                      Example: --add-langs "fra,spa,deu"
+                      - Translates from English (or best available)
+                      - Skips languages that already exist
+                      Default: None
+
+--dry-run             Test mode - shows what would be done without modifying
+                      Use this to preview changes before applying
+                      Default: Off (will modify files)
+
+
+COMBINING OPTIONS:
+------------------
+You can combine multiple options in one command:
+
+    python Subtitle_Manager.py "movie.mp4" --clean --ensure-eng --add-langs "fra,spa"
+
+This will:
+1. Remove duplicate subtitles
+2. Add English if missing
+3. Add French and Spanish translations
+
+================================================================================
+7. SUPPORTED LANGUAGES
+================================================================================
+
+LANGUAGE CODES (ISO 639-2/3):
+------------------------------
+Use these codes with --add-langs:
+
+Common Languages:
+  eng - English
+  spa - Spanish (Español)
+  fra - French (Français)
+  deu - German (Deutsch)
+  ita - Italian (Italiano)
+  por - Portuguese (Português)
+  rus - Russian (Русский)
+  jpn - Japanese (日本語)
+  chi/zho - Chinese (中文)
+  kor - Korean (한국어)
+
+European Languages:
+  nld - Dutch (Nederlands)
+  pol - Polish (Polski)
+  swe - Swedish (Svenska)
+  fin - Finnish (Suomi)
+  dan - Danish (Dansk)
+  nor - Norwegian (Norsk)
+
+Other Languages:
+  ara - Arabic (العربية)
+  hin - Hindi (हिन्दी)
+  tur - Turkish (Türkçe)
+
+
+TRANSLATION MODEL AVAILABILITY:
+--------------------------------
+Helsinki-NLP provides models for 1000+ language pairs.
+Most common translations are supported (e.g., en→fr, en→es, es→en, etc.)
+
+Check model availability: https://huggingface.co/Helsinki-NLP
+
+
+MULTIPLE LANGUAGES:
+-------------------
+Add multiple languages separated by commas (no spaces):
+  ✓ --add-langs "fra,spa,deu"
+  ✗ --add-langs "fra, spa, deu" (spaces will cause issues)
+
+================================================================================
+8. TIPS & BEST PRACTICES
+================================================================================
+
+1. ALWAYS USE --dry-run FIRST
+   Before processing your entire library, test on a single file:
+   
+   python Subtitle_Manager.py "test.mp4" --clean --dry-run
+   
+   Review the output, then remove --dry-run when satisfied.
+
+
+2. PROCESS IN STAGES
+   Don't try to do everything at once. Process files in stages:
+   
+   Stage 1: Clean duplicates
+       python Subtitle_Manager.py "C:\Movies" --clean
+   
+   Stage 2: Add translations
+       python Subtitle_Manager.py "C:\Movies" --add-langs "fra,spa"
+
+
+3. DOWNLOAD MODELS ONCE
+   The first time you translate to a language, the model (~300MB) will 
+   download. It's cached in AI_Models/ for future use.
+   
+   Tip: Pre-download models by running a small test file first.
+
+
+4. GPU ACCELERATION
+   If you have an NVIDIA GPU, install CUDA-enabled PyTorch:
+   
+   pip install torch --index-url https://download.pytorch.org/whl/cu118
+   
+   Translation will be 10-50x faster!
+
+
+5. BACKUP IMPORTANT FILES
+   While the script is designed to be safe, always backup irreplaceable 
+   content before batch processing:
+   
+   - Use --dry-run first
+   - Test on copies
+   - Keep originals until verified
+
+
+6. CHECK DISK SPACE
+   Translation models require ~300MB per language pair.
+   Temporary files during processing can be large.
+   Ensure adequate free space (~5GB recommended).
+
+
+7. BATCH SIZE TUNING
+   If running out of memory during translation, edit Subtitle_Manager.py:
+   
+   Line 226: batch_size = 16  (reduce to 8 or 4 for low-memory systems)
+
+
+8. LANGUAGE DETECTION
+   The script relies on FFmpeg metadata for language detection.
+   If subtitles are tagged incorrectly (e.g., "und" instead of "eng"),
+   manually fix with FFmpeg before processing:
+   
+   ffmpeg -i input.mp4 -map 0 -c copy -metadata:s:s:0 language=eng output.mp4
+
+
+9. SUBTITLE FORMAT COMPATIBILITY
+   The script works with:
+   ✓ mov_text (MP4 native)
+   ✓ subrip (SRT)
+   ✓ ass/ssa (Advanced SubStation Alpha)
+   
+   Output is always mov_text for MP4 compatibility.
+
+
+10. PROCESSING TIME
+    Translation speed depends on:
+    - Number of subtitle lines
+    - GPU vs CPU
+    - Model size
+    
+    Typical times (CPU):
+    - 2-hour movie: ~2-5 minutes per language
+    
+    With GPU: ~20-60 seconds per language
+
+================================================================================
+9. TROUBLESHOOTING
+================================================================================
+
+PROBLEM: "ImportError: No module named 'transformers'"
+SOLUTION: Install required packages:
+    pip install torch transformers sentencepiece
+
+
+PROBLEM: "Could not load model for en->XX"
+SOLUTION: Model may not exist for that language pair. Check:
+    https://huggingface.co/Helsinki-NLP
+    Try alternative direction (e.g., XX->en instead)
+
+
+PROBLEM: "FFmpeg not found"
+SOLUTION: Ensure FFmpeg is installed and in PATH:
+    - Windows: Download from https://ffmpeg.org/download.html
+    - Or edit line 126 in Utils.py with full path to ffmpeg.exe
+
+
+PROBLEM: Translation is very slow
+SOLUTION: 
+    1. Install CUDA-enabled PyTorch for GPU acceleration
+    2. Reduce batch size (edit line 226: batch_size = 8)
+    3. Process fewer files at once
+
+
+PROBLEM: "Out of memory" during translation
+SOLUTION:
+    1. Reduce batch size (line 226: batch_size = 4)
+    2. Close other applications
+    3. Process files one at a time instead of entire folder
+
+
+PROBLEM: Subtitles not detected as duplicates
+SOLUTION: This can happen if content genuinely differs (SDH vs regular).
+    Use FFmpeg to extract and manually compare:
+    
+    ffmpeg -i movie.mp4 -map 0:s:0 -f srt sub1.srt
+    ffmpeg -i movie.mp4 -map 0:s:1 -f srt sub2.srt
+    
+    Then compare sub1.srt and sub2.srt
+
+
+PROBLEM: Wrong subtitle selected for translation
+SOLUTION: The script picks the first available subtitle. To control this:
+    1. Remove unwanted subtitles first with --clean
+    2. Or manually specify which stream to keep before running
+
+
+PROBLEM: Remux fails with "Invalid stream index"
+SOLUTION: Run FFprobe to check stream indices:
+    ffprobe -v quiet -show_streams movie.mp4
+    
+    If indices don't match, the file may be corrupted.
+
+
+PROBLEM: "File is marked read-only" error
+SOLUTION: Remove read-only attribute:
+    Windows: attrib -R "movie.mp4"
+    Or run script as administrator
+
+
+PROBLEM: HuggingFace warnings about symlinks
+SOLUTION: This is a Windows limitation, not critical. To fix:
+    - Enable Windows Developer Mode
+    - Or ignore the warning (copy mode works fine, just uses more space)
+
+
+PROBLEM: Translated subtitles are inaccurate
+SOLUTION: AI translation isn't perfect. For critical content:
+    1. Use professional human translation
+    2. Or use the generated subtitle as a starting point and manually edit
+    3. Larger models (e.g., GPT-4) will be more accurate but slower
+
+================================================================================
+10. TODO / FUTURE ENHANCEMENTS
+================================================================================
+
+PLANNED FEATURES:
+-----------------
+[ ] Support for more subtitle formats (WebVTT, TTML)
+[ ] Confidence scoring for duplicate detection
+[ ] Manual override for stream selection
+[ ] GUI interface for easier use
+[ ] Progress bar for batch processing
+[ ] Better error recovery (resume failed translations)
+[ ] Export/import translation cache
+[ ] Custom translation model support
+[ ] Subtitle quality metrics (WER, BLEU scores)
+[ ] Integration with external translation APIs (Google, DeepL)
+[ ] Support for embedded fonts and styles
+[ ] Subtitle offset/timing correction
+[ ] Merge multiple subtitle files into one video
+
+
+KNOWN LIMITATIONS:
+------------------
+- Translation quality depends on model (not human-quality)
+- Very large subtitle files (>1000 lines) may be slow to translate
+- Some special characters may not translate correctly
+- Timing information is preserved but not optimized
+- No support for image-based subtitles (PGS, VobSub)
+
+
+OPTIMIZATION OPPORTUNITIES:
+---------------------------
+- Parallel processing for multi-file operations
+- Model quantization for faster inference
+- Caching of translated segments for reuse
+- Smart batching based on subtitle length
+- GPU memory optimization
+
+
+COMMUNITY CONTRIBUTIONS:
+------------------------
+Want to improve Subtitle_Manager? Consider:
+- Adding support for new languages
+- Improving normalization algorithm
+- Creating GUI wrapper
+- Writing unit tests
+- Benchmarking translation quality
+- Creating Docker container
+
+
+REPORTING ISSUES:
+-----------------
+When reporting bugs, include:
+1. Full command used
+2. Python version (python --version)
+3. FFmpeg version (ffmpeg -version)
+4. Full error message
+5. Sample file (if possible)
+
+================================================================================
+END OF DOCUMENTATION
+================================================================================
+
+For questions, suggestions, or issues, refer to the main project repository
+or contact the development team.
+
+Version: 1.0
+Last Updated: 2025-11-27

@@ -1,0 +1,77 @@
+scanning:
+  root_directories: []
+  file_extensions:
+  - .avi
+  - .flv
+  - .av1
+  - .m4v
+  - .mkv
+  - .mov
+  - .mp4
+  - .ts
+  - .mts
+  - .webm
+  - .wmv
+  parallel_scan: true
+  max_scan_workers: 8
+  scan_cache_enabled: true
+
+encoding:
+  target_codec: hevc
+  bits_per_pixel: 0.045
+  target_crf: 23
+  hardware_encoder_priority:
+  - hevc_nvenc
+  - hevc_qsv
+  - hevc_amf
+  - libx265
+  force_10bit: true
+  size_ok_margin: 1.2
+  tag_hevc_as_hvc1: true
+
+languages:
+  default_language: eng
+  keep_languages:
+  - eng
+  - fre
+  - ger
+  - heb
+  - hun
+  - ita
+  - jpn
+  - rum
+  - rus
+  - spa
+  ensure_english_subtitle: true
+  ai_subtitle_languages: []
+  ai_audio_languages: []
+
+artifacts:
+  enabled: false
+  force_on_skip: true
+  enable_matrix: true
+  enable_speed_up: true
+  enable_short_clip: true
+  matrix_columns: 4
+  matrix_rows: 3
+  matrix_width: 320
+  matrix_start_time: 30.0
+  short_duration: 33.0
+  speed_factor: 2
+  quality_crf: 24
+
+processing:
+  parallel_processing: false
+  max_workers: 1
+  pause_on_exit: true
+  error_logs_enabled: true
+  smart_rename: false
+  check_corruption: false
+
+llm:
+  enabled: true
+  use_local_llm: true
+
+output:
+  work_directory: null
+  exceptions_directory: null
